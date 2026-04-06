@@ -9,6 +9,6 @@
         IPaymentRepository PaymentsRepository { get; }
         IPrescriptionRepository PrescriptionsRepository { get; }
         IRefreshTokenRepository RefreshTokensRepository { get; }
-        Task<int> SaveAsync();
+        Task<int> SaveAsync(CancellationToken cancellationToken = default);
     }
 }

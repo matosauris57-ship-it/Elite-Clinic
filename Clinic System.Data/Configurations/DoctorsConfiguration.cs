@@ -83,7 +83,8 @@ namespace Clinic_System.Data.Configurations
             // Index على ApplicationUserId للأداء والـ Unique constraint
             builder.HasIndex(d => d.ApplicationUserId)
                 .IsUnique()
-                .HasDatabaseName("IX_Doctors_ApplicationUserId");
+                .HasDatabaseName("IX_Doctors_ApplicationUserId_Unique")
+                .HasFilter("[IsDeleted] = 0");
             // IsUnique: يضمن أن كل ApplicationUser مرتبط بـ Doctor واحد فقط
 
             // ============================================

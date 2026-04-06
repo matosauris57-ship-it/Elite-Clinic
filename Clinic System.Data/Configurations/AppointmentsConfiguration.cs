@@ -70,7 +70,13 @@ namespace Clinic_System.Data.Configurations
 
             // Index على PatientId للأداء
             builder.HasIndex(a => a.PatientId)
-                .HasDatabaseName("IX_Appointments_PatientId");
+    .HasDatabaseName("IX_Appointments_PatientId");
+
+            // القيد الجديد لمنع المريض إنه يحجز ميعادين في نفس اللحظة
+            builder.HasIndex(a => new { a.PatientId, a.AppointmentDate })
+                .IsUnique()
+                .HasDatabaseName("IX_Appointments_Patient_Date_Unique")
+                .HasFilter("[AppointmentStatus] != 'Cancelled' AND [IsDeleted] = 0");
 
             // ============================================
             // Doctor Relationship (Many-to-One)
@@ -91,7 +97,9 @@ namespace Clinic_System.Data.Configurations
 
             // Composite Index على DoctorId و AppointmentDate
             builder.HasIndex(a => new { a.DoctorId, a.AppointmentDate })
-                .HasDatabaseName("IX_Appointments_Doctor_Date");
+                .IsUnique()
+                .HasDatabaseName("IX_Appointments_Doctor_Date_Unique")
+                .HasFilter("[AppointmentStatus] != 'Cancelled' AND [IsDeleted] = 0");
             // مفيد للبحث عن مواعيد Doctor معين في تاريخ معين
 
             // ============================================

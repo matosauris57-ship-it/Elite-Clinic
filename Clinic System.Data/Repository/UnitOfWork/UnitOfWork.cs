@@ -1,4 +1,5 @@
-﻿using Clinic_System.Core.Interfaces;
+﻿using Clinic_System.Core.Exceptions;
+using Microsoft.Data.SqlClient;
 
 namespace Clinic_System.Data.Repository.UnitOfWork
 {
@@ -110,7 +111,30 @@ namespace Clinic_System.Data.Repository.UnitOfWork
 
         public void Dispose() => context.Dispose();
 
-        public Task<int> SaveAsync() => context.SaveChangesAsync();
+        //public Task<int> SaveAsync() => context.SaveChangesAsync();
 
+        public async Task<int> SaveAsync(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return await context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex)
+            {
+                // بنتأكد إن الإيرور جاي من SQL Server
+                if (ex.InnerException is SqlException sqlEx)
+                {
+                    // أرقام 2601 و 2627 و 1505 دي أرقام الـ Unique Constraint Violation في SQL Server
+                    if (sqlEx.Number == 2601 || sqlEx.Number == 2627 || sqlEx.Number == 1505)
+                    {
+                        // هنا بنترجم إيرور الـ EF Core لإيرور يفهمه الـ Application
+                        throw new UniqueConstraintViolationException("A database unique constraint was violated.", ex);
+                    }
+                }
+
+                // لو إيرور داتابيز تاني، ارميه زي ما هو (أو اعمله ترجمة لـ Exception تاني لو حابب)
+                throw;
+            }
+        }
     }
 }
