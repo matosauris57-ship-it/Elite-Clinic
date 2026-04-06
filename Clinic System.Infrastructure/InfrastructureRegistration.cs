@@ -19,7 +19,7 @@
             services.AddScoped<ICurrentUserService, CurrentUserService>();
             services.AddScoped<IGoogleAuthService, GoogleAuthService>();
             services.AddScoped<IMessagePublisher, MessagePublisher>();
-
+            services.AddScoped<IDistributedLockService, RedisDistributedLockService>();
 
             services.Configure<ClinicSettings>(configuration.GetSection("ClinicSettings"));
 

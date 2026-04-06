@@ -21,7 +21,7 @@ namespace Clinic_System.Data.Configurations
             {
                 // Check Constraint: EndDate يجب أن يكون بعد StartDate
                 table.HasCheckConstraint("CK_Prescriptions_EndDate_After_StartDate", 
-                    "[EndDate] > [StartDate]");
+                    "[EndDate] >= [StartDate]");
             });
 
             // ============================================

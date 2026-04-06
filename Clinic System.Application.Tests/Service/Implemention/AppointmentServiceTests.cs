@@ -5,6 +5,7 @@ namespace Clinic_System.Application.Tests.Service.Implemention
     public class AppointmentServiceTests
     {
         private readonly Mock<IUnitOfWork> _mockUnitOfWork;
+        private readonly Mock<IDistributedLockService> _mockLock;
         private readonly Mock<IPaymentService> _mockPaymentService;
         private readonly Mock<IMedicalRecordService> _mockMedicalRecordService;
         private readonly Mock<IAppointmentRepository> _mockAppointmentRepository;
@@ -17,13 +18,14 @@ namespace Clinic_System.Application.Tests.Service.Implemention
         {
             _mockClinicsettings = new Mock<IOptions<ClinicSettings>>();
             _mockUnitOfWork = new Mock<IUnitOfWork>();
+            _mockLock = new Mock<IDistributedLockService>();
             _mockAppointmentRepository = new Mock<IAppointmentRepository>();
             _mockPaymentService = new Mock<IPaymentService>();
             _mockMedicalRecordService = new Mock<IMedicalRecordService>();
             _mockLogger = new Mock<ILogger<AppointmentService>>();
             _mockUnitOfWork.SetupGet(u => u.AppointmentsRepository).Returns(_mockAppointmentRepository.Object);
             _appointmentService = new AppointmentService(null,_mockUnitOfWork.Object, _mockPaymentService.Object,
-               _mockMedicalRecordService.Object, _mockLogger.Object,_mockClinicsettings.Object);
+               _mockMedicalRecordService.Object, _mockLogger.Object,_mockClinicsettings.Object,_mockLock.Object);
         }
 
         [Fact]

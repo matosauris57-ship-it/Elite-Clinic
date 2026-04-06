@@ -35,6 +35,25 @@
 
         //    optionsBuilder.UseSqlServer(connectionString);
         //}
+
+        #region OnConfiguring2
+        //protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        //{
+        //    base.OnConfiguring(optionsBuilder);
+
+        //    optionsBuilder.ConfigureWarnings(warnings =>
+        //        warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
+
+        //    // لو الـ Options مش جاية من Program.cs (يعني وقت الميجريشن)
+        //    if (!optionsBuilder.IsConfigured)
+        //    {
+        //        // حطينا الكونكشن سترينج بتاعك مباشرة هنا عشان نعدي الـ Migration فوراً
+        //        var connectionString = "Server=DESKTOP-3EENUE4;Database=ClinicSystem;Integrated Security=SSPI;TrustServerCertificate=True;MultipleActiveResultSets=True";
+
+        //        optionsBuilder.UseSqlServer(connectionString);
+        //    }
+        //}
+        #endregion
         #endregion
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

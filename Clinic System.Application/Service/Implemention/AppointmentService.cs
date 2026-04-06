@@ -8,13 +8,15 @@
         private readonly IMedicalRecordService medicalRecordService;
         private readonly ILogger<AppointmentService> logger;
         private readonly ClinicSettings clinicSettings;
+        private readonly IDistributedLockService _lockService;
         public AppointmentService(
             IMessagePublisher messagePublisher,
             IUnitOfWork unitOfWork,
             IPaymentService paymentService,
             IMedicalRecordService medicalRecordService,
             ILogger<AppointmentService> logger,
-            IOptions<ClinicSettings> clinicSettings)
+            IOptions<ClinicSettings> clinicSettings,
+            IDistributedLockService lockService)
         {
             _messagePublisher = messagePublisher;
             this.unitOfWork = unitOfWork;
@@ -22,6 +24,7 @@
             this.medicalRecordService = medicalRecordService;
             this.logger = logger;
             this.clinicSettings = clinicSettings.Value;
+            _lockService = lockService;
         }
 
         public async Task<List<Appointment>> GetBookedAppointmentsAsync(int doctorId, DateTime date, CancellationToken cancellationToken = default)
@@ -94,14 +97,26 @@
             logger.LogInformation("Attempting to book appointment for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDateTime}",
                     patientId, doctorId, appointmentDateTime);
 
-            string PatientEmail = string.Empty;
-            Appointment appointment2 = null;
+            // 1.  مفتاح القفل (مستقل تماماً عن أي تفاصيل للريديس هنا)
+            string lockKey = $"lock:appointment:doctor:{doctorId}:time:{appointmentDateTime:yyyyMMddHHmm}";
 
+            // 2. محاولة الحصول على القفل من الـ Service
+            bool isLocked = await _lockService.AcquireLockAsync(lockKey, TimeSpan.FromSeconds(30));
 
-            using (var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+            if (!isLocked)
             {
-                try
+                logger.LogWarning("Distributed Lock prevented double booking for DoctorId: {DoctorId} on {AppointmentDateTime}", doctorId, appointmentDateTime);
+                throw new SlotAlreadyBookedException("This time slot is currently being booked by someone else. Please try again in a few seconds.");
+            }
+
+
+            try
+            {
+                Appointment appointment2 = null;
+
+                using (var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
                 {
+                
                     // 1. *** التحقق الأمني النهائي والمباشر من قاعدة البيانات (Anti-Concurrency) ***
                     var bookedAppointmentsOnDay = await unitOfWork.AppointmentsRepository
                          .GetBookedAppointmentsAsync(doctorId, appointmentDate, cancellationToken);
@@ -162,25 +177,28 @@
 
                     transaction.Complete();
                 }
-                catch (Exception ex)
+
+                await _messagePublisher.PublishAsync(new AppointmentBookedEvent
                 {
-                    logger.LogError(ex, "An error occurred while booking appointment for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDate} at {AppointmentTime}",
-                       patientId, doctorId, appointmentDate.ToShortDateString(), appointmentTime);
-                    throw; // إعادة رمي الاستثناء بعد تسجيله
-                }
+                    AppointmentId = appointment2.Id,
+                    PatientUserId = appointment2.Patient.ApplicationUserId,
+                    PatientName = appointment2.Patient.FullName,
+                    DoctorName = appointment2.Doctor.FullName,
+                    DoctorSpecialization = appointment2.Doctor.Specialization,
+                    AppointmentDate = appointment2.AppointmentDate
+                }, cancellationToken);
+
+                return appointment2;
             }
-
-            await _messagePublisher.PublishAsync(new AppointmentBookedEvent
+            catch (UniqueConstraintViolationException ex) 
             {
-                AppointmentId = appointment2.Id,
-                PatientUserId = appointment2.Patient.ApplicationUserId,
-                PatientName = appointment2.Patient.FullName,
-                DoctorName = appointment2.Doctor.FullName,
-                DoctorSpecialization = appointment2.Doctor.Specialization,
-                AppointmentDate = appointment2.AppointmentDate
-            }, cancellationToken);
-
-            return appointment2;
+                logger.LogError(ex, "Concurrency issue: Unique constraint violated for DoctorId: {DoctorId} on {AppointmentDateTime}", doctorId, appointmentDateTime);
+                throw new SlotAlreadyBookedException("The selected time slot was just booked by another patient. Please try again.");
+            }
+            finally
+            {
+                await _lockService.ReleaseLockAsync(lockKey);
+            }
         }
 
         public async Task<Appointment> RescheduleAppointmentAsync(RescheduleAppointmentCommand command, CancellationToken cancellationToken = default)
@@ -203,46 +221,70 @@
 
             var appointmentDateTime = command.AppointmentDate.Date.Add(command.AppointmentTime);
 
-            var bookedAppointmentsOnDay = await unitOfWork.AppointmentsRepository
-               .GetBookedAppointmentsAsync(appointment.DoctorId, command.AppointmentDate, cancellationToken);
+            // 1.  مفتاح القفل للميعاد الجديد اللي اليوزر بيحاول ينقل ليه
+            string lockKey = $"lock:appointment:doctor:{appointment.DoctorId}:time:{appointmentDateTime:yyyyMMddHHmm}";
 
-            var isSlotBooked = bookedAppointmentsOnDay
-                .Any(a => a.AppointmentDate == appointmentDateTime && a.Id != command.AppointmentId);
+            // 2.  محاولة أخذ القفل
+            bool isLocked = await _lockService.AcquireLockAsync(lockKey, TimeSpan.FromSeconds(30));
 
-            if (isSlotBooked)
+            if (!isLocked)
             {
-                logger.LogError("Failed to book appointment: Slot already booked for DoctorId: {DoctorId} on {AppointmentDateTime}",
-                    appointment.DoctorId, appointmentDateTime);
-                throw new SlotAlreadyBookedException("The selected time slot is no longer available. Please select another time.");
+                logger.LogWarning("Distributed Lock prevented double rescheduling for DoctorId: {DoctorId} on {AppointmentDateTime}", appointment.DoctorId, appointmentDateTime);
+                throw new SlotAlreadyBookedException("This new time slot is currently being booked by someone else.");
             }
 
-            appointment.Reschedule(appointmentDateTime);
-
-            var result = await unitOfWork.SaveAsync();
-
-            if (result == 0)
+            try
             {
-                logger.LogError("Failed to save the Reschedule appointment for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDateTime}",
-                    command.PatientId, appointment.DoctorId, appointmentDateTime);
-                // إذا فشل الحفظ دون استثناء، يجب رفع استثناء هنا
-                throw new DatabaseSaveException("Failed to save the Reschedule appointment to the database.");
+                var bookedAppointmentsOnDay = await unitOfWork.AppointmentsRepository
+                     .GetBookedAppointmentsAsync(appointment.DoctorId, command.AppointmentDate, cancellationToken);
+
+                var isSlotBooked = bookedAppointmentsOnDay
+                    .Any(a => a.AppointmentDate == appointmentDateTime && a.Id != command.AppointmentId);
+                
+                if (isSlotBooked)
+                {
+                    logger.LogError("Failed to book appointment: Slot already booked for DoctorId: {DoctorId} on {AppointmentDateTime}",
+                        appointment.DoctorId, appointmentDateTime);
+                    throw new SlotAlreadyBookedException("The selected time slot is no longer available. Please select another time.");
+                }
+                
+                appointment.Reschedule(appointmentDateTime);
+                
+                var result = await unitOfWork.SaveAsync();
+                
+                if (result == 0)
+                {
+                    logger.LogError("Failed to save the Reschedule appointment for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDateTime}",
+                        command.PatientId, appointment.DoctorId, appointmentDateTime);
+                    // إذا فشل الحفظ دون استثناء، يجب رفع استثناء هنا
+                    throw new DatabaseSaveException("Failed to save the Reschedule appointment to the database.");
+                }
+                
+                logger.LogInformation("Successfully rescheduled appointment with ID: {AppointmentId} for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDateTime}",
+                    appointment.Id, command.PatientId, appointment.DoctorId, appointmentDateTime);
+                
+                await _messagePublisher.PublishAsync(new AppointmentRescheduledEvent
+                {
+                    AppointmentId = appointment.Id,
+                    PatientUserId = appointment.Patient.ApplicationUserId,
+                    PatientName = appointment.Patient.FullName,
+                    DoctorName = appointment.Doctor.FullName,
+                    DoctorSpecialization = appointment.Doctor.Specialization,
+                    OldDate = oldAppointmentDate,
+                    NewDate = appointmentDateTime
+                }, cancellationToken);
+                
+                return appointment;
             }
-
-            logger.LogInformation("Successfully rescheduled appointment with ID: {AppointmentId} for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDateTime}",
-                appointment.Id, command.PatientId, appointment.DoctorId, appointmentDateTime);
-
-            await _messagePublisher.PublishAsync(new AppointmentRescheduledEvent
+            catch (UniqueConstraintViolationException ex) 
             {
-                AppointmentId = appointment.Id,
-                PatientUserId = appointment.Patient.ApplicationUserId,
-                PatientName = appointment.Patient.FullName,
-                DoctorName = appointment.Doctor.FullName,
-                DoctorSpecialization = appointment.Doctor.Specialization,
-                OldDate = oldAppointmentDate,
-                NewDate = appointmentDateTime
-            }, cancellationToken);
-
-            return appointment;
+                logger.LogError(ex, "Concurrency issue: Unique constraint violated for DoctorId: {DoctorId} on {AppointmentDateTime}", appointment.DoctorId, appointmentDateTime);
+                throw new SlotAlreadyBookedException("The selected time slot was just booked by another patient. Please try again.");
+            }
+            finally
+            {
+                await _lockService.ReleaseLockAsync(lockKey);
+            }
         }
         
         public async Task<Appointment> CancelAppointmentAsync(CancelAppointmentCommand command, CancellationToken cancellationToken = default)
