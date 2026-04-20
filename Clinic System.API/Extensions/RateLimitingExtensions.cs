@@ -19,7 +19,7 @@
 
                     logger.LogWarning("Rate Limit Exceeded! IP: {IP}, User: {UserId}, Tried to attack: {Method} {Path}", ip, userId, method, path);
 
-                    string cacheKey = $"BlockedTracker_{ip}_{DateTime.UtcNow.Ticks}";
+                    string cacheKey = $"Blacklist_IP_{ip}";
 
                     var crimeData = new
                     {
@@ -58,13 +58,13 @@
                                      ?? "unknown_user";
 
                         // بنعمله جردل خاص بيه باسمه
-                        return RateLimitPartition.GetTokenBucketLimiter(
+                        return RateLimitPartition.GetSlidingWindowLimiter(
                             partitionKey: $"User_{userId}",
-                            factory: _ => new TokenBucketRateLimiterOptions
+                            factory: _ => new SlidingWindowRateLimiterOptions
                             {
-                                TokenLimit = 100, // مسموحله بـ 100 ريكويست في الدقيقة
-                                ReplenishmentPeriod = TimeSpan.FromMinutes(1), // الجردل بيتملي كل دقيقة
-                                TokensPerPeriod = 100, // بنحطله 100 عملة جديدة
+                                PermitLimit = 100, // مسموحله بـ 100 ريكويست في الدقيقة
+                                Window = TimeSpan.FromMinutes(1), // الجردل بيتملي كل دقيقة
+                                SegmentsPerWindow = 6, //  السر هنا: قسمنا الدقيقة لـ 6 أجزاء (كل 10 ثواني). كده النافذة بتتزحلق كل 10 ثواني ومستحيل الهاكر يخدعها
                                 QueueLimit = 0,
                                 AutoReplenishment = true
                             });
@@ -73,13 +73,13 @@
                     {
                         // لو مش مسجل دخول، بنعامله بالـ IP وبنديله ليميت أقل (60 بس)
                         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown_ip";
-                        return RateLimitPartition.GetTokenBucketLimiter(
+                        return RateLimitPartition.GetSlidingWindowLimiter(
                             partitionKey: $"IP_{ip}",
-                            factory: _ => new TokenBucketRateLimiterOptions
+                            factory: _ => new SlidingWindowRateLimiterOptions
                             {
-                                TokenLimit = 60, // الزائر العادي آخره 60 ريكويست
-                                ReplenishmentPeriod = TimeSpan.FromMinutes(1),
-                                TokensPerPeriod = 60,
+                                PermitLimit = 60, // مسموحله بـ 100 ريكويست في الدقيقة
+                                Window = TimeSpan.FromMinutes(1), // الجردل بيتملي كل دقيقة
+                                SegmentsPerWindow = 6, //  السر هنا: قسمنا الدقيقة لـ 6 أجزاء (كل 10 ثواني). كده النافذة بتتزحلق كل 10 ثواني ومستحيل الهاكر يخدعها
                                 QueueLimit = 0,
                                 AutoReplenishment = true
                             });
