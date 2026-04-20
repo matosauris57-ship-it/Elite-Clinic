@@ -12,5 +12,7 @@
         Task<bool> RemoveDataAsync(string key);
 
         Task<bool> RemoveByPrefixAsync(params string[] prefixKeys);
+
+        Task<T?> GetOrSetAsync<T>(string key, Func<Task<T>> fetchData, TimeSpan cacheDuration);
     }
 }

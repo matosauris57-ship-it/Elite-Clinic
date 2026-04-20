@@ -1,7 +1,4 @@
-﻿using Clinic_System.API.Hubs;
-using Clinic_System.API.Services;
-
-namespace Clinic_System.API
+﻿namespace Clinic_System.API
 {
     public class Program
     {
@@ -65,7 +62,7 @@ namespace Clinic_System.API
                 }
 
                 app.UseMiddleware<ErrorHandlerMiddleware>();
-
+                app.UseMiddleware<BlacklistMiddleware>();
 
                 // Configure the HTTP request pipeline.
                 if (app.Environment.IsDevelopment())

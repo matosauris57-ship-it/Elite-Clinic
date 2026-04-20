@@ -29,28 +29,33 @@
             // ب. نسأل الـ Redis: "هل عندك الداتا دي؟"
             var cachedDoctors = await cacheService.GetDataAsync<PagedResult<GetDoctorListDTO>>(cacheKey);
 
-            // ج. لو الداتا موجودة في الكاش، هنرجعها فوراً ومش هنكمل باقي الكود (وفرنا رحلة للداتابيز)
-            if (cachedDoctors != null)
-            {
-                logger.LogInformation("Successfully retrieved doctors from CACHE for {CacheKey}", cacheKey);
-                return Success(cachedDoctors); // هنرجع نفس نوع الـ Response اللي الفرونت مستنيه
-            }
 
+            var pagedResult = await cacheService.GetOrSetAsync(
+                cacheKey,
+                async () =>
+                {
+                    // 👈 البلوك ده مش هيتنفذ غير لو الكاش فاضي تماماً، أو لو ده الريكويست "البطل" اللي بيجدد الكاش
+                    logger.LogInformation("Fetching doctors from DATABASE for {CacheKey}", cacheKey);
 
-            var doctors = await doctorService.GetDoctorsListPagingAsync(request.PageNumber, request.PageSize, cancellationToken);
+                    var doctors = await doctorService.GetDoctorsListPagingAsync(request.PageNumber, request.PageSize, cancellationToken);
 
-            if (doctors?.Items.Any() != true)
+                    if (doctors?.Items.Any() != true)
+                    {
+                        return null; // لو مفيش داتا، هنرجع null عشان الكاش ميسجلش حاجة فاضية
+                    }
+
+                    var doctorsMapper = mapper.Map<List<GetDoctorListDTO>>(doctors.Items);
+                    return new PagedResult<GetDoctorListDTO>(doctorsMapper, doctors.TotalCount, doctors.CurrentPage, doctors.PageSize);
+                },
+                TimeSpan.FromMinutes(30) // ده العمر المنطقي (Logical Expiry) اللي اتفقنا عليه
+            );
+
+            // 3. بنشيك على النتيجة النهائية
+            if (pagedResult == null)
             {
                 logger.LogWarning("No doctors found for PageNumber={PageNumber}, PageSize={PageSize}", request.PageNumber, request.PageSize);
                 return NotFound<PagedResult<GetDoctorListDTO>>();
             }
-
-            var doctorsMapper = mapper.Map<List<GetDoctorListDTO>>(doctors.Items);
-            var pagedResult = new PagedResult<GetDoctorListDTO>(doctorsMapper, doctors.TotalCount, doctors.CurrentPage, doctors.PageSize);
-           
-            logger.LogInformation("Successfully retrieved {Count} doctors for PageNumber={PageNumber}, PageSize={PageSize}", doctors.Items.Count(), request.PageNumber, request.PageSize);
-
-            await cacheService.SetDataAsync(cacheKey, pagedResult, TimeSpan.FromMinutes(30));
 
             return Success(pagedResult);
         }

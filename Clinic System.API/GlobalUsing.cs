@@ -55,6 +55,8 @@ global using Clinic_System.API.Hubs;
 global using Clinic_System.Application.DTOs;
 global using Clinic_System.Infrastructure.MessageBroker.Consumers;
 global using MassTransit;
+global using Clinic_System.API.Services;
+
 
 
 
