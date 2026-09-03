@@ -148,6 +148,116 @@ else if (_profile != null)
                         <button class="btn-primary" disabled="@_saving" @onclick="SavePersonalDataAsync">@(_saving ? "Guardando..." : "Guardar datos")</button>
                     </div>
                 }
+
+                <div class="ec-section">
+                    <button type="button" class="ec-toggle" @onclick="ToggleEmergencyContacts">
+                        <Icon Name="alert-triangle" Class="ec-toggle-icon" />
+                        <span>Contactos de emergencia (@_emergencyContacts.Count)</span>
+                        <span class="ec-chevron @(_ecExpanded ? "is-open" : "")">
+                            <Icon Name="chevron-right" Class="ec-chevron-svg" StrokeWidth="2" />
+                        </span>
+                    </button>
+
+                    @if (_ecExpanded)
+                    {
+                        @if (!string.IsNullOrEmpty(_ecError))
+                        {
+                            <div class="wizard-error">@_ecError</div>
+                        }
+                        @if (_ecLoading)
+                        {
+                            <AnimatedLoader Compact="true" Message="Cargando contactos..." />
+                        }
+                        else
+                        {
+                            @if (_emergencyContacts.Count > 0)
+                            {
+                                <div class="ec-list">
+                                    @foreach (var contact in _emergencyContacts)
+                                    {
+                                        <div class="ec-card">
+                                            <div class="ec-card-main">
+                                                <strong>@contact.FullName</strong>
+                                                <span class="ec-badge">@contact.Relationship</span>
+                                            </div>
+                                            <div class="ec-card-detail">
+                                                <span>@contact.Phone</span>
+                                                @if (!string.IsNullOrWhiteSpace(contact.Notes))
+                                                {
+                                                    <span class="ec-notes">@contact.Notes</span>
+                                                }
+                                            </div>
+                                            @if (_canEditPatient)
+                                            {
+                                                <div class="ec-card-actions">
+                                                    <button class="btn-outline btn-sm" @onclick="() => EditEmergencyContact(contact)">Editar</button>
+                                                    <button class="btn-outline btn-sm btn-table-danger" disabled="@_ecSaving" @onclick="() => DeleteEmergencyContactAsync(contact)">Eliminar</button>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="ec-empty">No hay contactos de emergencia registrados.</p>
+                            }
+
+                            @if (_canEditPatient)
+                            {
+                                @if (_ecFormVisible)
+                                {
+                                    <div class="ec-form">
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label>Nombre completo <span class="np-req">*</span></label>
+                                                <input class="form-input" @bind="_ecForm.FullName" placeholder="Nombre del contacto" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Parentesco <span class="np-req">*</span></label>
+                                                <select class="form-input" @bind="_ecForm.Relationship">
+                                                    <option value="">Seleccionar...</option>
+                                                    <option value="Padre">Padre</option>
+                                                    <option value="Madre">Madre</option>
+                                                    <option value="Cónyuge">Cónyuge</option>
+                                                    <option value="Hijo/a">Hijo/a</option>
+                                                    <option value="Hermano/a">Hermano/a</option>
+                                                    <option value="Abuelo/a">Abuelo/a</option>
+                                                    <option value="Tío/a">Tío/a</option>
+                                                    <option value="Amigo/a">Amigo/a</option>
+                                                    <option value="Tutor legal">Tutor legal</option>
+                                                    <option value="Otro">Otro</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label>Teléfono <span class="np-req">*</span></label>
+                                                <input class="form-input" @bind="_ecForm.Phone" placeholder="809 555 1234" inputmode="tel" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Notas (opcional)</label>
+                                                <input class="form-input" @bind="_ecForm.Notes" placeholder="Horario de contacto, etc." />
+                                            </div>
+                                        </div>
+                                        <div class="ec-form-actions">
+                                            <button class="btn-primary btn-sm" disabled="@_ecSaving" @onclick="SaveEmergencyContactAsync">
+                                                @(_ecSaving ? "Guardando..." : (_ecEditingId.HasValue ? "Actualizar" : "Agregar"))
+                                            </button>
+                                            <button class="btn-outline btn-sm" @onclick="CancelEmergencyContactForm">Cancelar</button>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <button class="btn-outline btn-sm ec-add-btn" @onclick="ShowEmergencyContactForm">
+                                        <Icon Name="plus" Class="btn-svg" /> Agregar contacto
+                                    </button>
+                                }
+                            }
+                        }
+                    }
+                </div>
             </div>
         }
         else if (_tab == "antecedentes" && _history != null)
@@ -671,6 +781,14 @@ else if (_profile != null)
 
     private PatientClinicalProfile? _profile;
     private DentalHistoryForm? _history;
+    private List<EmergencyContactItem> _emergencyContacts = [];
+    private EmergencyContactForm _ecForm = new();
+    private int? _ecEditingId;
+    private bool _ecExpanded;
+    private bool _ecLoading;
+    private bool _ecSaving;
+    private bool _ecFormVisible;
+    private string? _ecError;
     private List<MedicalConditionListItem> _conditions = [];
     private List<ToothChartEntry> _chartEntries = [];
     private List<DentalClinicalEvent> _fullTimeline = [];
@@ -1141,6 +1259,89 @@ else if (_profile != null)
             _history.SelectedConditionIds.Add(id);
         else if (!selected)
             _history.SelectedConditionIds.Remove(id);
+    }
+
+    // ────── Emergency Contacts ──────
+
+    private async Task ToggleEmergencyContacts()
+    {
+        _ecExpanded = !_ecExpanded;
+        if (_ecExpanded && _emergencyContacts.Count == 0 && !_ecLoading)
+            await LoadEmergencyContactsAsync();
+    }
+
+    private async Task LoadEmergencyContactsAsync()
+    {
+        _ecLoading = true;
+        _ecError = null;
+        var (contacts, error) = await PatientService.GetEmergencyContactsAsync(PatientId);
+        _emergencyContacts = contacts;
+        _ecError = error;
+        _ecLoading = false;
+    }
+
+    private void ShowEmergencyContactForm()
+    {
+        _ecForm = new EmergencyContactForm();
+        _ecEditingId = null;
+        _ecFormVisible = true;
+    }
+
+    private void EditEmergencyContact(EmergencyContactItem contact)
+    {
+        _ecForm = new EmergencyContactForm
+        {
+            FullName = contact.FullName,
+            Phone = contact.Phone,
+            Relationship = contact.Relationship,
+            Notes = contact.Notes
+        };
+        _ecEditingId = contact.Id;
+        _ecFormVisible = true;
+    }
+
+    private void CancelEmergencyContactForm()
+    {
+        _ecFormVisible = false;
+        _ecEditingId = null;
+        _ecForm = new EmergencyContactForm();
+    }
+
+    private async Task SaveEmergencyContactAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_ecForm.FullName) || string.IsNullOrWhiteSpace(_ecForm.Phone) || string.IsNullOrWhiteSpace(_ecForm.Relationship))
+        {
+            _ecError = "Nombre, teléfono y parentesco son obligatorios.";
+            return;
+        }
+
+        _ecSaving = true;
+        _ecError = null;
+
+        if (_ecEditingId.HasValue)
+        {
+            var (ok, err) = await PatientService.UpdateEmergencyContactAsync(PatientId, _ecEditingId.Value, _ecForm);
+            if (!ok) { _ecError = err; _ecSaving = false; return; }
+        }
+        else
+        {
+            var (ok, err, _) = await PatientService.CreateEmergencyContactAsync(PatientId, _ecForm);
+            if (!ok) { _ecError = err; _ecSaving = false; return; }
+        }
+
+        CancelEmergencyContactForm();
+        _ecSaving = false;
+        await LoadEmergencyContactsAsync();
+    }
+
+    private async Task DeleteEmergencyContactAsync(EmergencyContactItem contact)
+    {
+        _ecSaving = true;
+        _ecError = null;
+        var (ok, err) = await PatientService.DeleteEmergencyContactAsync(PatientId, contact.Id);
+        _ecSaving = false;
+        if (!ok) { _ecError = err; return; }
+        _emergencyContacts.RemoveAll(c => c.Id == contact.Id);
     }
 
     private async Task SavePersonalDataAsync()

@@ -30,6 +30,7 @@ namespace Clinic_System.Data.Context
         public DbSet<DashboardLayout> DashboardLayouts { get; set; }
         public DbSet<EmailCampaign> EmailCampaigns { get; set; }
         public DbSet<EmailCampaignRecipient> EmailCampaignRecipients { get; set; }
+        public DbSet<EmergencyContact> EmergencyContacts { get; set; }
 
         public AppDbContext()
         {

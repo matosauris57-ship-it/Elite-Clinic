@@ -34,14 +34,13 @@
             </div>
 
             <div class="success-actions">
-                <button class="btn-primary" @onclick="OpenWhatsAppConfirmation">
-                    <Icon Name="message-circle" Class="btn-svg" />
-                    Confirmación WhatsApp
-                </button>
-                <button class="btn-outline" @onclick="OpenEmailConfirmation">
-                    <Icon Name="mail" Class="btn-svg" />
-                    Confirmación correo
-                </button>
+                @if (_state.ReminderEnabled && (_state.NotifyViaWhatsApp || _state.NotifyViaEmail))
+                {
+                    <button class="btn-primary" @onclick="OpenConfirmationDispatch">
+                        <Icon Name="bell" Class="btn-svg" />
+                        Enviar confirmación
+                    </button>
+                }
                 <button class="btn-outline" @onclick="ResetWizard">
                     <Icon Name="calendar-plus" Class="btn-svg" />
                     Agendar otra
@@ -478,19 +477,31 @@ else
                             <div class="reminder-section">
                                 <div class="reminder-head">
                                     <Icon Name="bell" Class="reminder-icon" />
-                                    <span>Recordatorio automático</span>
+                                    <span>Enviar confirmación al paciente</span>
                                     <label class="ai-toggle small">
                                         <input type="checkbox" @bind="_state.ReminderEnabled" />
                                         <span class="ai-slider"></span>
                                     </label>
                                 </div>
+                                <p class="reminder-hint">Puede elegir WhatsApp, correo, o ambos.</p>
                                 <div class="reminder-channels">
-                                    @foreach (var ch in _reminderChannels)
-                                    {
-                                        <button type="button" class="channel-btn @(_state.ReminderChannel == ch ? "active" : "")"
-                                                @onclick="() => _state.ReminderChannel = ch">@ch</button>
-                                    }
+                                    <button type="button"
+                                            class="channel-btn @(_state.NotifyViaWhatsApp ? "active" : "")"
+                                            disabled="@(!_state.ReminderEnabled)"
+                                            @onclick="() => _state.NotifyViaWhatsApp = !_state.NotifyViaWhatsApp">
+                                        WhatsApp
+                                    </button>
+                                    <button type="button"
+                                            class="channel-btn @(_state.NotifyViaEmail ? "active" : "")"
+                                            disabled="@(!_state.ReminderEnabled)"
+                                            @onclick="() => _state.NotifyViaEmail = !_state.NotifyViaEmail">
+                                        Correo
+                                    </button>
                                 </div>
+                                @if (_state.ReminderEnabled && !_state.NotifyViaWhatsApp && !_state.NotifyViaEmail)
+                                {
+                                    <p class="reminder-hint reminder-hint-warn">Seleccione al menos un canal.</p>
+                                }
                             </div>
                         </div>
                         break;
@@ -592,7 +603,7 @@ else
     private readonly CreatePatientRequest _newPatient = new();
     private readonly System.Globalization.CultureInfo _culture = System.Globalization.CultureInfo.GetCultureInfo("es-ES");
     private readonly string[] _weekDays = ["L", "M", "X", "J", "V", "S", "D"];
-    private readonly string[] _reminderChannels = ["WhatsApp", "EMAIL", "SMS"];
+    private readonly string[] _reminderChannels = ["WhatsApp", "Correo"];
 
     private readonly List<(int Number, string Name, string Icon)> _steps =
     [
@@ -1127,6 +1138,14 @@ else
         }
 
         CloseEmailModal();
+    }
+
+    private void OpenConfirmationDispatch()
+    {
+        if (_state.NotifyViaWhatsApp)
+            OpenWhatsAppConfirmation();
+        if (_state.NotifyViaEmail)
+            OpenEmailConfirmation();
     }
 
     private void ResetWizard()

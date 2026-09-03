@@ -1455,8 +1455,7 @@ The following features are planned for future releases:
 - [ ] **Test Coverage Reports** - Automated coverage analysis
 
 ### 📱 Communication
-- [ ] **SMS Notifications** - Appointment reminders via SMS (Twilio integration)
-- [ ] **WhatsApp Integration** - Automated messages via WhatsApp Business API
+- [ ] **WhatsApp Business API** - Automated messages via WhatsApp Business API (currently manual via wa.me links)
 
 ### 🐳 DevOps & Deployment
 - ✅ **Docker Support** - Containerization with Docker Compose

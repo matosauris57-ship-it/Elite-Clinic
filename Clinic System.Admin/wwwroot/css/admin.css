@@ -2026,6 +2026,30 @@ button.nav-item:focus-visible,
     background: rgba(38, 198, 218, 0.08);
 }
 
+.reminder-hint { margin: 0.35rem 0 0; font-size: 0.82rem; color: var(--text-muted); }
+.reminder-hint-warn { color: var(--accent-yellow); }
+
+/* Emergency Contacts */
+.ec-section { margin-top: 1.5rem; border: 1px solid var(--border-subtle); border-radius: var(--radius); overflow: hidden; }
+.ec-toggle { display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.85rem 1rem; appearance: none; border: 0; background: var(--surface-1); color: var(--text-primary); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.ec-toggle:hover { background: var(--hover-surface); }
+.ec-toggle-icon { width: 16px; height: 16px; color: var(--accent-yellow); }
+.ec-chevron { display: inline-flex; margin-left: auto; transition: transform 0.2s ease; }
+.ec-chevron.is-open { transform: rotate(90deg); }
+.ec-chevron-svg { width: 14px; height: 14px; }
+.ec-list { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem 1rem; }
+.ec-card { padding: 0.65rem 0.8rem; border-radius: 0.6rem; background: var(--bg-card-elevated); border: 1px solid var(--border-subtle); }
+.ec-card-main { display: flex; align-items: center; gap: 0.5rem; }
+.ec-badge { font-size: 0.75rem; padding: 0.15rem 0.55rem; border-radius: 999px; background: rgba(38, 198, 218, 0.12); color: var(--accent-teal); font-weight: 600; }
+.ec-card-detail { margin-top: 0.3rem; font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 1rem; }
+.ec-notes { font-style: italic; }
+.ec-card-actions { margin-top: 0.4rem; display: flex; gap: 0.4rem; }
+.ec-empty { padding: 0.75rem 1rem; color: var(--text-dim); font-size: 0.88rem; margin: 0; }
+.ec-form { padding: 0.75rem 1rem; }
+.ec-form-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.ec-add-btn { margin: 0.75rem 1rem; }
+.btn-sm { font-size: 0.82rem; padding: 0.4rem 0.75rem; }
+
 .wizard-footer {
     display: flex;
     align-items: center;
