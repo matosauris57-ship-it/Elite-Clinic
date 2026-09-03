@@ -38,6 +38,9 @@ else
         case DashboardWidgetKeys.TodayAppointments:
             <DashboardAppointmentList Items="Data.TodayAppointments" />
             break;
+        case DashboardWidgetKeys.DoctorsDailyAgenda:
+            <DoctorDailyAgendaWidget Items="Data.TodayAppointments" />
+            break;
         case DashboardWidgetKeys.WaitingQueue:
             <DashboardQueue Items="Data.WaitingPatients" />
             break;

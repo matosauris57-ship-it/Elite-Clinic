@@ -2050,6 +2050,20 @@ button.nav-item:focus-visible,
 .ec-add-btn { margin: 0.75rem 1rem; }
 .btn-sm { font-size: 0.82rem; padding: 0.4rem 0.75rem; }
 
+/* Dashboard doctor agenda widget */
+.doctor-agenda-widget { display: flex; flex-direction: column; gap: 0.65rem; min-height: 0; }
+.doctor-agenda-error { padding: 0.55rem 0.7rem; border-radius: 0.65rem; color: var(--accent-yellow); background: rgba(255, 202, 40, 0.08); border: 1px solid rgba(255, 202, 40, 0.14); font-size: 0.82rem; }
+.doctor-agenda-card { padding: 0.75rem; border-radius: 0.85rem; background: var(--surface-1); border: 1px solid var(--border-subtle); }
+.doctor-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.55rem; }
+.doctor-agenda-head strong { display: block; color: var(--text-primary); font-size: 0.95rem; }
+.doctor-agenda-head span { display: block; color: var(--text-muted); font-size: 0.78rem; margin-top: 0.1rem; }
+.doctor-agenda-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.doctor-agenda-row { display: grid; grid-template-columns: 4.8rem 1fr auto; gap: 0.5rem; align-items: center; color: var(--text-muted); font-size: 0.82rem; }
+.doctor-agenda-row span { color: var(--accent-teal); font-variant-numeric: tabular-nums; }
+.doctor-agenda-row strong { color: var(--text-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doctor-agenda-row em { color: var(--text-dim); font-style: normal; font-size: 0.76rem; }
+.doctor-agenda-more { color: var(--text-dim); font-size: 0.78rem; padding-left: 5.3rem; }
+
 .wizard-footer {
     display: flex;
     align-items: center;

@@ -51,6 +51,7 @@ public static class DashboardWidgetKeys
     public const string DailyRevenueKpi = "daily-revenue";
     public const string PendingTreatmentsKpi = "pending-treatments-count";
     public const string TodayAppointments = "today-appointments";
+    public const string DoctorsDailyAgenda = "doctors-daily-agenda";
     public const string WaitingQueue = "waiting-queue";
     public const string DailyCollections = "daily-collections";
     public const string MonthlyIncomeChart = "monthly-income";
