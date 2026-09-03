@@ -11,6 +11,7 @@ namespace Clinic_System.Application.DTOs.Dental
         public int? TreatmentProcedureId { get; set; }
         public string ProcedureName { get; set; } = null!;
         public string? ProcedureDetails { get; set; }
+        public string? MedicalNotes { get; set; }
         public decimal Cost { get; set; }
         public string Status { get; set; } = null!;
         public DateTime? PerformedDate { get; set; }

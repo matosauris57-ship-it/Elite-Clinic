@@ -18,6 +18,7 @@ namespace Clinic_System.Application.Service.Implemention
             ToothSurface? toothSurface,
             int? treatmentProcedureId,
             string? procedureDetails,
+            string? medicalNotes,
             string? recordedByUserId,
             CancellationToken cancellationToken = default)
         {
@@ -57,13 +58,14 @@ namespace Clinic_System.Application.Service.Implemention
                 ToothSurface = toothSurface,
                 TreatmentProcedureId = treatmentProcedureId,
                 ProcedureName = procedureName,
-                ProcedureDetails = procedureDetails,
+                ProcedureDetails = NormalizeOptional(procedureDetails),
+                MedicalNotes = NormalizeOptional(medicalNotes),
                 Cost = cost,
                 Status = DentalTreatmentStatus.Planned
             };
 
             await unitOfWork.DentalTreatmentsRepository.AddAsync(treatment, cancellationToken);
-            await AddEventAsync(treatment, "Tratamiento creado", "Estado: planificado.", recordedByUserId, cancellationToken);
+            await AddEventAsync(treatment, "Tratamiento creado", BuildEventDescription(treatment, "Estado: planificado."), recordedByUserId, cancellationToken);
             return treatment;
         }
 
@@ -73,7 +75,7 @@ namespace Clinic_System.Application.Service.Implemention
             var treatment = await GetByIdAsync(treatmentId, cancellationToken);
             treatment.Start();
             unitOfWork.DentalTreatmentsRepository.Update(treatment, cancellationToken);
-            await AddEventAsync(treatment, "Tratamiento iniciado", treatment.ProcedureDetails, recordedByUserId, cancellationToken);
+            await AddEventAsync(treatment, "Tratamiento iniciado", BuildEventDescription(treatment), recordedByUserId, cancellationToken);
             return treatment;
         }
 
@@ -86,7 +88,7 @@ namespace Clinic_System.Application.Service.Implemention
 
             treatment.Complete();
             unitOfWork.DentalTreatmentsRepository.Update(treatment, cancellationToken);
-            await AddEventAsync(treatment, "Tratamiento completado", treatment.ProcedureDetails, recordedByUserId, cancellationToken);
+            await AddEventAsync(treatment, "Tratamiento completado", BuildEventDescription(treatment), recordedByUserId, cancellationToken);
             return treatment;
         }
 
@@ -123,6 +125,7 @@ namespace Clinic_System.Application.Service.Implemention
             ToothSurface? toothSurface,
             int? treatmentProcedureId,
             string? procedureDetails,
+            string? medicalNotes,
             CancellationToken cancellationToken = default)
         {
             var treatment = await GetByIdAsync(treatmentId, cancellationToken);
@@ -150,7 +153,8 @@ namespace Clinic_System.Application.Service.Implemention
             treatment.ToothSurface = toothSurface;
             treatment.TreatmentProcedureId = treatmentProcedureId;
             treatment.ToothRecordId = toothRecordId;
-            treatment.ProcedureDetails = procedureDetails;
+            treatment.ProcedureDetails = NormalizeOptional(procedureDetails);
+            treatment.MedicalNotes = NormalizeOptional(medicalNotes);
 
             unitOfWork.DentalTreatmentsRepository.Update(treatment, cancellationToken);
             return treatment;
@@ -196,6 +200,21 @@ namespace Clinic_System.Application.Service.Implemention
                 RecordedByUserId = recordedByUserId,
                 RecordedAt = recordedAt
             }, cancellationToken);
+        }
+
+        private static string? NormalizeOptional(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        private static string BuildEventDescription(DentalTreatment treatment, string? fallback = null)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(fallback))
+                parts.Add(fallback);
+            if (!string.IsNullOrWhiteSpace(treatment.ProcedureDetails))
+                parts.Add(treatment.ProcedureDetails!);
+            if (!string.IsNullOrWhiteSpace(treatment.MedicalNotes))
+                parts.Add($"Notas médicas: {treatment.MedicalNotes}");
+            return string.Join(" ", parts);
         }
     }
 }

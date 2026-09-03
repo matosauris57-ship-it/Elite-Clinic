@@ -31,6 +31,7 @@ namespace Clinic_System.Application.Features.DentalTreatments.Commands.Handlers
                 request.ToothSurface,
                 request.TreatmentProcedureId,
                 request.ProcedureDetails,
+                request.MedicalNotes,
                 cancellationToken);
 
             await unitOfWork.SaveAsync(cancellationToken);

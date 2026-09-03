@@ -11,6 +11,7 @@ namespace Clinic_System.Application.Service.Interface
             ToothSurface? toothSurface,
             int? treatmentProcedureId,
             string? procedureDetails,
+            string? medicalNotes,
             string? recordedByUserId,
             CancellationToken cancellationToken = default);
 
@@ -35,6 +36,7 @@ namespace Clinic_System.Application.Service.Interface
             ToothSurface? toothSurface,
             int? treatmentProcedureId,
             string? procedureDetails,
+            string? medicalNotes,
             CancellationToken cancellationToken = default);
         Task<DentalTreatment> CancelAsync(int treatmentId, string? reason, string? recordedByUserId, CancellationToken cancellationToken = default);
         Task SoftDeleteAsync(int treatmentId, CancellationToken cancellationToken = default);

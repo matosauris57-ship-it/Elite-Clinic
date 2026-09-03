@@ -5859,6 +5859,14 @@ button.whatsapp-placeholder-chip:hover {
     font-size: 0.75rem;
 }
 
+.tx-medical-note {
+    display: block;
+    margin-top: 0.2rem;
+    color: var(--accent-teal);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
 @media (max-width: 900px) {
     .tx-procedure-grid {
         grid-template-columns: 1fr;

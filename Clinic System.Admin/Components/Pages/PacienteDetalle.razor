@@ -679,6 +679,11 @@ else if (_profile != null)
                             <div class="form-group"><label>Superficie</label><input class="form-input" value="@SurfaceLabel(_selectedSurface)" disabled /></div>
                         </div>
                         <div class="form-group"><label>Detalles</label><textarea class="form-input" rows="2" @bind="_treatmentDetails"></textarea></div>
+                        <div class="form-group">
+                            <label>Notas médicas</label>
+                            <textarea class="form-input" rows="3" maxlength="4000" @bind="_treatmentMedicalNotes"
+                                      placeholder="Observaciones clínicas, indicaciones o evolución del tratamiento..."></textarea>
+                        </div>
                         <button class="btn-primary" disabled="@(_savingTreatment || _treatmentProcedureId == 0)" @onclick="CreateTreatmentAsync">
                             @(_savingTreatment ? "Creando..." : "Crear tratamiento")
                         </button>
@@ -702,7 +707,17 @@ else if (_profile != null)
                                 @foreach (var treatment in _patientTreatments)
                                 {
                                     <tr>
-                                        <td>@treatment.ProcedureName</td>
+                                        <td>
+                                            <strong>@treatment.ProcedureName</strong>
+                                            @if (!string.IsNullOrWhiteSpace(treatment.ProcedureDetails))
+                                            {
+                                                <div class="billing-muted">@treatment.ProcedureDetails</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(treatment.MedicalNotes))
+                                            {
+                                                <div class="tx-medical-note">Notas médicas: @treatment.MedicalNotes</div>
+                                            }
+                                        </td>
                                         <td>@(treatment.ToothNumber?.ToString() ?? "—")</td>
                                         <td><span class="status-badge @TreatmentStatusClass(treatment.Status)">@TreatmentStatusLabel(treatment.Status)</span></td>
                                         <td>$@treatment.Cost.ToString("N0")</td>
@@ -832,6 +847,7 @@ else if (_profile != null)
     private int _treatmentProcedureId;
     private decimal _treatmentCost;
     private string? _treatmentDetails;
+    private string? _treatmentMedicalNotes;
     private string? _treatmentCancellationReason;
     private string? _loadError;
     private string? _saveError;
@@ -1493,7 +1509,8 @@ else if (_profile != null)
             Cost = _treatmentCost,
             ToothNumber = _selectedTooth,
             ToothSurface = _selectedTooth.HasValue ? _selectedSurface : null,
-            ProcedureDetails = _treatmentDetails
+            ProcedureDetails = _treatmentDetails,
+            MedicalNotes = _treatmentMedicalNotes
         });
         _savingTreatment = false;
         if (!result.Success)
@@ -1506,6 +1523,7 @@ else if (_profile != null)
         _treatmentProcedureId = 0;
         _treatmentCost = 0;
         _treatmentDetails = null;
+        _treatmentMedicalNotes = null;
         await RefreshClinicalDataAsync(includeChart: false);
     }
 

@@ -128,6 +128,10 @@
                                     {
                                         <span>@item.ProcedureDetails</span>
                                     }
+                                    @if (!string.IsNullOrWhiteSpace(item.MedicalNotes))
+                                    {
+                                        <span class="tx-medical-note">Notas médicas: @item.MedicalNotes</span>
+                                    }
                                 </div>
                             </td>
                             <td><span class="status-badge @GetStatusClass(item.Status)">@FormatStatus(item.Status)</span></td>
@@ -211,6 +215,11 @@
                         <label>Detalles</label>
                         <input class="form-input" @bind="_form.ProcedureDetails" />
                     </div>
+                </div>
+                <div class="form-group">
+                    <label>Notas médicas</label>
+                    <textarea class="form-input" rows="4" maxlength="4000" @bind="_form.MedicalNotes"
+                              placeholder="Observaciones clínicas, indicaciones del procedimiento o evolución del paciente..."></textarea>
                 </div>
             </div>
             <PatientClinicalHistoryPanel PatientId="_editing.PatientId" PatientName="@_editing.PatientName" />
@@ -412,7 +421,8 @@
             ProcedureName = item.ProcedureName,
             Cost = item.Cost,
             ToothNumber = item.ToothNumber,
-            ProcedureDetails = item.ProcedureDetails
+            ProcedureDetails = item.ProcedureDetails,
+            MedicalNotes = item.MedicalNotes
         };
         _showEditModal = true;
     }

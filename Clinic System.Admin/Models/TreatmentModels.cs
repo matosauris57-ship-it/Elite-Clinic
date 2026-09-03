@@ -78,6 +78,7 @@ public class DentalTreatmentListItem
     public int? TreatmentProcedureId { get; set; }
     public string ProcedureName { get; set; } = string.Empty;
     public string? ProcedureDetails { get; set; }
+    public string? MedicalNotes { get; set; }
     public decimal Cost { get; set; }
     public string Status { get; set; } = string.Empty;
     public DateTime? PerformedDate { get; set; }
@@ -110,6 +111,7 @@ public class CreateDentalTreatmentRequest
     public int? ToothNumber { get; set; }
     public ToothSurface? ToothSurface { get; set; }
     public string? ProcedureDetails { get; set; }
+    public string? MedicalNotes { get; set; }
 }
 
 public class UpdateDentalTreatmentRequest
@@ -121,6 +123,7 @@ public class UpdateDentalTreatmentRequest
     public ToothSurface? ToothSurface { get; set; }
     public int? TreatmentProcedureId { get; set; }
     public string? ProcedureDetails { get; set; }
+    public string? MedicalNotes { get; set; }
 }
 
 public class CancelDentalTreatmentRequest
