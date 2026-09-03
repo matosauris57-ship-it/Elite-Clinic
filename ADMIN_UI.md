@@ -72,3 +72,31 @@ La URL de la API se define en `Clinic System.Admin/appsettings.json`:
 | `GET /api/payment/daily-revenue` | Ingresos del día |
 | `GET /api/patients` | Nuevos pacientes |
 | `GET /api/payment/list` | Ingresos del mes (parcial) |
+
+## Sala de espera (TV + SignalR)
+
+Página a pantalla completa para llamar pacientes en la sala de espera.
+
+### Ruta
+
+- Admin: `http://<IP-del-PC>:5200/sala-espera`
+- Hub SignalR (API): `http://<IP-del-PC>:5129/hubs/notifications`
+- Grupo: `WaitingRoomScreens` (método `JoinWaitingRoom`)
+- Evento: `ReceiveNotification` con `NotificationType = PatientCalled`
+
+### Cómo conectar una TV (misma red, sin dominio)
+
+1. Arranca **API** y **Admin** en un PC de la clínica.
+2. Averigua la IP LAN de ese PC (`ipconfig` / `ip a`), p. ej. `192.168.1.50`.
+3. En la TV (navegador Chrome, Fire Stick, mini-PC HDMI, etc.) abre:
+   - `http://192.168.1.50:5200/login`
+4. Inicia sesión (`admin@clinic.com` / `Admin@123` o un usuario con permiso `sala-espera.view`).
+5. Ve a **Sala de espera** (menú) o directamente a `/sala-espera`.
+6. Pulsa **Pantalla completa** (o F11) y deja la guía oculta.
+7. En otro equipo, abre **Agenda**, selecciona una cita y pulsa **Llamar paciente**.
+8. El nombre aparece en la TV (y se lee en voz alta si **Voz** está activo).
+
+El perfil `http` del Admin escucha en `0.0.0.0:5200` para aceptar conexiones desde la LAN. La TV solo necesita llegar al Admin; el cliente SignalR hacia la API corre en el servidor Blazor.
+
+No hace falta dominio ni pago: basta la misma Wi‑Fi/LAN y que el firewall del PC permita el puerto `5200` (Admin) y, si aplica, `5129` (API).
+

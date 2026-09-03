@@ -35,6 +35,7 @@ public static class AdminPermissionCatalog
         new("dashboard", "Dashboard", [Actions.View]),
         new("agendar-cita", "Agendar Cita", [Actions.View, Actions.Create]),
         new("agenda", "Agenda", [Actions.View, Actions.Edit, Actions.Delete]),
+        new("sala-espera", "Sala de espera (TV)", [Actions.View]),
         new("pacientes", "Pacientes", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
         new("enfermedades", "Enfermedades", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
         new("medicos", "Médicos", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
