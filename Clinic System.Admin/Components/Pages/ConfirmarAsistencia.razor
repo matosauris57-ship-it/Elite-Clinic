@@ -1,0 +1,104 @@
+@page "/confirmar-asistencia"
+@layout LoginLayout
+@rendermode InteractiveServer
+@inject AttendanceConfirmationService AttendanceService
+
+<PageTitle>Confirmar asistencia — DentalCare</PageTitle>
+
+<div class="login-card attendance-card">
+    <div class="login-brand">
+        <div class="login-logo">
+            <Icon Name="calendar" Class="login-logo-svg" StrokeWidth="1.6" />
+        </div>
+        <h1>Confirmar asistencia</h1>
+        <p>Indique si podrá asistir a su cita.</p>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Compact="true" Message="Validando enlace..." />
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="login-error">@_error</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_success))
+    {
+        <div class="wizard-success">@_success</div>
+        <p class="attendance-muted">Puede cerrar esta ventana.</p>
+    }
+    else if (_details != null)
+    {
+        <div class="attendance-summary">
+            <div><span>Paciente</span><strong>@_details.PatientName</strong></div>
+            <div><span>Médico</span><strong>@_details.DoctorName</strong></div>
+            <div><span>Fecha</span><strong>@_details.AppointmentDate.ToString("dd/MM/yyyy")</strong></div>
+            <div><span>Hora</span><strong>@_details.AppointmentDate.ToString("hh:mm tt")</strong></div>
+            <div><span>Estado</span><strong>@FormatStatus(_details.Status)</strong></div>
+        </div>
+
+        <div class="attendance-actions">
+            <button class="btn-primary" disabled="@_saving" @onclick='() => RespondAsync("confirm")'>
+                @(_saving ? "Guardando..." : "Sí, asistiré")
+            </button>
+            <button class="btn-outline" disabled="@_saving" @onclick='() => RespondAsync("decline")'>
+                No podré asistir
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "token")] public string? Token { get; set; }
+
+    private AttendanceConfirmationDetails? _details;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Token))
+        {
+            _error = "Falta el token de confirmación.";
+            _loading = false;
+            return;
+        }
+
+        var (details, error) = await AttendanceService.GetDetailsAsync(Token);
+        _details = details;
+        _error = error;
+        _loading = false;
+    }
+
+    private async Task RespondAsync(string action)
+    {
+        if (string.IsNullOrWhiteSpace(Token))
+            return;
+
+        _saving = true;
+        _error = null;
+        var (ok, message, error) = await AttendanceService.RespondAsync(Token, action);
+        _saving = false;
+
+        if (!ok)
+        {
+            _error = error;
+            return;
+        }
+
+        _success = message ?? "Respuesta registrada.";
+    }
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "Pending" => "Pendiente",
+        "Confirmed" => "Confirmada",
+        "Rescheduled" => "Reagendada",
+        "Completed" => "Completada",
+        "Cancelled" => "Cancelada",
+        "NoShow" => "No asistió",
+        _ => status
+    };
+}

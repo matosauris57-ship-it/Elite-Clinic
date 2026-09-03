@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject WhatsAppMessageSettingsService WhatsAppSettings
 @inject EmailMessageSettingsService EmailMessageSettings
+@inject AttendanceConfirmationService AttendanceService
 @inject IJSRuntime JS
 
 <PageTitle>Agendar Cita — DentalCare Admin</PageTitle>
@@ -41,6 +42,14 @@
                         Enviar confirmación
                     </button>
                 }
+                <button class="btn-outline" @onclick="OpenAttendanceWhatsAppAsync">
+                    <Icon Name="message-circle" Class="btn-svg" />
+                    Enlace asistencia WhatsApp
+                </button>
+                <button class="btn-outline" @onclick="OpenAttendanceEmailAsync">
+                    <Icon Name="mail" Class="btn-svg" />
+                    Enlace asistencia correo
+                </button>
                 <button class="btn-outline" @onclick="ResetWizard">
                     <Icon Name="calendar-plus" Class="btn-svg" />
                     Agendar otra
@@ -1146,6 +1155,97 @@ else
             OpenWhatsAppConfirmation();
         if (_state.NotifyViaEmail)
             OpenEmailConfirmation();
+    }
+
+    private async Task OpenAttendanceWhatsAppAsync()
+    {
+        if (_state.BookedAppointment == null)
+            return;
+
+        var (link, _, error) = await AttendanceService.CreatePublicLinkAsync(_state.BookedAppointment.Id, Navigation.BaseUri);
+        if (string.IsNullOrWhiteSpace(link))
+        {
+            _whatsAppError = error ?? "No se pudo generar el enlace de asistencia.";
+            _whatsAppUrl = null;
+            _whatsAppPreview = null;
+            _showWhatsAppModal = true;
+            return;
+        }
+
+        var phone = !string.IsNullOrWhiteSpace(_state.SelectedPatient?.Phone)
+            ? _state.SelectedPatient.Phone
+            : _state.SelectedPatient?.MobilePhone;
+        if (!WhatsAppMessageSettingsService.TryNormalizePhone(
+                phone,
+                WhatsAppSettings.Get().DefaultCountryCode,
+                out var digits,
+                out var phoneError))
+        {
+            _whatsAppError = phoneError;
+            _whatsAppUrl = null;
+            _whatsAppPreview = null;
+        }
+        else
+        {
+            _whatsAppError = null;
+            _whatsAppPreview = BuildAttendanceConfirmationMessage(link);
+            _whatsAppUrl = $"https://wa.me/{digits}?text={Uri.EscapeDataString(_whatsAppPreview)}";
+        }
+
+        _showWhatsAppModal = true;
+    }
+
+    private async Task OpenAttendanceEmailAsync()
+    {
+        if (_state.BookedAppointment == null)
+            return;
+
+        var (link, _, linkError) = await AttendanceService.CreatePublicLinkAsync(_state.BookedAppointment.Id, Navigation.BaseUri);
+        if (string.IsNullOrWhiteSpace(link))
+        {
+            _emailError = linkError ?? "No se pudo generar el enlace de asistencia.";
+            _emailTo = null;
+            _emailSubject = null;
+            _emailPreview = null;
+            _showEmailModal = true;
+            return;
+        }
+
+        var email = _state.SelectedPatient?.Email;
+        if (!ContactEmail.TryValidate(email, out var normalizedEmail, out var emailError) || string.IsNullOrWhiteSpace(normalizedEmail))
+        {
+            _emailError = emailError ?? "El paciente no tiene correo válido.";
+            _emailTo = null;
+            _emailSubject = null;
+            _emailPreview = null;
+        }
+        else
+        {
+            _emailError = null;
+            _emailTo = normalizedEmail;
+            _emailSubject = "Confirme su asistencia a la cita";
+            _emailPreview = BuildAttendanceConfirmationMessage(link);
+        }
+
+        _showEmailModal = true;
+    }
+
+    private string BuildAttendanceConfirmationMessage(string link)
+    {
+        var when = _state.SelectedDate.HasValue && _state.SelectedTime.HasValue
+            ? _state.SelectedDate.Value.Date.Add(_state.SelectedTime.Value)
+            : (DateTime?)null;
+
+        return $"""
+            Hola {_state.SelectedPatient?.FullName}, confirme si asistirá a su cita en {WhatsAppSettings.Get().ClinicName}:
+
+            Médico: {_state.SelectedDoctor?.FullName}
+            Fecha: {(when.HasValue ? when.Value.ToString("dd/MM/yyyy") : "Pendiente")}
+            Hora: {(when.HasValue ? when.Value.ToString("hh:mm tt") : "Pendiente")}
+
+            Confirme aquí:
+            {link}
+            """;
     }
 
     private void ResetWizard()

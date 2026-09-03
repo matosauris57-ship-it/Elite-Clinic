@@ -39,6 +39,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<DashboardLayoutApiService>();
 builder.Services.AddScoped<AppointmentBookingService>();
+builder.Services.AddScoped<AttendanceConfirmationService>();
 builder.Services.AddScoped<DoctorMaintenanceService>();
 builder.Services.AddScoped<MedicalConditionMaintenanceService>();
 builder.Services.AddScoped<PatientMaintenanceService>();

@@ -7,6 +7,7 @@
 @inject NavigationManager Navigation
 @inject WhatsAppMessageSettingsService WhatsAppSettings
 @inject EmailMessageSettingsService EmailMessageSettings
+@inject AttendanceConfirmationService AttendanceService
 @inject IJSRuntime JS
 
 <PageTitle>Agenda — DentalCare Admin</PageTitle>
@@ -301,6 +302,8 @@
                 {
                     <button class="btn-outline" @onclick="() => OpenWhatsAppReminder(_selectedAppointment)">Recordatorio WhatsApp</button>
                     <button class="btn-outline" @onclick="() => OpenEmailReminder(_selectedAppointment)">Recordatorio correo</button>
+                    <button class="btn-outline" @onclick="() => OpenAttendanceWhatsAppAsync(_selectedAppointment)">Enlace asistencia WS</button>
+                    <button class="btn-outline" @onclick="() => OpenAttendanceEmailAsync(_selectedAppointment)">Enlace asistencia correo</button>
                     <button class="btn-outline" @onclick='() => OpenDoctorAppointmentWhatsApp(_selectedAppointment, "Recordatorio")'>WhatsApp doctor</button>
                     <button class="btn-outline" @onclick='() => OpenDoctorAppointmentEmail(_selectedAppointment, "Recordatorio")'>Correo doctor</button>
                 }
@@ -345,6 +348,8 @@
                 {
                     <button class="btn-outline" disabled="@_saving" @onclick="() => OpenWhatsAppReminder(_selectedAppointment)">Recordatorio WhatsApp</button>
                     <button class="btn-outline" disabled="@_saving" @onclick="() => OpenEmailReminder(_selectedAppointment)">Recordatorio correo</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick="() => OpenAttendanceWhatsAppAsync(_selectedAppointment)">Enlace asistencia WS</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick="() => OpenAttendanceEmailAsync(_selectedAppointment)">Enlace asistencia correo</button>
                     <button class="btn-outline" disabled="@_saving" @onclick='() => OpenDoctorAppointmentWhatsApp(_selectedAppointment, "Actualización")'>WhatsApp doctor</button>
                     <button class="btn-outline" disabled="@_saving" @onclick='() => OpenDoctorAppointmentEmail(_selectedAppointment, "Actualización")'>Correo doctor</button>
                 }
@@ -1361,6 +1366,83 @@
         _emailSubject = result.Subject;
         _emailPreview = result.Body;
         _showEmailModal = true;
+    }
+
+    private async Task OpenAttendanceWhatsAppAsync(AppointmentAgendaItem appt)
+    {
+        _selectedAppointment = appt;
+        _whatsAppModalTitle = "Enlace de asistencia por WhatsApp";
+        _whatsAppError = null;
+        _whatsAppUrl = null;
+        _whatsAppPreview = null;
+
+        var (link, _, linkError) = await AttendanceService.CreatePublicLinkAsync(appt.Id, Navigation.BaseUri);
+        if (string.IsNullOrWhiteSpace(link))
+        {
+            _whatsAppError = linkError ?? "No se pudo generar el enlace de asistencia.";
+        }
+        else if (!WhatsAppMessageSettingsService.TryNormalizePhone(
+                     appt.PatientPhone,
+                     WhatsAppSettings.Get().DefaultCountryCode,
+                     out var digits,
+                     out var phoneError))
+        {
+            _whatsAppError = phoneError;
+        }
+        else
+        {
+            _whatsAppPreview = BuildAttendanceConfirmationMessage(appt, link);
+            _whatsAppUrl = $"https://wa.me/{digits}?text={Uri.EscapeDataString(_whatsAppPreview)}";
+        }
+
+        _showDetailModal = false;
+        _showActionsModal = false;
+        _showWhatsAppModal = true;
+    }
+
+    private async Task OpenAttendanceEmailAsync(AppointmentAgendaItem appt)
+    {
+        _selectedAppointment = appt;
+        _emailModalTitle = "Enlace de asistencia por correo";
+        _emailError = null;
+        _emailTo = null;
+        _emailSubject = null;
+        _emailPreview = null;
+
+        var (link, _, linkError) = await AttendanceService.CreatePublicLinkAsync(appt.Id, Navigation.BaseUri);
+        if (string.IsNullOrWhiteSpace(link))
+        {
+            _emailError = linkError ?? "No se pudo generar el enlace de asistencia.";
+        }
+        else if (!ContactEmail.TryValidate(appt.PatientEmail, out var normalizedEmail, out var emailError) || string.IsNullOrWhiteSpace(normalizedEmail))
+        {
+            _emailError = emailError ?? "El paciente no tiene correo válido.";
+        }
+        else
+        {
+            _emailTo = normalizedEmail;
+            _emailSubject = "Confirme su asistencia a la cita";
+            _emailPreview = BuildAttendanceConfirmationMessage(appt, link);
+        }
+
+        _showDetailModal = false;
+        _showActionsModal = false;
+        _showEmailModal = true;
+    }
+
+    private string BuildAttendanceConfirmationMessage(AppointmentAgendaItem appt, string link)
+    {
+        var when = appt.ParsedDate;
+        return $"""
+            Hola {appt.PatientFullName}, confirme si asistirá a su cita en {WhatsAppSettings.Get().ClinicName}:
+
+            Médico: {appt.DoctorName}
+            Fecha: {(when.HasValue ? when.Value.ToString("dd/MM/yyyy") : appt.AppointmentDate)}
+            Hora: {(when.HasValue ? when.Value.ToString("hh:mm tt") : "Pendiente")}
+
+            Confirme aquí:
+            {link}
+            """;
     }
 
     private async Task OpenDoctorDailyAgendaWhatsAppAsync()
