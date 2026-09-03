@@ -1,6 +1,4 @@
-﻿using Microsoft.Extensions.Options;
-
-namespace Clinic_System.Application.Tests.Service.Implemention
+﻿namespace Clinic_System.Application.Tests.Service.Implemention
 {
     public class AppointmentServiceTests
     {
@@ -10,22 +8,34 @@ namespace Clinic_System.Application.Tests.Service.Implemention
         private readonly Mock<IMedicalRecordService> _mockMedicalRecordService;
         private readonly Mock<IAppointmentRepository> _mockAppointmentRepository;
         private readonly Mock<ILogger<AppointmentService>> _mockLogger;
-        private readonly Mock<IOptions<ClinicSettings>> _mockClinicsettings;
+        private readonly Mock<IClinicOperatingHoursService> _mockHours;
+        private readonly Mock<IMessagePublisher> _mockPublisher;
         private readonly AppointmentService _appointmentService;
 
 
         public AppointmentServiceTests()
         {
-            _mockClinicsettings = new Mock<IOptions<ClinicSettings>>();
+            _mockHours = new Mock<IClinicOperatingHoursService>();
+            _mockHours.Setup(h => h.GetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ClinicOperatingHours
+                {
+                    OpenTime = new TimeSpan(12, 0, 0),
+                    CloseTime = new TimeSpan(22, 0, 0),
+                    SlotDurationMinutes = 15,
+                    WorkingDays = [0, 1, 2, 3, 4, 5, 6]
+                });
             _mockUnitOfWork = new Mock<IUnitOfWork>();
             _mockLock = new Mock<IDistributedLockService>();
+            _mockLock.Setup(l => l.AcquireLockAsync(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+                .ReturnsAsync(true);
             _mockAppointmentRepository = new Mock<IAppointmentRepository>();
             _mockPaymentService = new Mock<IPaymentService>();
             _mockMedicalRecordService = new Mock<IMedicalRecordService>();
             _mockLogger = new Mock<ILogger<AppointmentService>>();
+            _mockPublisher = new Mock<IMessagePublisher>();
             _mockUnitOfWork.SetupGet(u => u.AppointmentsRepository).Returns(_mockAppointmentRepository.Object);
-            _appointmentService = new AppointmentService(null,_mockUnitOfWork.Object, _mockPaymentService.Object,
-               _mockMedicalRecordService.Object, _mockLogger.Object,_mockClinicsettings.Object,_mockLock.Object);
+            _appointmentService = new AppointmentService(_mockPublisher.Object,_mockUnitOfWork.Object, _mockPaymentService.Object,
+               _mockMedicalRecordService.Object, _mockLogger.Object,_mockHours.Object,_mockLock.Object);
         }
 
         [Fact]
@@ -36,7 +46,7 @@ namespace Clinic_System.Application.Tests.Service.Implemention
             {
                 DoctorId = 1,
                 PatientId = 1,
-                AppointmentDate = DateTime.Today,
+                AppointmentDate = DateTime.Today.AddDays(1),
                 AppointmentTime = new TimeSpan(12, 0, 0) // 12:00 PM
             };
 
@@ -51,6 +61,18 @@ namespace Clinic_System.Application.Tests.Service.Implemention
                 .Setup(u => u.SaveAsync())
                 .ReturnsAsync(1);
 
+            _mockAppointmentRepository
+                .Setup(r => r.GetAppointmentWithDetailsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Appointment
+                {
+                    Id = 1,
+                    DoctorId = 1,
+                    PatientId = 1,
+                    Status = AppointmentStatus.Pending,
+                    Patient = new Patient { FullName = "Paciente", ApplicationUserId = "u1" },
+                    Doctor = new Doctor { FullName = "Doctor", Specialization = "General" }
+                });
+
             // Act
             var result = await _appointmentService.BookAppointmentAsync(command.PatientId, command.DoctorId, command.AppointmentDate, command.AppointmentTime, CancellationToken.None);
 
@@ -60,9 +82,9 @@ namespace Clinic_System.Application.Tests.Service.Implemention
 
             _mockAppointmentRepository.Verify(r => r.AddAsync(
                  It.Is<Appointment>(a => a.DoctorId == command.DoctorId),
-                 It.IsAny<CancellationToken>()), Times.Once); // التأكد من استدعاء AddAsync
+                 It.IsAny<CancellationToken>()), Times.Once);
            
-            _mockUnitOfWork.Verify(u => u.SaveAsync(), Times.Once); // التأكد من استدعاء SaveAsync
+            _mockUnitOfWork.Verify(u => u.SaveAsync(), Times.AtLeastOnce);
         }
 
         [Fact]
@@ -73,7 +95,7 @@ namespace Clinic_System.Application.Tests.Service.Implemention
             {
                 DoctorId = 1,
                 PatientId = 1,
-                AppointmentDate = DateTime.Today,
+                AppointmentDate = DateTime.Today.AddDays(1),
                 AppointmentTime = new TimeSpan(12, 0, 0) // 12:00 PM
             };
 
@@ -91,7 +113,7 @@ namespace Clinic_System.Application.Tests.Service.Implemention
             // Act
 
             // Assert
-            await Assert.ThrowsAsync<Exception>(async () =>
+            await Assert.ThrowsAsync<DatabaseSaveException>(async () =>
             {
                 await _appointmentService.BookAppointmentAsync(command.PatientId,command.DoctorId
                     ,command.AppointmentDate,command.AppointmentTime, CancellationToken.None);
@@ -113,7 +135,7 @@ namespace Clinic_System.Application.Tests.Service.Implemention
             {
                 DoctorId = 1,
                 PatientId = 1,
-                AppointmentDate = DateTime.Today,
+                AppointmentDate = DateTime.Today.AddDays(1),
                 AppointmentTime = new TimeSpan(12, 0, 0) // 12:00 PM
             };
 
@@ -133,7 +155,7 @@ namespace Clinic_System.Application.Tests.Service.Implemention
                 .ReturnsAsync(bookedAppointments);
 
             // Act & Assert
-            await Assert.ThrowsAsync<Exception>(() => _appointmentService.BookAppointmentAsync(command.PatientId, command.DoctorId
+            await Assert.ThrowsAsync<SlotAlreadyBookedException>(() => _appointmentService.BookAppointmentAsync(command.PatientId, command.DoctorId
                     , command.AppointmentDate, command.AppointmentTime, CancellationToken.None));
 
             _mockAppointmentRepository.Verify(r => r.AddAsync(
@@ -177,6 +199,28 @@ namespace Clinic_System.Application.Tests.Service.Implemention
             // عدد الفترات الممكنة بين 12:00 و 22:00 (10 ساعات) هو 40 فترة (10 * 4).
             // إذا أزلنا فترة واحدة، يجب أن يكون العدد 39.
             availableSlots.Count.Should().Be(39);
+        }
+
+        [Fact]
+        public async Task GetAvailableSlotsAsync_ClosedDay_ReturnsEmpty()
+        {
+            _mockHours.Setup(h => h.GetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ClinicOperatingHours
+                {
+                    OpenTime = new TimeSpan(8, 0, 0),
+                    CloseTime = new TimeSpan(17, 0, 0),
+                    SlotDurationMinutes = 30,
+                    WorkingDays = [(int)DayOfWeek.Monday]
+                });
+
+            var sunday = new DateTime(2026, 9, 6);
+            _mockAppointmentRepository.Setup(u => u
+                .GetBookedAppointmentsAsync(1, sunday, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<Appointment>());
+
+            var slots = await _appointmentService.GetAvailableSlotsAsync(1, sunday);
+
+            slots.Should().BeEmpty();
         }
     }
 }

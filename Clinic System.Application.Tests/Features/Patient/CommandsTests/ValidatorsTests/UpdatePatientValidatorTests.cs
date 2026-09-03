@@ -180,5 +180,37 @@
 
             result.ShouldNotHaveValidationErrorFor(c => c.Phone);
         }
+
+        [Fact]
+        public async Task Email_InvalidSyntax_ShouldHaveValidationError()
+        {
+            var command = new UpdatePatientCommand { Id = 1, Email = "paciente@" };
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldHaveValidationErrorFor(c => c.Email);
+        }
+
+        [Fact]
+        public async Task Email_Valid_ShouldNotHaveValidationError()
+        {
+            var command = new UpdatePatientCommand { Id = 1, Email = "paciente@outlook.com" };
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldNotHaveValidationErrorFor(c => c.Email);
+        }
+
+        [Fact]
+        public async Task DateOfBirth_InTheFuture_ShouldHaveValidationError()
+        {
+            var command = new UpdatePatientCommand { Id = 1, DateOfBirth = DateTime.Today.AddDays(1) };
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldHaveValidationErrorFor(c => c.DateOfBirth);
+        }
+
+        [Fact]
+        public async Task DateOfBirth_Past_ShouldNotHaveValidationError()
+        {
+            var command = new UpdatePatientCommand { Id = 1, DateOfBirth = DateTime.Today.AddYears(-30) };
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldNotHaveValidationErrorFor(c => c.DateOfBirth);
+        }
     }
 }

@@ -1,0 +1,64 @@
+@page "/pacientes/{PatientId:int}/recetas/{PrescriptionId:int}/imprimir"
+@layout PrintLayout
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "pacientes.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject PatientPrescriptionService Prescriptions
+@inject IJSRuntime JS
+
+<PageTitle>Receta #@PrescriptionId</PageTitle>
+
+<div class="invoice-print-page">
+    <div class="invoice-print-toolbar no-print">
+        <a class="btn-outline" href="/pacientes/@PatientId?tab=recetas">Volver a la ficha</a>
+        <button class="btn-primary" disabled="@_loading" @onclick="PrintAsync">Imprimir</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_loading || _prescription == null)
+    {
+        <AnimatedLoader Message="Cargando receta..." />
+    }
+    else
+    {
+        <PrescriptionDocument Prescription="_prescription" />
+    }
+</div>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public int PrescriptionId { get; set; }
+
+    private PatientPrescriptionDetail? _prescription;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var (item, error) = await Prescriptions.GetAsync(PrescriptionId);
+        _prescription = item;
+        _error = error;
+        if (_prescription == null && string.IsNullOrWhiteSpace(_error))
+            _error = "No se encontró la receta.";
+        else if (_prescription != null && _prescription.PatientId != PatientId)
+            _error = "La receta no corresponde a este paciente.";
+        _loading = false;
+    }
+
+    private async Task PrintAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareUi.printPage");
+        }
+        catch
+        {
+        }
+    }
+}

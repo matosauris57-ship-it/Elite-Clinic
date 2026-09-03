@@ -10,8 +10,13 @@
             // المبلغ لو مبعوت، لازم يكون أكبر من صفر
             RuleFor(x => x.Amount)
                 .GreaterThan(0)
-                .When(x => x.Amount.HasValue)
+                .When(x => x.Amount.HasValue && string.IsNullOrWhiteSpace(x.AmountInput))
                 .WithMessage("Amount must be greater than 0.");
+
+            RuleFor(x => x.AmountInput)
+                .Must(value => Money.TryParse(value, out var amount) && amount > 0)
+                .When(x => !string.IsNullOrWhiteSpace(x.AmountInput))
+                .WithMessage("El monto no es válido.");
 
             // الـ Method لو مبعوتة، لازم تكون في الـ Enum
             RuleFor(x => x.PaymentMethod)

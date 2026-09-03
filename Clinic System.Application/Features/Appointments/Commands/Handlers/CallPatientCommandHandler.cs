@@ -28,10 +28,6 @@
                 return NotFound<string>("Appointment not found.");
             }
 
-            var authResult = await ValidateDoctorAccess(appointment.DoctorId);
-            if (authResult != null)
-                return authResult;
-
             string patientName = appointment.Patient?.FullName ?? $"ID: {appointment.PatientId}";
             string doctorName = appointment.Doctor?.FullName ?? $"ID: {appointment.DoctorId}";
 

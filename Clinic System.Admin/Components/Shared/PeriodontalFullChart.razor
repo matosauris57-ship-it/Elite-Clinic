@@ -1,0 +1,36 @@
+@using Clinic_System.Core.Validation
+<section class="periodontal-full-chart" aria-label="Gráfica periodontal de boca completa">
+    @if (Exam != null)
+    {
+        var indices = PeriodontalChartFactory.LiveIndices(Exam);
+        <div class="perio-index-strip" aria-label="Índices de la evaluación">
+            <span><b>Sitios</b> @indices.RecordedSiteCount</span>
+            <span><b>BOP</b> @indices.BleedingPercent.ToString("0.0")%</span>
+            <span><b>Placa</b> @indices.PlaquePercent.ToString("0.0")%</span>
+            <span><b>PD medio</b> @(indices.MeanProbingDepthMm?.ToString("0.0") ?? "—") mm</span>
+            <span><b>≥5 mm</b> @indices.SitesDeepGe5</span>
+            <span><b>≥6 mm</b> @indices.SitesDeepGe6</span>
+        </div>
+    }
+
+    <div class="perio-full-scroll">
+        <PeriodontalArchSvg Label="Arcada superior · vestibular arriba / palatino abajo"
+                            Teeth="PeriodontalCalculations.UpperArch"
+                            Upper="true"
+                            Exam="Exam"
+                            SelectedTooth="SelectedTooth"
+                            SelectedToothChanged="SelectedToothChanged" />
+        <PeriodontalArchSvg Label="Arcada inferior · lingual arriba / vestibular abajo"
+                            Teeth="PeriodontalCalculations.LowerArch"
+                            Upper="false"
+                            Exam="Exam"
+                            SelectedTooth="SelectedTooth"
+                            SelectedToothChanged="SelectedToothChanged" />
+    </div>
+</section>
+
+@code {
+    [Parameter] public PeriodontalExamDetail? Exam { get; set; }
+    [Parameter] public int? SelectedTooth { get; set; }
+    [Parameter] public EventCallback<int> SelectedToothChanged { get; set; }
+}

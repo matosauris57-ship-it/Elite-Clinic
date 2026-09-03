@@ -6,6 +6,7 @@
         Paid = 2,
         Failed = 3,
         Refunded = 4,
-        Cancelled = 5
+        Cancelled = 5,
+        PartiallyPaid = 6
     }
 }

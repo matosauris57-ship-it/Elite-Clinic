@@ -1,0 +1,52 @@
+@page "/configuracion"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode InteractiveServer
+
+<PageTitle>Configuración — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Configuración</h1>
+            <p>Administración del sistema y accesos</p>
+        </div>
+    </div>
+
+    <div class="config-hub-grid">
+        <NavLink class="config-hub-card" href="/configuracion/clinica">
+            <Icon Name="building" Class="config-hub-icon" />
+            <h3>Datos de la clínica</h3>
+            <p>Nombre, teléfono, dirección, correo SMTP, RNC y logo. Un solo registro para facturas, citas y el panel.</p>
+        </NavLink>
+        <NavLink class="config-hub-card" href="/configuracion/usuarios">
+            <Icon Name="users" Class="config-hub-icon" />
+            <h3>Usuarios y roles</h3>
+            <p>Gestiona cuentas staff, roles personalizados y permisos por módulo.</p>
+        </NavLink>
+        <NavLink class="config-hub-card" href="/configuracion/mensajes-whatsapp">
+            <Icon Name="message-circle" Class="config-hub-icon" />
+            <h3>Mensajes WhatsApp</h3>
+            <p>Edita las plantillas de recordatorio y confirmación de citas.</p>
+        </NavLink>
+        <NavLink class="config-hub-card" href="/campanas">
+            <Icon Name="mail" Class="config-hub-icon" />
+            <h3>Campañas de correo</h3>
+            <p>Avisos a pacientes con correo, en lotes de 15 cada 15 minutos.</p>
+        </NavLink>
+        <NavLink class="config-hub-card" href="/configuracion/mensajes-correo">
+            <Icon Name="mail" Class="config-hub-icon" />
+            <h3>Mensajes de correo</h3>
+            <p>Recordatorios automáticos, confirmación y felicitación de cumpleaños.</p>
+        </NavLink>
+        <NavLink class="config-hub-card" href="/configuracion/dashboard">
+            <Icon Name="layout-dashboard" Class="config-hub-icon" />
+            <h3>Dashboard</h3>
+            <p>Activa o desactiva los widgets que verá el personal de la clínica.</p>
+        </NavLink>
+        <NavLink class="config-hub-card" href="/configuracion/odontograma">
+            <Icon Name="tooth" Class="config-hub-icon" />
+            <h3>Odontograma</h3>
+            <p>Simbología, colores y formas de las condiciones clínicas de la clínica.</p>
+        </NavLink>
+    </div>
+</div>

@@ -1,0 +1,18 @@
+<div class="wizard-error dashboard-api-warning maintenance-error-banner">
+    <span>@Message</span>
+    <div class="error-banner-actions">
+        @if (OnRetry.HasDelegate)
+        {
+            <button type="button" class="btn-outline btn-retry" @onclick="OnRetry">Reintentar</button>
+        }
+        @if (ApiConnectionMessages.IsSessionError(Message))
+        {
+            <a href="/auth/logout" class="btn-outline btn-retry">Cerrar sesión</a>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+}

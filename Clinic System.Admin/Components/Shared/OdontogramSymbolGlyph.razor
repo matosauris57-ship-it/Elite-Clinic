@@ -1,0 +1,51 @@
+@using Clinic_System.Core.Odontogram
+<svg class="odontogram-symbol-glyph @Class"
+     viewBox="0 0 24 24"
+     width="24"
+     height="24"
+     aria-hidden="true"
+     style="color: @Color; opacity: @Opacity.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)">
+    @switch (OdontogramSymbolShapes.Normalize(Symbol.Shape))
+    {
+        case OdontogramSymbolShapes.Circle:
+        case OdontogramSymbolShapes.CircleFilled:
+            <circle cx="12" cy="12" r="7.2" fill="@Fill" stroke="@Stroke" stroke-width="@StrokeWidth" />
+            break;
+        case OdontogramSymbolShapes.Square:
+        case OdontogramSymbolShapes.SquareFilled:
+            <rect x="5" y="5" width="14" height="14" rx="1.2" fill="@Fill" stroke="@Stroke" stroke-width="@StrokeWidth" />
+            break;
+        case OdontogramSymbolShapes.Triangle:
+            <polygon points="12,4.5 20,19.5 4,19.5" fill="@Fill" stroke="@Stroke" stroke-width="@StrokeWidth" stroke-linejoin="round" />
+            break;
+        case OdontogramSymbolShapes.Line:
+            <line x1="5" y1="19" x2="19" y2="5" stroke="@Stroke" stroke-width="@LineWidth" stroke-linecap="round" />
+            break;
+        case OdontogramSymbolShapes.Cross:
+            <line x1="6" y1="6" x2="18" y2="18" stroke="@Stroke" stroke-width="@LineWidth" stroke-linecap="round" />
+            <line x1="18" y1="6" x2="6" y2="18" stroke="@Stroke" stroke-width="@LineWidth" stroke-linecap="round" />
+            break;
+        case OdontogramSymbolShapes.Outline:
+            <rect x="5" y="4" width="14" height="16" rx="3" fill="none" stroke="@Stroke" stroke-width="@StrokeWidth" />
+            break;
+        case OdontogramSymbolShapes.Fill:
+            <rect x="5" y="4" width="14" height="16" rx="3" fill="@Color" stroke="@Stroke" stroke-width="1" opacity="0.92" />
+            break;
+        case OdontogramSymbolShapes.Dot:
+            <circle cx="12" cy="12" r="3.4" fill="@Color" stroke="none" />
+            break;
+    }
+</svg>
+
+@code {
+    [Parameter] public OdontogramConditionSymbol Symbol { get; set; } = OdontogramSymbolDefaults.Condition(Clinic_System.Core.Enums.ToothCondition.Caries);
+    [Parameter] public string Class { get; set; } = "";
+
+    private string Color => OdontogramSymbolColor.Normalize(Symbol.Color);
+    private double Opacity => Math.Clamp(Symbol.Opacity, 0.1, 1);
+    private bool Filled => OdontogramSymbolPaint.MarkIsFilled(Symbol);
+    private string Fill => Filled ? "currentColor" : "none";
+    private string Stroke => "currentColor";
+    private string StrokeWidth => Math.Clamp(Symbol.StrokeWidth, 0.8, 4).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    private string LineWidth => Math.Clamp(Symbol.StrokeWidth, 1.2, 5).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+}

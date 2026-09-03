@@ -14,18 +14,18 @@
         PaymentStatus? status,
         PaymentMethod? method,
         int pageNumber,
-        int pageSize)
+        int pageSize,
+        string? search = null)
         {
-            // 1. Start Query with Includes (عشان نجيب الأسماء)
             var query = context.Payments
                 .AsNoTracking()
+                .Include(p => p.Receipts)
+                .Include(p => p.InvoiceLines)
                 .Include(p => p.Appointment)
-                    .ThenInclude(a => a.Patient) // عشان اسم المريض
+                    .ThenInclude(a => a.Patient)
                 .Include(p => p.Appointment)
-                    .ThenInclude(a => a.Doctor)  // عشان اسم الدكتور
+                    .ThenInclude(a => a.Doctor)
                 .AsQueryable();
-
-            // 2. Dynamic Filtering (تطبيق الفلاتر فقط لو مبعوتة)
 
             if (doctorId.HasValue)
                 query = query.Where(p => p.Appointment.DoctorId == doctorId);
@@ -34,10 +34,20 @@
                 query = query.Where(p => p.Appointment.PatientId == patientId);
 
             if (fromDate.HasValue)
-                query = query.Where(p => p.PaymentDate >= fromDate);
+            {
+                var start = fromDate.Value.Date;
+                query = query.Where(p =>
+                    (p.PaymentDate ?? p.CreatedAt) >= start
+                    || p.Appointment.AppointmentDate >= start);
+            }
 
             if (toDate.HasValue)
-                query = query.Where(p => p.PaymentDate <= toDate);
+            {
+                var end = toDate.Value.Date.AddDays(1);
+                query = query.Where(p =>
+                    (p.PaymentDate ?? p.CreatedAt) < end
+                    || p.Appointment.AppointmentDate < end);
+            }
 
             if (status.HasValue)
                 query = query.Where(p => p.PaymentStatus == status);
@@ -45,8 +55,25 @@
             if (method.HasValue)
                 query = query.Where(p => p.PaymentMethod == method);
 
-            // 3. Ordering (الأحدث فالأقدم)
-            query = query.OrderByDescending(p => p.PaymentDate);
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                if (int.TryParse(term, out var paymentId))
+                {
+                    query = query.Where(p =>
+                        p.Id == paymentId
+                        || p.Appointment.Patient.FullName.Contains(term)
+                        || p.Appointment.Doctor.FullName.Contains(term));
+                }
+                else
+                {
+                    query = query.Where(p =>
+                        p.Appointment.Patient.FullName.Contains(term)
+                        || p.Appointment.Doctor.FullName.Contains(term));
+                }
+            }
+
+            query = query.OrderByDescending(p => p.PaymentDate ?? p.CreatedAt);
 
             // 4. Get Total Count (قبل الـ Pagination)
             var totalCount = await query.CountAsync();
@@ -64,6 +91,8 @@
         {
             return await context.Payments
                 .AsNoTracking()
+                .Include(p => p.Receipts)
+                .Include(p => p.InvoiceLines)
                 .Include(p => p.Appointment)
                     .ThenInclude(a => a.Patient)
                 .Include(p => p.Appointment)
@@ -71,26 +100,43 @@
                 .FirstOrDefaultAsync(p => p.Id == id);
         }
 
+        public async Task<Payment?> GetPaymentWithLinesAsync(int id, CancellationToken cancellationToken = default)
+        {
+            return await context.Payments
+                .Include(p => p.InvoiceLines)
+                .Include(p => p.Receipts)
+                .Include(p => p.Appointment)
+                    .ThenInclude(a => a.Patient)
+                .Include(p => p.Appointment)
+                    .ThenInclude(a => a.Doctor)
+                .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+        }
+
         public async Task<Payment?> GetPaymentByAppointmentIdAsync(int appointmentId)
         {
             return await context.Payments
+                .Include(p => p.InvoiceLines)
+                .Include(p => p.Receipts)
                 .FirstOrDefaultAsync(p => p.AppointmentId == appointmentId);
         }
 
         public async Task<(decimal total, decimal cash, decimal insta, decimal card, int count)> GetDailyTotalsAsync(DateTime date , CancellationToken cancellationToken = default)
         {
-            var stats = await context.Payments
+            var start = date.Date;
+            var end = start.AddDays(1);
+
+            var receipts = context.PaymentReceipts
                  .AsNoTracking()
-                 .Where(p => p.PaymentDate.HasValue &&
-                             p.PaymentDate.Value.Date == date.Date &&
-                             p.PaymentStatus == PaymentStatus.Paid)
-                 .GroupBy(p => 1) // تجميع وهمي عشان نقدر نستخدم Sum و Count في خطوة واحدة
+                 .Where(r => r.PaidAt >= start && r.PaidAt < end);
+
+            var stats = await receipts
+                 .GroupBy(r => 1)
                  .Select(g => new
                  {
-                     Total = g.Sum(p => p.AmountPaid),
-                     Cash = g.Where(p => p.PaymentMethod == PaymentMethod.Cash).Sum(p => p.AmountPaid),
-                     Card = g.Where(p => p.PaymentMethod == PaymentMethod.CreditCard).Sum(p => p.AmountPaid),
-                     Insta = g.Where(p => p.PaymentMethod == PaymentMethod.InstaPay).Sum(p => p.AmountPaid),
+                     Total = g.Sum(r => r.Amount),
+                     Cash = g.Where(r => r.PaymentMethod == PaymentMethod.Cash).Sum(r => r.Amount),
+                     Card = g.Where(r => r.PaymentMethod == PaymentMethod.CreditCard).Sum(r => r.Amount),
+                     Insta = g.Where(r => r.PaymentMethod == PaymentMethod.InstaPay).Sum(r => r.Amount),
                      Count = g.Count()
                  })
                  .FirstOrDefaultAsync(cancellationToken);
@@ -103,16 +149,15 @@
 
         public async Task<(decimal total, int count)> GetDoctorRevenueStatsAsync(int doctorId, DateTime from, DateTime to, CancellationToken cancellationToken = default)
         {
-            var stats = await context.Payments
+            var stats = await context.PaymentReceipts
                 .AsNoTracking()
-                .Where(p => p.Appointment.DoctorId == doctorId &&
-                            p.PaymentStatus == PaymentStatus.Paid &&
-                            p.PaymentDate >= from &&
-                            p.PaymentDate <= to)
-                .GroupBy(p => 1)
+                .Where(r => r.Payment.Appointment.DoctorId == doctorId &&
+                            r.PaidAt >= from &&
+                            r.PaidAt <= to)
+                .GroupBy(r => 1)
                 .Select(g => new
                 {
-                    Total = g.Sum(p => p.AmountPaid),
+                    Total = g.Sum(r => r.Amount),
                     Count = g.Count()
                 })
                 .FirstOrDefaultAsync(cancellationToken);

@@ -4,10 +4,15 @@
     {
         private readonly IUnitOfWork unitOfWork;
         private readonly ICurrentUserService currentUserService;
-        public RescheduleAppointmentCommandValidator(IUnitOfWork unitOfWork, ICurrentUserService currentUserService)
+        private readonly IClinicOperatingHoursService operatingHours;
+        public RescheduleAppointmentCommandValidator(
+            IUnitOfWork unitOfWork,
+            ICurrentUserService currentUserService,
+            IClinicOperatingHoursService operatingHours)
         {
             this.unitOfWork = unitOfWork;
             this.currentUserService = currentUserService;
+            this.operatingHours = operatingHours;
 
             ApplyRules();
         }
@@ -34,10 +39,11 @@
 
             RuleFor(x => x.AppointmentTime)
             .NotEmpty()
-            .WithMessage("Appointment time is required")
-            // تحقق من أن الوقت يقع بين 12:00:00 و 22:00:00
-            .Must(BeWithinServiceHours)
-            .WithMessage("The appointment time must be between 12:00PM and 10:00PM.");
+            .WithMessage("Appointment time is required");
+
+            RuleFor(x => x)
+                .MustAsync(BeWithinClinicHours)
+                .WithMessage("El horario está fuera del horario de trabajo de la clínica.");
         }
 
         private async Task<bool> AppointmentExists(int appointmentId, CancellationToken cancellationToken)
@@ -63,14 +69,10 @@
             return existingDateTime != newDateTime;
         }
 
-        // >> الميثود المساعدة الجديدة في Validator
-        private bool BeWithinServiceHours(TimeSpan appointmentTime)
+        private async Task<bool> BeWithinClinicHours(RescheduleAppointmentCommand command, CancellationToken cancellationToken)
         {
-            var DefaultStartTime = new TimeSpan(12, 0, 0); // 12:00 PM
-            var DefaultEndTime = new TimeSpan(22, 0, 0);  // 10:00 PM
-
-            // يجب أن يكون الوقت >= بداية الخدمة و < نهاية الخدمة (لأن الـ Slot Duration يجب أن يُحسب)
-            return appointmentTime >= DefaultStartTime && appointmentTime < DefaultEndTime;
+            var hours = await operatingHours.GetAsync(cancellationToken);
+            return hours.Allows(command.AppointmentDate, command.AppointmentTime);
         }
     }
 }

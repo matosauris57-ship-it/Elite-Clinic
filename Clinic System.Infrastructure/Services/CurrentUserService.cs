@@ -1,4 +1,6 @@
-﻿namespace Clinic_System.Infrastructure.Services
+﻿using Clinic_System.Core.Authorization;
+
+namespace Clinic_System.Infrastructure.Services
 {
     public class CurrentUserService : ICurrentUserService
     {
@@ -9,33 +11,62 @@
             _httpContextAccessor = httpContextAccessor;
         }
 
+        private ClaimsPrincipal? User => _httpContextAccessor.HttpContext?.User;
+
         public Task<List<string>> GetCurrentUserRolesAsync()
         {
-            var roles = _httpContextAccessor.HttpContext?.User?.Claims
-                .Where(c => c.Type == ClaimTypes.Role)
-                .Select(c => c.Value)
-                .ToList();
+            var roles = User == null
+                ? []
+                : AdminRoleAuthorization.GetRoleValues(User)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
 
-            return Task.FromResult(roles ?? new List<string>());
+            return Task.FromResult(roles);
         }
 
-        public string? UserId => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        public string? UserId =>
+            User?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User?.FindFirstValue(JwtRegisteredClaimNames.Sub);
 
-        public bool IsAuthenticated => _httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated ?? false;
+        public bool IsAuthenticated => User?.Identity?.IsAuthenticated ?? false;
+
+        public bool IsAdmin => User != null && AdminRoleAuthorization.IsAdminUser(User);
+
+        public bool IsStaff
+        {
+            get
+            {
+                if (User == null || !IsAuthenticated)
+                    return false;
+
+                if (IsAdmin)
+                    return true;
+
+                return User.Claims.Any(c =>
+                    string.Equals(c.Type, AdminPermissionCatalog.ClaimType, StringComparison.OrdinalIgnoreCase) &&
+                    AdminPermissionCatalog.IsValid(c.Value));
+            }
+        }
+
+        public bool HasPermission(string permission)
+        {
+            if (string.IsNullOrWhiteSpace(permission))
+                return false;
+
+            if (IsAdmin)
+                return true;
+
+            return User?.Claims.Any(c =>
+                string.Equals(c.Type, AdminPermissionCatalog.ClaimType, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(c.Value, permission, StringComparison.OrdinalIgnoreCase)) == true;
+        }
 
         public int? DoctorId
         {
             get
             {
-                // بنبحث عن Claim اسمه "DoctorId" اللي حطيناه واحنا بنعمل التوكن
-                var claimValue = _httpContextAccessor.HttpContext?.User?.FindFirst("DoctorId")?.Value;
-
-                // لو موجود وقيمته رقم صحيح، بنرجعه.. غير كده بنرجع null
-                if (int.TryParse(claimValue, out int id))
-                {
-                    return id;
-                }
-                return null;
+                var claimValue = User?.FindFirst("DoctorId")?.Value;
+                return int.TryParse(claimValue, out int id) ? id : null;
             }
         }
 
@@ -43,16 +74,9 @@
         {
             get
             {
-                // نفس الكلام للمريض
-                var claimValue = _httpContextAccessor.HttpContext?.User?.FindFirst("PatientId")?.Value;
-
-                if (int.TryParse(claimValue, out int id))
-                {
-                    return id;
-                }
-                return null;
+                var claimValue = User?.FindFirst("PatientId")?.Value;
+                return int.TryParse(claimValue, out int id) ? id : null;
             }
         }
-
     }
 }

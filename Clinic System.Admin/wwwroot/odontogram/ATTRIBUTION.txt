@@ -1,0 +1,3 @@
+# Tooth SVG templates
+Copied from React Advanced Odontogram (https://github.com/ZoliQua/React-Odontogram-Modul)
+MIT License — see LICENSE.txt (Copyright 2026 Zoltán Dul).

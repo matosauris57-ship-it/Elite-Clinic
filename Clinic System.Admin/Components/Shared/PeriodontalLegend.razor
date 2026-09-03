@@ -1,0 +1,14 @@
+@using Clinic_System.Core.Validation
+<div class="periodontal-legend" aria-label="Leyenda periodontal">
+    <span title="Profundidad 1 a @PeriodontalThresholds.PocketNormalMaxMm mm"><b>N</b> 1–@PeriodontalThresholds.PocketNormalMaxMm mm</span>
+    <span title="Profundidad 4 a @PeriodontalThresholds.PocketAlertMaxMm mm"><b>!</b> @(PeriodontalThresholds.PocketNormalMaxMm + 1)–@PeriodontalThresholds.PocketAlertMaxMm mm</span>
+    <span title="Profundidad de 6 mm o más"><b>!!</b> ≥ @(PeriodontalThresholds.PocketAlertMaxMm + 1) mm</span>
+    <span><b>B</b> Sangrado (punto rojo)</span>
+    <span><b>P</b> Placa</span>
+    <span><b>S</b> Supuración</span>
+    <span><b>X</b> Ausente</span>
+    <span><b>Imp</b> Implante</span>
+    <span><b>F</b> Furcación (Glickman)</span>
+    <span><b>M</b> Movilidad</span>
+    <span><b>—</b> Sin medición</span>
+</div>

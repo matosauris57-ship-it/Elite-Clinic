@@ -4,6 +4,7 @@
     {
         public int PaymentId { get; set; } 
         public decimal AmountPaid { get; set; }
+        public string AmountPaidDisplay { get; set; } = string.Empty;
         public string PaymentStatus { get; set; }
         public string PaymentDate { get; set; }
         public string? AdditionalNotes { get; set; }

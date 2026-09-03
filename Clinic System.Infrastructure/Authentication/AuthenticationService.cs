@@ -19,15 +19,17 @@
             // 2. تجهيز البيانات (Claims) اللي هتتحفر جوه التوكن
             var authClaims = new List<Claim>
             {
-                new Claim(JwtRegisteredClaimNames.Sub, userId), 
-                new Claim(JwtRegisteredClaimNames.UniqueName, userName), 
-                new Claim(JwtRegisteredClaimNames.Email, email), 
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()) 
+                new Claim(JwtRegisteredClaimNames.Sub, userId),
+                new Claim(ClaimTypes.NameIdentifier, userId),
+                new Claim(JwtRegisteredClaimNames.UniqueName, userName),
+                new Claim(JwtRegisteredClaimNames.Email, email),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
             foreach (var role in roles)
             {
                 authClaims.Add(new Claim(ClaimTypes.Role, role));
+                authClaims.Add(new Claim("role", role));
             }
 
             if (extraClaims != null)
@@ -73,8 +75,12 @@
             var principal = GetPrincipalFromExpiredToken(accessToken);
             if (principal == null) return default; 
 
-            var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var user = await _userManager.FindByIdAsync(userId!);
+            var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return default;
+
+            var user = await _userManager.FindByIdAsync(userId);
 
             // 2. التحقق من وجود المستخدم والتوكن في الداتابيز
             if (user == null) return default;

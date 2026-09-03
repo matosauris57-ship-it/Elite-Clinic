@@ -1,0 +1,225 @@
+@page "/enfermedades"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "enfermedades.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject MedicalConditionMaintenanceService ConditionService
+@inject AuthService AuthService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Enfermedades — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Catálogo de enfermedades</h1>
+            <p>Condiciones médicas para antecedentes del paciente</p>
+        </div>
+        @if (_canCreate)
+        {
+            <div class="command-actions">
+                <button class="btn-primary" @onclick="OpenCreateModal">
+                    <Icon Name="plus" Class="btn-svg" />
+                    Nueva enfermedad
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_loadError))
+    {
+        <ErrorBanner Message="@_loadError" OnRetry="ReloadAsync" />
+    }
+
+    <div class="maintenance-toolbar">
+        <div class="search-field maintenance-search">
+            <Icon Name="search" Class="field-icon" />
+            <input type="text" placeholder="Buscar por nombre o categoría..." @bind="_search" @bind:event="oninput" />
+        </div>
+        <span class="maintenance-count">@FilteredItems.Count() enfermedad(es)</span>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando catálogo..." />
+    }
+    else if (!FilteredItems.Any() && string.IsNullOrEmpty(_loadError))
+    {
+        <div class="maintenance-empty"><p>No hay enfermedades en el catálogo.</p></div>
+    }
+    else
+    {
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Orden</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th>Estado</th>
+                        <th class="col-actions">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in FilteredItems)
+                    {
+                        <tr class="@(item.IsActive ? null : "table-row-inactive")">
+                            <td>@item.SortOrder</td>
+                            <td>@item.Name</td>
+                            <td>@(item.Category ?? "—")</td>
+                            <td>
+                                <span class="status-badge @(item.IsActive ? "status-active" : "status-inactive")">
+                                    @(item.IsActive ? "Activo" : "Inactivo")
+                                </span>
+                            </td>
+                            <td class="col-actions">
+                                @if (_canEdit)
+                                {
+                                    <button class="btn-table" @onclick="() => OpenEditModal(item)">Editar</button>
+                                }
+                                @if (_canDelete)
+                                {
+                                    <button class="btn-table btn-table-danger" @onclick="() => OpenDeleteModal(item)">Eliminar</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_showFormModal)
+{
+    <div class="modal-overlay" @onclick="CloseFormModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@(_isEdit ? "Editar enfermedad" : "Nueva enfermedad")</h2>
+                <button class="modal-close" @onclick="CloseFormModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_formError)) { <div class="wizard-error">@_formError</div> }
+            <div class="new-patient-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nombre</label>
+                        <input class="form-input" @bind="_form.Name" placeholder="Diabetes" />
+                    </div>
+                    <div class="form-group">
+                        <label>Categoría</label>
+                        <input class="form-input" @bind="_form.Category" placeholder="Sistémica" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Orden</label>
+                        <input class="form-input" type="number" @bind="_form.SortOrder" />
+                    </div>
+                    <div class="form-group checkbox-label">
+                        <label><input type="checkbox" @bind="_form.IsActive" /> Activa en catálogo</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseFormModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Guardando..." : "Guardar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showDeleteModal && _toDelete != null)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Eliminar enfermedad</h2>
+                <button class="modal-close" @onclick="CloseDeleteModal">×</button>
+            </div>
+            <p class="modal-confirm-text">¿Eliminar <strong>@_toDelete.Name</strong> del catálogo?</p>
+            @if (!string.IsNullOrEmpty(_deleteError)) { <div class="wizard-error">@_deleteError</div> }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseDeleteModal">Cancelar</button>
+                <button class="btn-danger" disabled="@_deleting" @onclick="ConfirmDeleteAsync">@(_deleting ? "Eliminando..." : "Eliminar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<MedicalConditionListItem> _items = [];
+    private string _search = string.Empty;
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _canCreate, _canEdit, _canDelete;
+    private bool _showFormModal, _isEdit, _saving;
+    private string? _formError;
+    private CreateMedicalConditionRequest _form = new();
+    private int _editingId;
+    private bool _showDeleteModal, _deleting;
+    private string? _deleteError;
+    private MedicalConditionListItem? _toDelete;
+
+    private IEnumerable<MedicalConditionListItem> FilteredItems =>
+        string.IsNullOrWhiteSpace(_search) ? _items.OrderBy(i => i.SortOrder).ThenBy(i => i.Name)
+        : _items.Where(i => i.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                            (i.Category?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canCreate = PermissionService.HasPermission(user, "enfermedades.create");
+        _canEdit = PermissionService.HasPermission(user, "enfermedades.edit");
+        _canDelete = PermissionService.HasPermission(user, "enfermedades.delete");
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        var (items, error) = await AuthService.WithTokenRetryAsync(() => ConditionService.GetConditionsAsync(), AuthService.IsTokenError);
+        _items = items;
+        _loadError = error;
+        _loading = false;
+    }
+
+    private void OpenCreateModal() { _isEdit = false; _form = new CreateMedicalConditionRequest(); _formError = null; _showFormModal = true; }
+    private void OpenEditModal(MedicalConditionListItem item)
+    {
+        _isEdit = true; _editingId = item.Id; _formError = null;
+        _form = new CreateMedicalConditionRequest { Name = item.Name, Category = item.Category, IsActive = item.IsActive, SortOrder = item.SortOrder };
+        _showFormModal = true;
+    }
+    private void CloseFormModal() { _showFormModal = false; _formError = null; }
+    private void OpenDeleteModal(MedicalConditionListItem item) { _toDelete = item; _deleteError = null; _showDeleteModal = true; }
+    private void CloseDeleteModal() { _showDeleteModal = false; _toDelete = null; }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Name)) { _formError = "El nombre es obligatorio."; return; }
+        _saving = true; _formError = null;
+        if (_isEdit)
+        {
+            var (ok, err) = await ConditionService.UpdateAsync(_editingId, new UpdateMedicalConditionRequest
+            {
+                Id = _editingId, Name = _form.Name, Category = _form.Category, IsActive = _form.IsActive, SortOrder = _form.SortOrder
+            });
+            if (!ok) { _formError = err; _saving = false; return; }
+        }
+        else
+        {
+            var (ok, err, _) = await ConditionService.CreateAsync(_form);
+            if (!ok) { _formError = err; _saving = false; return; }
+        }
+        _saving = false; _showFormModal = false; await ReloadAsync();
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_toDelete == null) return;
+        _deleting = true;
+        var (ok, err) = await ConditionService.DeleteAsync(_toDelete.Id);
+        if (!ok) { _deleteError = err; _deleting = false; return; }
+        _deleting = false; CloseDeleteModal(); await ReloadAsync();
+    }
+}

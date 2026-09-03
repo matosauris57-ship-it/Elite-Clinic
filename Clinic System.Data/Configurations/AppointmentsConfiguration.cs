@@ -55,6 +55,12 @@ namespace Clinic_System.Data.Configurations
             builder.HasIndex(a => a.Status)
                 .HasDatabaseName("IX_Appointments_Status");
 
+            builder.Property(a => a.DayBeforeReminderSentAt)
+                .HasColumnName("DayBeforeReminderSentAt");
+
+            builder.Property(a => a.SameDayReminderSentAt)
+                .HasColumnName("SameDayReminderSentAt");
+
             // ============================================
             // Patient Relationship (Many-to-One)
             // ============================================

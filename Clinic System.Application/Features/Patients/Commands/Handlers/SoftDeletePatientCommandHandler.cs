@@ -1,6 +1,6 @@
-﻿namespace Clinic_System.Application.Features.Patients.Commands.Handlers
+namespace Clinic_System.Application.Features.Patients.Commands.Handlers
 {
-    public class SoftDeletePatientCommandHandler : AppRequestHandler<SoftDeletePatientCommand, Patient>
+    public class SoftDeletePatientCommandHandler : ResponseHandler, IRequestHandler<SoftDeletePatientCommand, Response<Patient>>
     {
         private readonly IPatientService patientService;
         private readonly IIdentityService identityService;
@@ -8,11 +8,11 @@
         private readonly ILogger<SoftDeletePatientCommandHandler> logger;
 
         public SoftDeletePatientCommandHandler(
-            ICurrentUserService currentUserService,
+            ICurrentUserService @object,
             IPatientService patientService,
             IIdentityService identityService,
             IUnitOfWork unitOfWork,
-            ILogger<SoftDeletePatientCommandHandler> logger) : base(currentUserService)
+            ILogger<SoftDeletePatientCommandHandler> logger)
         {
             this.patientService = patientService;
             this.identityService = identityService;
@@ -20,56 +20,37 @@
             this.logger = logger;
         }
 
-        public override async Task<Response<Patient>> Handle(SoftDeletePatientCommand request, CancellationToken cancellationToken)
+        public async Task<Response<Patient>> Handle(SoftDeletePatientCommand request, CancellationToken cancellationToken)
         {
-            logger.LogInformation("Handling SoftDeletePatientCommand for Patient Id {PatientId}", request.Id);
-
-            var authResult = await ValidatePatientAccess(request.Id);
-            
-            if (authResult != null)
-                return authResult;
-
-            var patient = await patientService.GetPatientByIdAsync(request.Id);
+            var patient = await patientService.GetPatientByIdIncludingDeletedAsync(request.Id, cancellationToken);
 
             if (patient == null)
+                return NotFound<Patient>($"No se encontró el paciente con Id {request.Id}");
+
+            if (patient.IsDeleted)
+                return BadRequest<Patient>("El paciente ya está deshabilitado");
+
+            using var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+            try
             {
-                logger.LogWarning("Patient with Id {PatientId} not found", request.Id);
-                return NotFound<Patient>($"Patient with Id {request.Id} not found");
+                await patientService.SoftDeletePatient(patient, cancellationToken);
+
+                if (await unitOfWork.SaveAsync(cancellationToken) == 0)
+                    return BadRequest<Patient>("No se pudo deshabilitar el paciente");
+
+                if (!string.IsNullOrEmpty(patient.ApplicationUserId) &&
+                    !await identityService.SoftDeleteUserAsync(patient.ApplicationUserId, cancellationToken))
+                    return BadRequest<Patient>("No se pudo deshabilitar la cuenta de acceso del paciente");
+
+                transaction.Complete();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error deshabilitando paciente {PatientId}", request.Id);
+                return BadRequest<Patient>($"No se pudo deshabilitar el paciente: {ex.Message}");
             }
 
-            using (var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
-            {
-                try
-                {
-                    logger.LogInformation("Soft deleting Patient with Id {PatientId}", request.Id);
-                    await patientService.SoftDeletePatient(patient, cancellationToken);
-
-                    var result = await unitOfWork.SaveAsync();
-                    if (result == 0)
-                    {
-                        logger.LogError("Failed to delete Patient with Id {PatientId}", request.Id);
-                        return BadRequest<Patient>("Failed to Deleted Patient");
-                    }
-
-                    var IsDeletedUser = await identityService.SoftDeleteUserAsync(patient.ApplicationUserId, cancellationToken);
-
-                    if (!IsDeletedUser)
-                    {
-                        logger.LogError("Failed to delete associated user for Patient with Id {PatientId}", request.Id);
-                        return BadRequest<Patient>("Failed to Deleted associated user");
-                    }
-
-                    transaction.Complete();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "An error occurred while deleting Patient with Id {PatientId}", request.Id);
-                    return BadRequest<Patient>($"Patient deletion failed: {ex.Message}");
-                }
-            }
-
-            logger.LogInformation("Patient with Id {PatientId} deleted successfully", request.Id);
-            return Deleted<Patient>("Patient Deleted successfully");
+            return Deleted<Patient>("Paciente deshabilitado correctamente");
         }
     }
 }

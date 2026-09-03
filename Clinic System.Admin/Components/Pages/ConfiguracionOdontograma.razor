@@ -1,0 +1,23 @@
+@page "/configuracion/odontograma"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode InteractiveServer
+
+<PageTitle>Odontograma — Configuración</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/configuracion" class="back-link-inline">← Configuración</a>
+            <h1>Odontograma</h1>
+            <p>Ajustes visuales de la clínica. Los diagnósticos clínicos no se modifican desde aquí.</p>
+        </div>
+    </div>
+
+    <div class="config-hub-grid">
+        <NavLink class="config-hub-card" href="/configuracion/odontograma/simbologia">
+            <Icon Name="tooth" Class="config-hub-icon" />
+            <h3>Simbología</h3>
+            <p>Forma, color y estilo de cada condición y fase en el odontograma.</p>
+        </NavLink>
+    </div>
+</div>

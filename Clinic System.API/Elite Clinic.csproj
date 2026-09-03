@@ -40,4 +40,11 @@
     <ProjectReference Include="..\Clinic System.Infrastructure\Elite Clinic.Infrastructure.csproj" />
   </ItemGroup>
 
+  <Target Name="StopLockedClinicDevProcesses"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(Configuration)' == 'Debug' and '$(DesignTimeBuild)' != 'true' and '$(BuildingInsideVisualStudio)' != 'true' and '$(StopClinicDevProcesses)' != 'false'">
+    <Exec Command='powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\build\StopDevProcesses.ps1&quot; -ProcessNames &quot;Elite Clinic&quot;'
+          ContinueOnError="WarnAndContinue" />
+  </Target>
+
 </Project>

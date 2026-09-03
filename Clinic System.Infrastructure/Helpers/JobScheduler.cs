@@ -24,7 +24,19 @@
             recurringJobManager.AddOrUpdate<IRefreshTokenCleanupService>(
                 "cleanup-tokens",
                 service => service.RemoveExpiredRefreshTokensAsync(),
-                Cron.Daily 
+                Cron.Daily
+            );
+
+            recurringJobManager.AddOrUpdate<IPatientNotificationDispatchService>(
+                "patient-email-notifications",
+                service => service.DispatchDueAsync(),
+                "*/15 * * * *"
+            );
+
+            recurringJobManager.AddOrUpdate<IEmailCampaignService>(
+                "patient-email-campaigns",
+                service => service.DispatchDueAsync(),
+                "*/15 * * * *"
             );
         }
     }

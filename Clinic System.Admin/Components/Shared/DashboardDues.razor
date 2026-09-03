@@ -1,0 +1,63 @@
+@using System.Globalization
+<div class="widget dash-panel">
+    <div class="widget-head">
+        <div>
+            <h3>Próximos vencimientos</h3>
+            <p class="dash-panel-sub">Saldos pendientes o parciales</p>
+        </div>
+        <a class="widget-pill dash-link-pill" href="/facturacion">Cobrar</a>
+    </div>
+
+    @if (Restricted)
+    {
+        <div class="dash-empty">
+            <Icon Name="alert-triangle" Class="dash-empty-icon" />
+            <p>No tienes permiso para ver deudas.</p>
+        </div>
+    }
+    else if (Items.Count == 0)
+    {
+        <div class="dash-empty">
+            <Icon Name="check-circle-2" Class="dash-empty-icon" />
+            <p>No hay saldos pendientes.</p>
+        </div>
+    }
+    else
+    {
+        <div class="dash-list">
+            @foreach (var item in Items)
+            {
+                <a class="dash-row" href="/facturacion">
+                    <span class="dash-row-main">
+                        <strong>@item.PatientName</strong>
+                        <span>@StatusLabel(item.PaymentStatus) · @FormatDate(item.PaymentDate)</span>
+                    </span>
+                    <span class="dash-amount warn">@FormatMoney(item.Balance)</span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo EsDo = CultureInfo.GetCultureInfo("es-DO");
+
+    [Parameter] public List<PaymentListItem> Items { get; set; } = [];
+    [Parameter] public bool Restricted { get; set; }
+
+    private static string FormatMoney(decimal amount) => amount.ToString("C0", EsDo);
+
+    private static string FormatDate(string? value)
+    {
+        if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var dt))
+            return dt.ToString("d MMM", EsDo);
+        return "Sin fecha";
+    }
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "Pending" => "Pendiente",
+        "PartiallyPaid" => "Parcial",
+        _ => status
+    };
+}

@@ -39,10 +39,6 @@
                 return NotFound<CaneclledAndNoShowAppointmentDTO>("Appointment not found.");
             }
 
-            var authResult = await ValidatePatientAccess(appointment.PatientId);
-            if (authResult != null)
-                return authResult;
-
             request.PatientId = appointment.PatientId;
 
             Appointment CancelAppointment = null;

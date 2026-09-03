@@ -17,19 +17,12 @@
 
         public async Task<Response<List<GetDoctorListDTO>>> Handle(GetDoctorListQuery request, CancellationToken cancellationToken)
         {
-            logger.LogInformation("Handling GetDoctorListQuery");
+            logger.LogInformation("Handling GetDoctorListQuery (IncludeInactive={IncludeInactive})", request.IncludeInactive);
 
-            var doctors = await doctorService.GetDoctorsListAsync(cancellationToken);
+            var doctors = await doctorService.GetDoctorsListForAdminAsync(request.IncludeInactive, cancellationToken);
+            var doctorsMapper = mapper.Map<List<GetDoctorListDTO>>(doctors.Where(d => d != null));
 
-            if (doctors?.Any() != true)
-            {
-                logger.LogWarning("No doctors found");
-                return NotFound<List<GetDoctorListDTO>>();
-            }
-
-            var doctorsMapper = mapper.Map<List<GetDoctorListDTO>>(doctors);
-
-            logger.LogInformation("Successfully retrieved and mapped doctor list");
+            logger.LogInformation("Successfully retrieved {Count} doctors for admin list", doctorsMapper.Count);
 
             return Success(doctorsMapper);
         }

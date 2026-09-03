@@ -11,5 +11,6 @@
         public string CreatedAt { get; set; }
         public string Specialization { get; set; } = null!;
         public string ApplicationUserId { get; set; } = null!;
+        public bool IsActive { get; set; } = true;
     }
 }

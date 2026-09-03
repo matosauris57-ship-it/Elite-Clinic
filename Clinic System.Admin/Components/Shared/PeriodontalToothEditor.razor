@@ -1,0 +1,271 @@
+@inject IJSRuntime JS
+@using Clinic_System.Core.Validation
+<section class="clinical-entry-panel periodontal-editor" aria-labelledby="perio-tooth-heading">
+    @if (Tooth == null)
+    {
+        <p>Seleccione una pieza de la gráfica para registrar mediciones.</p>
+    }
+    else
+    {
+        <div class="clinical-section-heading">
+            <div>
+                <span class="eyebrow">Diente</span>
+                <h3 id="perio-tooth-heading">@Tooth.ToothNumber</h3>
+                <p>@FdiToothNumber.Describe(Tooth.ToothNumber)</p>
+            </div>
+            <div class="perio-nav-buttons">
+                <button type="button" class="btn-outline" @onclick="Previous" title="Diente anterior">← Anterior</button>
+                <button type="button" class="btn-outline" @onclick="Next" title="Diente siguiente">Siguiente →</button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="perio-status">Estado de la pieza</label>
+                <select id="perio-status" class="form-input" disabled="@ReadOnly" value="@Tooth.Status" @onchange="OnStatusChanged">
+                    @foreach (var value in Enum.GetValues<PeriodontalToothStatus>())
+                    {
+                        <option value="@value">@PeriodontalChartFactory.StatusLabel(value)</option>
+                    }
+                </select>
+            </div>
+            @if (Tooth.Status == PeriodontalToothStatus.Present)
+            {
+                <div class="form-group">
+                    <label for="perio-kg">Encía queratinizada (mm)</label>
+                    <input id="perio-kg" class="form-input perio-mm" type="number" inputmode="numeric" min="0" max="@PeriodontalThresholds.MaxMillimeters" step="1"
+                           disabled="@ReadOnly" value="@Tooth.KeratinizedGingivaMm" @onchange="SetKg" />
+                </div>
+            }
+        </div>
+
+        @if (Tooth.Status == PeriodontalToothStatus.Missing)
+        {
+            <p class="clinical-readonly-note">Pieza ausente: no se capturan sitios de sondaje. En la gráfica aparece marcada con X.</p>
+        }
+        else
+        {
+            @foreach (var surface in new[] { PeriodontalSurface.Facial, PeriodontalSurface.Lingual })
+            {
+                <h4 class="perio-surface-title">@PeriodontalChartFactory.SurfaceCaption(surface, FdiToothNumber.IsUpper(Tooth.ToothNumber))</h4>
+                <div class="data-table-wrap perio-measure-wrap">
+                    <table class="data-table perio-measure-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Medición</th>
+                                <th scope="col">Mesial</th>
+                                <th scope="col">Centro</th>
+                                <th scope="col">Distal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <th scope="row">Prof. (mm)</th>
+                                @foreach (var position in Positions)
+                                {
+                                    var site = PeriodontalChartFactory.Site(Tooth, surface, position);
+                                    <td>
+                                        <input id="@InputId(surface, position, "pd")"
+                                               class="form-input perio-mm @PocketClass(site.ProbingDepthMm)"
+                                               type="number" inputmode="numeric" min="0" max="@PeriodontalThresholds.MaxMillimeters" step="1"
+                                               aria-label="Profundidad @surface @position"
+                                               disabled="@ReadOnly"
+                                               value="@site.ProbingDepthMm"
+                                               @onchange="e => SetMm(site, true, e.Value)"
+                                               @onkeydown="e => OnPdKey(e, surface, position)" />
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <th scope="row">Recesión (mm)</th>
+                                @foreach (var position in Positions)
+                                {
+                                    var site = PeriodontalChartFactory.Site(Tooth, surface, position);
+                                    <td>
+                                        <input class="form-input perio-mm" type="number" inputmode="numeric" min="0" max="@PeriodontalThresholds.MaxMillimeters" step="1"
+                                               aria-label="Recesión @surface @position"
+                                               disabled="@ReadOnly"
+                                               value="@site.RecessionMm"
+                                               @onchange="e => SetMm(site, false, e.Value)" />
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <th scope="row">CAL (mm)</th>
+                                @foreach (var position in Positions)
+                                {
+                                    var site = PeriodontalChartFactory.Site(Tooth, surface, position);
+                                    var cal = PeriodontalCalculations.CalculateCal(site.ProbingDepthMm, site.RecessionMm);
+                                    <td><span class="perio-cal">@(cal?.ToString() ?? "—")</span></td>
+                                }
+                            </tr>
+                            <tr>
+                                <th scope="row">Sangrado</th>
+                                @foreach (var position in Positions)
+                                {
+                                    var site = PeriodontalChartFactory.Site(Tooth, surface, position);
+                                    <td>
+                                        <label class="perio-flag">
+                                            <input type="checkbox" disabled="@ReadOnly" @bind="site.Bleeding" />
+                                            <span>@(site.Bleeding ? "✓ Sí" : "○ No")</span>
+                                        </label>
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <th scope="row">Placa</th>
+                                @foreach (var position in Positions)
+                                {
+                                    var site = PeriodontalChartFactory.Site(Tooth, surface, position);
+                                    <td>
+                                        <label class="perio-flag">
+                                            <input type="checkbox" disabled="@ReadOnly" @bind="site.Plaque" />
+                                            <span>@(site.Plaque ? "✓ Sí" : "○ No")</span>
+                                        </label>
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <th scope="row">Supuración</th>
+                                @foreach (var position in Positions)
+                                {
+                                    var site = PeriodontalChartFactory.Site(Tooth, surface, position);
+                                    <td>
+                                        <label class="perio-flag">
+                                            <input type="checkbox" disabled="@ReadOnly" @bind="site.Suppuration" />
+                                            <span>@(site.Suppuration ? "✓ Sí" : "○ No")</span>
+                                        </label>
+                                    </td>
+                                }
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="perio-mobility">Movilidad</label>
+                    <select id="perio-mobility" class="form-input" disabled="@ReadOnly" @bind="Tooth.Mobility">
+                        @foreach (var value in Enum.GetValues<PeriodontalMobility>())
+                        {
+                            <option value="@value">@PeriodontalChartFactory.MobilityLabel(value)</option>
+                        }
+                    </select>
+                </div>
+                @if (FdiToothNumber.HasFurcation(Tooth.ToothNumber))
+                {
+                    <div class="form-group">
+                        <label for="perio-furcation-v">Furcación vestibular</label>
+                        <select id="perio-furcation-v" class="form-input" disabled="@ReadOnly" @bind="Tooth.FacialFurcation">
+                            @foreach (var value in Enum.GetValues<PeriodontalFurcation>())
+                            {
+                                <option value="@value">@PeriodontalChartFactory.FurcationLabel(value)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="perio-furcation-l">Furcación @(FdiToothNumber.IsUpper(Tooth.ToothNumber) ? "palatina" : "lingual")</label>
+                        <select id="perio-furcation-l" class="form-input" disabled="@ReadOnly" @bind="Tooth.LingualFurcation">
+                            @foreach (var value in Enum.GetValues<PeriodontalFurcation>())
+                            {
+                                <option value="@value">@PeriodontalChartFactory.FurcationLabel(value)</option>
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="form-group">
+            <label for="perio-tooth-notes">Observaciones de la pieza</label>
+            <textarea id="perio-tooth-notes" class="form-input" rows="2" maxlength="1000" disabled="@ReadOnly" @bind="Tooth.Notes"></textarea>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public PeriodontalToothModel? Tooth { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public EventCallback<int> NavigateToTooth { get; set; }
+
+    private static readonly PeriodontalSitePosition[] Positions =
+        [PeriodontalSitePosition.Mesial, PeriodontalSitePosition.Center, PeriodontalSitePosition.Distal];
+
+    private static readonly (PeriodontalSurface Surface, PeriodontalSitePosition Position)[] PdOrder =
+    [
+        (PeriodontalSurface.Facial, PeriodontalSitePosition.Mesial),
+        (PeriodontalSurface.Facial, PeriodontalSitePosition.Center),
+        (PeriodontalSurface.Facial, PeriodontalSitePosition.Distal),
+        (PeriodontalSurface.Lingual, PeriodontalSitePosition.Mesial),
+        (PeriodontalSurface.Lingual, PeriodontalSitePosition.Center),
+        (PeriodontalSurface.Lingual, PeriodontalSitePosition.Distal)
+    ];
+
+    private Task Previous() =>
+        Tooth == null ? Task.CompletedTask : NavigateToTooth.InvokeAsync(PeriodontalCalculations.PreviousTooth(Tooth.ToothNumber));
+
+    private Task Next() =>
+        Tooth == null ? Task.CompletedTask : NavigateToTooth.InvokeAsync(PeriodontalCalculations.NextTooth(Tooth.ToothNumber));
+
+    private static string InputId(PeriodontalSurface surface, PeriodontalSitePosition position, string field) =>
+        $"perio-{surface}-{position}-{field}";
+
+    private static string PocketClass(int? pd) =>
+        $"pocket-{PeriodontalCalculations.GetPocketSeverity(pd).ToString().ToLowerInvariant()}";
+
+    private void OnStatusChanged(ChangeEventArgs e)
+    {
+        if (Tooth == null || !Enum.TryParse<PeriodontalToothStatus>(e.Value?.ToString(), out var status))
+            return;
+        PeriodontalChartFactory.ApplyStatus(Tooth, status);
+    }
+
+    private void SetKg(ChangeEventArgs e)
+    {
+        if (Tooth == null)
+            return;
+        var raw = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            Tooth.KeratinizedGingivaMm = null;
+            return;
+        }
+        if (int.TryParse(raw, out var value) && PeriodontalCalculations.IsValidMillimeters(value))
+            Tooth.KeratinizedGingivaMm = value;
+    }
+
+    private async Task OnPdKey(KeyboardEventArgs e, PeriodontalSurface surface, PeriodontalSitePosition position)
+    {
+        if (Tooth == null || e.Key != "Enter")
+            return;
+        var index = Array.FindIndex(PdOrder, x => x.Surface == surface && x.Position == position);
+        if (index < 0)
+            return;
+        if (index < PdOrder.Length - 1)
+        {
+            var next = PdOrder[index + 1];
+            await JS.InvokeVoidAsync("dentalCareUi.focusById", InputId(next.Surface, next.Position, "pd"));
+            return;
+        }
+
+        await NavigateToTooth.InvokeAsync(PeriodontalCalculations.NextTooth(Tooth.ToothNumber));
+        await JS.InvokeVoidAsync("dentalCareUi.focusById", InputId(PeriodontalSurface.Facial, PeriodontalSitePosition.Mesial, "pd"));
+    }
+
+    private static void SetMm(PeriodontalSiteModel site, bool probing, object? raw)
+    {
+        int? parsed = null;
+        if (raw != null && int.TryParse(raw.ToString(), out var value) && PeriodontalCalculations.IsValidMillimeters(value))
+            parsed = value;
+        else if (raw != null && !string.IsNullOrWhiteSpace(raw.ToString()) && int.TryParse(raw.ToString(), out _))
+            parsed = probing ? site.ProbingDepthMm : site.RecessionMm;
+
+        if (probing)
+            site.ProbingDepthMm = string.IsNullOrWhiteSpace(raw?.ToString()) ? null : parsed;
+        else
+            site.RecessionMm = string.IsNullOrWhiteSpace(raw?.ToString()) ? null : parsed;
+
+        site.ClinicalAttachmentLevelMm = PeriodontalCalculations.CalculateCal(site.ProbingDepthMm, site.RecessionMm);
+    }
+}

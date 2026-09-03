@@ -14,6 +14,7 @@
             _mockIdentityService = new Mock<IIdentityService>();
             _mockMapper = new Mock<IMapper>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
+            _mockCurrentUserService.Setup(s => s.IsAdmin).Returns(true);
             _mockLogger = new Mock<ILogger<PatientWithAppointmentsByIdQueryHandler>>();
 
             _handler = new PatientWithAppointmentsByIdQueryHandler(

@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Infrastructure
+namespace Clinic_System.Infrastructure
 {
     public static class InfrastructureRegistration
     {
@@ -11,16 +11,18 @@
             services.AddScoped<IIdentityService, IdentityService>();
             services.AddScoped<IAuthenticationService, AuthenticationService>();
             services.AddScoped<IAuthorizationService, AuthorizationService>();
+            services.AddScoped<IPermissionResolver, PermissionResolver>();
+            services.AddScoped<IRoleManagementService, RoleManagementService>();
+            services.AddScoped<IUserManagementService, UserManagementService>();
             services.AddScoped<IRefreshTokenCleanupService, RefreshTokenCleanupService>();
             services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>();
             services.AddScoped<IAppointmentNotificationService, AppointmentEmailNotificationService>();
             services.AddScoped<IIdentityNotificationService, IdentityNotificationService>();
             services.AddTransient<IEmailService, EmailService>();
+            services.AddScoped<IPatientNotificationDispatchService, PatientNotificationDispatchService>();
+            services.AddScoped<IEmailCampaignService, EmailCampaignService>();
             services.AddScoped<ICurrentUserService, CurrentUserService>();
             services.AddScoped<IGoogleAuthService, GoogleAuthService>();
-            services.AddScoped<IMessagePublisher, MessagePublisher>();
-            services.AddScoped<IDistributedLockService, RedisDistributedLockService>();
-
             services.Configure<ClinicSettings>(configuration.GetSection("ClinicSettings"));
 
             // بيقرأ القسم من الـ JSON ويربطه بالكلاس
@@ -29,18 +31,20 @@
 
             var redisConnectionString = configuration.GetSection("Redis:ConnectionString").Value;
 
-            if (!string.IsNullOrEmpty(redisConnectionString))
+            if (!string.IsNullOrWhiteSpace(redisConnectionString))
             {
-                // 2. تظبيط إعدادات الاتصال (زي الـ Retries)
+                services.AddScoped<IDistributedLockService, RedisDistributedLockService>();
+                services.AddScoped<ICacheService, RedisCacheService>();
+
                 var redisConfiguration = ConfigurationOptions.Parse(redisConnectionString);
                 redisConfiguration.ReconnectRetryPolicy = new ExponentialRetry(500, 2000);
-
-                // 3. تسجيل مأمور السنترال (ConnectionMultiplexer) كـ Singleton
                 services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConfiguration));
             }
-
-            // 4. تسجيل الـ Cache Service بتاعتنا عشان الـ Application Layer تعرف تشوفها
-            services.AddScoped<ICacheService, RedisCacheService>();
+            else
+            {
+                services.AddScoped<IDistributedLockService, NullDistributedLockService>();
+                services.AddScoped<ICacheService, NullCacheService>();
+            }
 
             return services;
         }

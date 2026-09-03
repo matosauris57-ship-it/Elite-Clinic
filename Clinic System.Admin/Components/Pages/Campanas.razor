@@ -1,0 +1,449 @@
+@page "/campanas"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "campanas.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject EmailCampaignMaintenanceService Campaigns
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ClinicProfileService ClinicProfile
+@inject IJSRuntime JS
+
+<PageTitle>Campañas de correo — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Campañas de correo</h1>
+            <p>Avisos a pacientes con correo, en lotes de 15 cada 15 minutos</p>
+        </div>
+        @if (_canCreate)
+        {
+            <div class="command-actions">
+                <button class="btn-primary" @onclick="StartNew">
+                    <Icon Name="plus" Class="btn-svg" /> Nueva campaña
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_notice))
+    {
+        <div class="wizard-success">@_notice</div>
+    }
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="wizard-error">@_error</div>
+    }
+
+    @if (_audience != null)
+    {
+        <div class="campaign-audience">
+            <div>
+                <strong>@_audience.EligibleCount</strong>
+                <span>listos para enviar</span>
+            </div>
+            <div>
+                <strong>@_audience.WithEmailCount</strong>
+                <span>con correo</span>
+            </div>
+            <div>
+                <strong>@_audience.OptedOutCount</strong>
+                <span>sin campañas</span>
+            </div>
+            <div>
+                <strong>@_audience.InvalidCount</strong>
+                <span>correo inválido</span>
+            </div>
+            <p class="campaign-audience-note">
+                Cada lote envía @_audience.BatchSize correos y espera 15 minutos.
+                @if (_audience.EligibleCount > 0)
+                {
+                    <text> Esta audiencia son unos @_audience.EstimatedBatches lote(s).</text>
+                }
+                @if (!_audience.SmtpConfigured)
+                {
+                    <text> Configure el SMTP en <a href="/configuracion/clinica">Datos de la clínica</a> antes de iniciar.</text>
+                }
+            </p>
+        </div>
+    }
+
+    @if (_showForm)
+    {
+        <form class="new-patient-form patient-detail-form campaign-form" @onsubmit="SaveDraftAsync" @onsubmit:preventDefault="true">
+            <h2>@(_editingId == null ? "Nueva campaña" : "Editar borrador")</h2>
+            <div class="form-group">
+                <label>Nombre interno</label>
+                <input class="form-input" @bind="_form.Name" maxlength="80" placeholder="Promoción septiembre" />
+            </div>
+            <p class="modal-confirm-text">
+                Variables (pulse una para insertarla en el campo activo):
+            </p>
+            <div class="whatsapp-placeholder-list" role="group" aria-label="Variables de plantilla">
+                @foreach (var token in Placeholders)
+                {
+                    <button type="button"
+                            class="whatsapp-placeholder-chip"
+                            title="Insertar @token"
+                            @onclick="() => InsertPlaceholderAsync(token)">@token</button>
+                }
+            </div>
+            <p class="whatsapp-placeholder-hint">Se insertará en: <strong>@_activeFieldLabel</strong></p>
+            <div class="form-group">
+                <label>Asunto</label>
+                <input @ref="_subjectEditor"
+                       class="form-input"
+                       maxlength="120"
+                       placeholder="Aviso de @ClinicName"
+                       @bind="_form.Subject"
+                       @bind:event="oninput"
+                       @onfocus="() => _activeField = CampaignField.Subject" />
+            </div>
+            <div class="form-group">
+                <label>Mensaje</label>
+                <textarea @ref="_bodyEditor"
+                          class="form-input"
+                          rows="7"
+                          maxlength="4000"
+                          placeholder="Hola {nombre}, le escribimos de {clinica}..."
+                          @bind="_form.Body"
+                          @bind:event="oninput"
+                          @onfocus="() => _activeField = CampaignField.Body"></textarea>
+                <span class="form-hint">El sistema añade un pie indicando que es un aviso de la clínica.</span>
+            </div>
+            <div class="whatsapp-preview-label">Vista previa</div>
+            <div class="whatsapp-preview">@PreviewBody</div>
+            <div class="patient-detail-actions campaign-form-actions">
+                <button class="btn-outline" type="button" @onclick="CancelForm">Cancelar</button>
+                <button class="btn-primary" type="submit" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar borrador")</button>
+            </div>
+        </form>
+    }
+
+    @if (_loading)
+    {
+        <div class="loading-state">Cargando campañas...</div>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="maintenance-empty"><p>Aún no hay campañas. Cree una para avisar a los pacientes con correo.</p></div>
+    }
+    else
+    {
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Campaña</th>
+                        <th>Estado</th>
+                        <th>Progreso</th>
+                        <th class="col-actions">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _items)
+                    {
+                        <tr class="@(_selected?.Id == item.Id ? "table-row-selected" : null)">
+                            <td>
+                                <strong>@item.Name</strong>
+                                <div class="form-hint">@item.Subject</div>
+                            </td>
+                            <td><span class="status-badge @StatusClass(item.Status)">@StatusLabel(item.Status)</span></td>
+                            <td>@ProgressLabel(item)</td>
+                            <td class="col-actions">
+                                <button class="btn-table" @onclick="() => SelectAsync(item.Id)">Ver</button>
+                                @if (_canEdit && item.Status == "Draft")
+                                {
+                                    <button class="btn-table" @onclick="() => EditDraft(item)">Editar</button>
+                                    <button class="btn-table" @onclick="() => StartAsync(item.Id)">Iniciar</button>
+                                }
+                                @if (_canEdit && item.Status == "Running")
+                                {
+                                    <button class="btn-table" @onclick="() => PauseAsync(item.Id)">Pausar</button>
+                                }
+                                @if (_canEdit && item.Status == "Paused")
+                                {
+                                    <button class="btn-table" @onclick="() => ResumeAsync(item.Id)">Reanudar</button>
+                                }
+                                @if (_canEdit && item.Status is "Draft" or "Running" or "Paused")
+                                {
+                                    <button class="btn-table btn-table-danger" @onclick="() => CancelAsync(item.Id)">Cancelar</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (_selected != null)
+    {
+        <div class="campaign-detail">
+            <h2>@_selected.Name</h2>
+            <p class="form-hint">Asunto: @_selected.Subject</p>
+            <div class="whatsapp-preview">@_selected.Body</div>
+            @if (_selected.RecentRecipients.Count > 0)
+            {
+                <h3>Últimos envíos</h3>
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Paciente</th>
+                                <th>Correo</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _selected.RecentRecipients)
+                            {
+                                <tr>
+                                    <td>@row.PatientName</td>
+                                    <td>@row.Email</td>
+                                    <td>
+                                        <span class="status-badge @StatusClass(row.Status)">@StatusLabel(row.Status)</span>
+                                        @if (!string.IsNullOrWhiteSpace(row.Error))
+                                        {
+                                            <div class="form-hint">@row.Error</div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] Placeholders = ["{nombre}", "{clinica}"];
+
+    private enum CampaignField { Subject, Body }
+
+    private EmailCampaignAudience? _audience;
+    private List<EmailCampaignListItem> _items = [];
+    private EmailCampaignDetail? _selected;
+    private EmailCampaignForm _form = new();
+    private ElementReference _subjectEditor;
+    private ElementReference _bodyEditor;
+    private CampaignField _activeField = CampaignField.Body;
+    private int? _editingId;
+    private bool _showForm;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _canCreate;
+    private bool _canEdit;
+    private string? _notice;
+    private string? _error;
+
+    private string _activeFieldLabel =>
+        _activeField == CampaignField.Subject ? "Asunto" : "Mensaje";
+
+    private string ClinicName => string.IsNullOrWhiteSpace(ClinicProfile.Get().Name)
+        ? "la clínica"
+        : ClinicProfile.Get().Name;
+
+    private string PreviewBody
+    {
+        get
+        {
+            var body = (_form.Body ?? string.Empty)
+                .Replace("{nombre}", "Aurileidy Matos", StringComparison.OrdinalIgnoreCase)
+                .Replace("{clinica}", ClinicName, StringComparison.OrdinalIgnoreCase)
+                .Trim();
+            if (string.IsNullOrWhiteSpace(body))
+                return "Escriba el mensaje para ver la vista previa.";
+            return body + "\n\n—\n" + ClinicName + "\nEste aviso se envía solo a pacientes de la clínica.";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canCreate = PermissionService.HasPermission(user, "campanas.create");
+        _canEdit = PermissionService.HasPermission(user, "campanas.edit");
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var audienceTask = Campaigns.GetAudienceAsync();
+        var listTask = Campaigns.ListAsync();
+        await Task.WhenAll(audienceTask, listTask);
+        var (audience, audienceError) = audienceTask.Result;
+        var (items, listError) = listTask.Result;
+        _audience = audience;
+        _items = items;
+        _error = audienceError ?? listError;
+        _loading = false;
+        if (_selected != null)
+        {
+            var (detail, _) = await Campaigns.GetAsync(_selected.Id);
+            if (detail != null)
+                _selected = detail;
+        }
+    }
+
+    private void StartNew()
+    {
+        _editingId = null;
+        _form = new EmailCampaignForm();
+        _showForm = true;
+        _activeField = CampaignField.Body;
+        ClearNotice();
+    }
+
+    private void EditDraft(EmailCampaignListItem item)
+    {
+        _editingId = item.Id;
+        _form = new EmailCampaignForm
+        {
+            Name = item.Name,
+            Subject = item.Subject,
+            Body = _selected?.Id == item.Id ? _selected.Body : string.Empty
+        };
+        _showForm = true;
+        _ = LoadBodyAsync(item.Id);
+    }
+
+    private async Task LoadBodyAsync(int id)
+    {
+        var (detail, _) = await Campaigns.GetAsync(id);
+        if (detail == null)
+            return;
+        _form.Body = detail.Body;
+        _selected = detail;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CancelForm()
+    {
+        _showForm = false;
+        _editingId = null;
+        _activeField = CampaignField.Body;
+    }
+
+    private async Task InsertPlaceholderAsync(string token)
+    {
+        var editor = _activeField == CampaignField.Subject ? _subjectEditor : _bodyEditor;
+        try
+        {
+            var next = await JS.InvokeAsync<string?>("dentalCareUi.insertAtCursor", editor, token);
+            if (!string.IsNullOrEmpty(next))
+            {
+                if (_activeField == CampaignField.Subject)
+                    _form.Subject = next;
+                else
+                    _form.Body = next;
+            }
+        }
+        catch (JSException)
+        {
+            if (_activeField == CampaignField.Subject)
+                _form.Subject += token;
+            else
+                _form.Body += token;
+        }
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        _saving = true;
+        ClearNotice();
+        var (data, error) = _editingId == null
+            ? await Campaigns.CreateAsync(_form)
+            : await Campaigns.UpdateDraftAsync(_editingId.Value, _form);
+        _saving = false;
+        if (error != null || data == null)
+        {
+            _error = error;
+            return;
+        }
+        _notice = "Borrador guardado.";
+        _showForm = false;
+        _editingId = null;
+        _selected = data;
+        await ReloadAsync();
+    }
+
+    private Task SelectAsync(int id) => RunAsync(() => Campaigns.GetAsync(id), selected => _selected = selected, null);
+
+    private Task StartAsync(int id) => RunAsync(() => Campaigns.StartAsync(id), selected =>
+    {
+        _selected = selected;
+        _notice = "Campaña en curso. El sistema enviará 15 correos cada 15 minutos.";
+    }, "iniciar");
+
+    private Task PauseAsync(int id) => RunAsync(() => Campaigns.PauseAsync(id), selected =>
+    {
+        _selected = selected;
+        _notice = "Campaña pausada.";
+    }, "pausar");
+
+    private Task ResumeAsync(int id) => RunAsync(() => Campaigns.ResumeAsync(id), selected =>
+    {
+        _selected = selected;
+        _notice = "Campaña reanudada.";
+    }, "reanudar");
+
+    private Task CancelAsync(int id) => RunAsync(() => Campaigns.CancelAsync(id), selected =>
+    {
+        _selected = selected;
+        _notice = "Campaña cancelada.";
+    }, "cancelar");
+
+    private async Task RunAsync(
+        Func<Task<(EmailCampaignDetail? Data, string? Error)>> action,
+        Action<EmailCampaignDetail> onOk,
+        string? verb)
+    {
+        ClearNotice();
+        var (data, error) = await action();
+        if (error != null || data == null)
+        {
+            _error = error ?? (string.IsNullOrEmpty(verb) ? "No se pudo cargar la campaña." : $"No se pudo {verb} la campaña.");
+            return;
+        }
+        onOk(data);
+        await ReloadAsync();
+    }
+
+    private void ClearNotice()
+    {
+        _notice = null;
+        _error = null;
+    }
+
+    private static string ProgressLabel(EmailCampaignListItem item)
+    {
+        if (item.RecipientCount <= 0)
+            return "Sin destinatarios aún";
+        return $"{item.SentCount} enviados · {item.PendingCount} pendientes · {item.FailedCount} fallidos";
+    }
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "Draft" => "Borrador",
+        "Running" => "En curso",
+        "Paused" => "Pausada",
+        "Completed" => "Completada",
+        "Cancelled" => "Cancelada",
+        "Pending" => "Pendiente",
+        "Sent" => "Enviado",
+        "Failed" => "Falló",
+        "Skipped" => "Omitido",
+        _ => status
+    };
+
+    private static string StatusClass(string status) => status switch
+    {
+        "Running" or "Sent" or "Completed" => "status-active",
+        "Paused" or "Pending" or "Draft" => "status-inactive",
+        "Failed" or "Cancelled" => "status-inactive",
+        _ => "status-inactive"
+    };
+}

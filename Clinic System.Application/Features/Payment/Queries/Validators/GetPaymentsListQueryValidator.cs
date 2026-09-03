@@ -37,6 +37,10 @@
             RuleFor(x => x.Status)
                 .IsInEnum().WithMessage("Invalid Payment Status.")
                 .When(x => x.Status.HasValue);
+
+            RuleFor(x => x.Search)
+                .MaximumLength(100)
+                .When(x => !string.IsNullOrWhiteSpace(x.Search));
         }
     }
 }

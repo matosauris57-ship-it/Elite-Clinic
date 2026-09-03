@@ -1,0 +1,343 @@
+@inject ToothChartService ToothChartService
+@inject PatientMaintenanceService PatientService
+@inject MedicalConditionMaintenanceService ConditionService
+@inject AuthService AuthService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+@if (PatientId > 0)
+{
+    <aside class="patient-history-panel @(Compact ? "compact" : "") @(Collapsible ? "collapsible" : "") @(_expanded ? "is-open" : "")"
+           aria-label="Historial clínico del paciente">
+        <div class="patient-history-panel-head">
+            @if (Collapsible)
+            {
+                <button type="button"
+                        class="patient-history-toggle"
+                        aria-expanded="@_expanded"
+                        aria-controls="@_bodyId"
+                        @onclick="ToggleExpanded">
+                    <span class="patient-history-toggle-copy">
+                        <span class="eyebrow">Historial clínico</span>
+                        <span class="patient-history-toggle-name">@DisplayName</span>
+                        <span class="patient-history-meta">@ToggleHint</span>
+                    </span>
+                    <span class="patient-history-chevron" aria-hidden="true"></span>
+                </button>
+            }
+            else
+            {
+                <div>
+                    <span class="eyebrow">Historial clínico</span>
+                    <h3>@(DisplayName)</h3>
+                    @if (!string.IsNullOrWhiteSpace(_profileMeta))
+                    {
+                        <p class="patient-history-meta">@_profileMeta</p>
+                    }
+                </div>
+            }
+            <a class="btn-outline patient-history-link"
+               href="/pacientes/@PatientId?tab=antecedentes"
+               @onclick:stopPropagation="true">Ver ficha completa</a>
+        </div>
+
+        @if (!Collapsible || _expanded)
+        {
+            <div id="@_bodyId" class="patient-history-panel-body">
+                @if (!_canView)
+                {
+                    <p class="clinical-readonly-note">No tiene permiso para consultar el historial clínico de este paciente.</p>
+                }
+                else if (_loading)
+                {
+                    <AnimatedLoader Compact="true" Message="Cargando antecedentes clínicos..." />
+                }
+                else if (!string.IsNullOrWhiteSpace(_error))
+                {
+                    <ErrorBanner Message="@_error" OnRetry="RetryAsync" />
+                }
+                else
+                {
+                    @if (AlertChips.Count > 0)
+                    {
+                        <div class="history-alert-chips" aria-label="Alertas clínicas">
+                            @foreach (var chip in AlertChips)
+                            {
+                                <span class="history-alert-chip @chip.CssClass">@chip.Label</span>
+                            }
+                        </div>
+                    }
+
+                    <section class="history-background" aria-label="Antecedentes">
+                        <h4>Antecedentes</h4>
+                        @if (BackgroundFacts.Count == 0 && AlertChips.Count == 0)
+                        {
+                            <p class="history-empty-note">No hay antecedentes clínicos registrados.</p>
+                        }
+                        else
+                        {
+                            <dl class="history-fact-grid">
+                                @foreach (var fact in BackgroundFacts)
+                                {
+                                    <div>
+                                        <dt>@fact.Label</dt>
+                                        <dd>@fact.Value</dd>
+                                    </div>
+                                }
+                            </dl>
+                        }
+                    </section>
+
+                    <DentalTimeline Title="Últimos eventos"
+                                    Subtitle="Resumen para esta operación. Abra la ficha para ver el expediente completo."
+                                    Events="_events"
+                                    Loading="false"
+                                    Error="@_timelineError"
+                                    Compact="true"
+                                    MaxItems="MaxItems" />
+                }
+            </div>
+        }
+    </aside>
+}
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public string? PatientName { get; set; }
+    [Parameter] public int MaxItems { get; set; } = 5;
+    [Parameter] public bool Compact { get; set; } = true;
+    [Parameter] public bool Collapsible { get; set; }
+
+    private List<DentalClinicalEvent> _events = [];
+    private PatientClinicalProfile? _profile;
+    private List<MedicalConditionListItem> _conditions = [];
+    private bool _loading;
+    private bool _canView;
+    private bool _permissionsReady;
+    private bool _expanded;
+    private string? _error;
+    private string? _timelineError;
+    private int _loadedPatientId;
+    private int _boundPatientId;
+    private readonly string _bodyId = $"patient-history-{Guid.NewGuid():N}";
+
+    private string DisplayName =>
+        !string.IsNullOrWhiteSpace(_profile?.FullName)
+            ? _profile.FullName
+            : string.IsNullOrWhiteSpace(PatientName) ? $"Paciente #{PatientId}" : PatientName;
+
+    private string? _profileMeta;
+
+    private string ToggleHint =>
+        _expanded
+            ? (string.IsNullOrWhiteSpace(_profileMeta) ? "Resumen clínico del paciente." : _profileMeta)
+            : "Opcional. Ábralo para ver el resumen o consulte la ficha.";
+
+    private sealed record AlertChip(string Label, string CssClass);
+    private sealed record BackgroundFact(string Label, string Value);
+
+    private List<AlertChip> AlertChips
+    {
+        get
+        {
+            var history = _profile?.DentalHistory;
+            if (history == null)
+                return [];
+
+            var chips = new List<AlertChip>();
+            if (!string.IsNullOrWhiteSpace(history.Allergies))
+                chips.Add(new("Alergias", "alert-critical"));
+            if (!string.IsNullOrWhiteSpace(history.CurrentMedication))
+                chips.Add(new("Medicación actual", "alert-warning"));
+            if (history.IsSmoker)
+                chips.Add(new("Fumador", "alert-warning"));
+            if (history.HasBleedingGums)
+                chips.Add(new("Sangrado de encías", "alert-warning"));
+            if (history.HasSensitiveTeeth)
+                chips.Add(new("Sensibilidad dental", "alert-info"));
+            if (history.HasBruxism)
+                chips.Add(new("Bruxismo", "alert-info"));
+            return chips;
+        }
+    }
+
+    private List<BackgroundFact> BackgroundFacts
+    {
+        get
+        {
+            var history = _profile?.DentalHistory;
+            if (history == null)
+                return [];
+
+            var facts = new List<BackgroundFact>();
+            AddFact(facts, "Alergias", history.Allergies);
+            AddFact(facts, "Medicación actual", history.CurrentMedication);
+            AddFact(facts, "Presión arterial", history.BloodPressure);
+            AddFact(facts, "Enfermedades sistémicas", history.SystemicDiseases);
+            AddFact(facts, "Otras enfermedades", history.OtherDiseases);
+            AddFact(facts, "Enfermedades del catálogo", ConditionNames);
+            AddFact(facts, "Tratamientos dentales previos", history.PreviousDentalTreatments);
+            AddFact(facts, "Motivo de consulta", history.ReasonForConsultation);
+            AddFact(facts, "Diagnóstico", history.Diagnosis);
+            AddFact(facts, "Observaciones", history.ClinicalObservations);
+            AddFact(facts, "Notas adicionales", history.AdditionalNotes);
+            return facts;
+        }
+    }
+
+    private string? ConditionNames
+    {
+        get
+        {
+            var ids = _profile?.DentalHistory?.SelectedConditionIds;
+            if (ids == null || ids.Count == 0 || _conditions.Count == 0)
+                return null;
+
+            var names = _conditions
+                .Where(c => ids.Contains(c.Id))
+                .Select(c => c.Name)
+                .ToList();
+            return names.Count == 0 ? null : string.Join(", ", names);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canView = PermissionService.HasPermission(user, "odontograma.view")
+            || PermissionService.HasPermission(user, "historial.view")
+            || PermissionService.HasPermission(user, "pacientes.view")
+            || user.IsInRole("Doctor");
+        _permissionsReady = true;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (PatientId != _boundPatientId)
+        {
+            _boundPatientId = PatientId;
+            _expanded = !Collapsible;
+            _profile = null;
+            _events = [];
+            _profileMeta = null;
+            _error = null;
+            _timelineError = null;
+            _loadedPatientId = 0;
+        }
+
+        await LoadIfNeededAsync();
+    }
+
+    private Task ToggleExpanded()
+    {
+        _expanded = !_expanded;
+        return LoadIfNeededAsync();
+    }
+
+    private async Task LoadIfNeededAsync()
+    {
+        if (!_permissionsReady || !_canView || PatientId <= 0)
+            return;
+
+        if (Collapsible && !_expanded)
+            return;
+
+        if (PatientId == _loadedPatientId)
+            return;
+
+        await LoadAsync();
+    }
+
+    private Task RetryAsync()
+    {
+        _loadedPatientId = 0;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _timelineError = null;
+        _loadedPatientId = PatientId;
+
+        var profileTask = AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PatientService.GetClinicalProfileAsync(PatientId);
+                return (response.Profile, response.Error);
+            },
+            AuthService.IsTokenError);
+        var timelineTask = AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await ToothChartService.GetTimelineAsync(PatientId);
+                return (response.Events, response.Error);
+            },
+            AuthService.IsTokenError);
+        var conditionsTask = _conditions.Count == 0
+            ? AuthService.WithTokenRetryAsync(
+                async () =>
+                {
+                    var response = await ConditionService.GetConditionsAsync(activeOnly: false);
+                    return (response.Items, response.Error);
+                },
+                AuthService.IsTokenError)
+            : Task.FromResult<(List<MedicalConditionListItem> Data, string? Error)>((_conditions, null));
+
+        await Task.WhenAll(profileTask, timelineTask, conditionsTask);
+
+        var profile = await profileTask;
+        var timeline = await timelineTask;
+        var conditions = await conditionsTask;
+
+        if (profile.Error != null && timeline.Error != null)
+        {
+            _error = profile.Error;
+        }
+        else
+        {
+            _profile = profile.Data;
+            _events = timeline.Data;
+            _timelineError = timeline.Error;
+            if (conditions.Data.Count > 0)
+                _conditions = conditions.Data;
+            BuildProfileMeta();
+            if (_profile == null && profile.Error != null)
+                _error = profile.Error;
+        }
+
+        _loading = false;
+    }
+
+    private void BuildProfileMeta()
+    {
+        if (_profile == null)
+        {
+            _profileMeta = null;
+            return;
+        }
+
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(_profile.Gender))
+            parts.Add(GenderLabel(_profile.Gender));
+        if (!string.IsNullOrWhiteSpace(_profile.DateOfBirth))
+            parts.Add($"Nac. {_profile.DateOfBirth}");
+        if (!string.IsNullOrWhiteSpace(_profile.NationalId))
+            parts.Add($"Cédula {_profile.NationalId}");
+        _profileMeta = parts.Count == 0 ? null : string.Join(" · ", parts);
+    }
+
+    private static void AddFact(List<BackgroundFact> facts, string label, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            facts.Add(new BackgroundFact(label, value.Trim()));
+    }
+
+    private static string GenderLabel(string gender) => gender switch
+    {
+        "Male" => "Masculino",
+        "Female" => "Femenino",
+        _ => gender
+    };
+}

@@ -1,0 +1,957 @@
+@page "/facturacion"
+@using System.Globalization
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "facturacion.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject BillingMaintenanceService BillingService
+@inject TreatmentProcedureMaintenanceService ProcedureService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Facturación — DentalCare Admin</PageTitle>
+
+<div class="billing-page maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Facturación</h1>
+            <p>Gestiona pagos, cobros y líneas de factura de las citas.</p>
+        </div>
+        <div class="command-actions">
+            <button class="btn-outline" disabled="@_loading" @onclick="ReloadAsync">
+                <Icon Name="refresh-cw" Class="btn-svg" />
+                Actualizar
+            </button>
+        </div>
+    </div>
+
+    <div class="billing-kpi-grid">
+        <div class="agenda-kpi accent-green">
+            <span class="agenda-kpi-value">@(_dailyRevenue?.TotalRevenueDisplay)</span>
+            <span class="agenda-kpi-label">Ingresos del día</span>
+        </div>
+        <div class="agenda-kpi accent-teal">
+            <span class="agenda-kpi-value">@(_dailyRevenue?.TotalTransactions ?? 0)</span>
+            <span class="agenda-kpi-label">Transacciones</span>
+        </div>
+        <div class="agenda-kpi accent-purple">
+            <span class="agenda-kpi-value">@(_dailyRevenue?.CardTotalDisplay)</span>
+            <span class="agenda-kpi-label">Tarjeta</span>
+        </div>
+        <div class="agenda-kpi accent-yellow">
+            <span class="agenda-kpi-value">@(_dailyRevenue?.CashAndInstaPayTotalDisplay)</span>
+            <span class="agenda-kpi-label">Efectivo + InstaPay</span>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <ErrorBanner Message="@_loadError" OnRetry="ReloadAsync" />
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_actionMessage))
+    {
+        <div class="agenda-action-message @(_actionSuccess ? "success" : "error")">@_actionMessage</div>
+    }
+
+    <section class="billing-panel">
+        <div class="billing-filters">
+            <div class="search-field maintenance-search">
+                <Icon Name="search" Class="field-icon" />
+                <input type="text"
+                       placeholder="Buscar paciente, médico o # pago..."
+                       disabled="@_loading"
+                       @bind="_search"
+                       @bind:event="oninput" />
+            </div>
+            <div class="form-group">
+                <label>Desde</label>
+                <input class="form-input" type="date" disabled="@_loading" value="@_fromDate" @onchange="OnFromDateChanged" />
+            </div>
+            <div class="form-group">
+                <label>Hasta</label>
+                <input class="form-input" type="date" disabled="@_loading" value="@_toDate" @onchange="OnToDateChanged" />
+            </div>
+            <div class="form-group">
+                <label>Método</label>
+                <select class="form-input" disabled="@_loading" @bind="_methodFilter">
+                    <option value="">Todos</option>
+                    <option value="Cash">Efectivo</option>
+                    <option value="CreditCard">Tarjeta</option>
+                    <option value="InstaPay">InstaPay</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Estado</label>
+                <select class="form-input" disabled="@_loading" @bind="_statusFilter">
+                    <option value="">Todos</option>
+                    <option value="Pending">Pendiente</option>
+                    <option value="PartiallyPaid">Abonado</option>
+                    <option value="Paid">Pagado</option>
+                    <option value="Failed">Fallido</option>
+                    <option value="Refunded">Reembolsado</option>
+                    <option value="Cancelled">Cancelado</option>
+                </select>
+            </div>
+            <button class="btn-primary" disabled="@_loading" @onclick="ApplyFiltersAsync">Filtrar</button>
+            <button class="btn-outline" disabled="@_loading" @onclick="ClearFiltersAsync">Limpiar</button>
+        </div>
+
+        <div class="billing-table-header">
+            <span>@_payments.Count pago(s) visibles de @_totalCount</span>
+            <span>Página @_pageNumber de @TotalPages</span>
+        </div>
+
+        @if (_loading)
+        {
+            <AnimatedLoader Message="Cargando facturación..." />
+        }
+        else if (!_payments.Any())
+        {
+            <div class="agenda-empty-state">
+                <h3>No hay pagos para mostrar</h3>
+                <p>Prueba ajustando fechas, estado, método o búsqueda.</p>
+                <div class="agenda-empty-actions">
+                    <button class="btn-outline" @onclick="ClearFiltersAsync">Limpiar filtros</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="data-table-wrap">
+                <table class="data-table billing-table">
+                    <thead>
+                        <tr>
+                            <th># Pago</th>
+                            <th>Paciente</th>
+                            <th>Médico</th>
+                            <th>Fecha</th>
+                            <th>Método</th>
+                            <th>Estado</th>
+                            <th>Total</th>
+                            <th>Abonado</th>
+                            <th>Saldo</th>
+                            <th class="col-actions">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var payment in _payments)
+                        {
+                            <tr>
+                                <td>#@payment.PaymentId</td>
+                                <td>@payment.PatientName</td>
+                                <td>@payment.DoctorName</td>
+                                <td>@FormatDate(payment.PaymentDate)</td>
+                                <td>@payment.PaymentMethodDisplay</td>
+                                <td><span class="status-badge @GetPaymentStatusClass(payment.PaymentStatus)">@payment.PaymentStatusDisplay</span></td>
+                                <td class="billing-amount">@payment.AmountDisplay</td>
+                                <td>@payment.AmountCollectedDisplay</td>
+                                <td>@payment.BalanceDisplay</td>
+                                <td class="col-actions">
+                                    <button class="btn-table" disabled="@_saving" @onclick="() => OpenDetailAsync(payment)">Detalle</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="billing-pagination">
+                <button class="btn-outline" disabled="@(_loading || _pageNumber <= 1)" @onclick="PrevPageAsync">Anterior</button>
+                <button class="btn-outline" disabled="@(_loading || _pageNumber >= TotalPages)" @onclick="NextPageAsync">Siguiente</button>
+            </div>
+        }
+    </section>
+</div>
+
+@if (_showDetailModal && _selectedPayment != null)
+{
+    <div class="modal-overlay" @onclick="CloseDetailModal">
+        <div class="modal-panel modal-panel-wide billing-detail-modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <div>
+                    <h2>Factura #@_selectedPayment.PaymentId</h2>
+                    <p>@_selectedPayment.PatientName · @_selectedPayment.DoctorName</p>
+                </div>
+                <button class="modal-close" @onclick="CloseDetailModal">×</button>
+            </div>
+
+            <div class="agenda-detail-grid billing-detail-grid">
+                <div>
+                    <span>Paciente</span>
+                    <strong>
+                        <a href="/pacientes/@_selectedPayment.PatientId">@_selectedPayment.PatientName</a>
+                    </strong>
+                </div>
+                <div>
+                    <span>Cita</span>
+                    <strong>
+                        <a href="/agenda">#@_selectedPayment.AppointmentId</a>
+                    </strong>
+                </div>
+                <div><span>Fecha</span><strong>@FormatDate(_selectedPayment.PaymentDate)</strong></div>
+                <div><span>Método</span><strong>@_selectedPayment.PaymentMethodDisplay</strong></div>
+                <div><span>Estado</span><strong><span class="status-badge @GetPaymentStatusClass(_selectedPayment.PaymentStatus)">@_selectedPayment.PaymentStatusDisplay</span></strong></div>
+                <div><span>Total</span><strong>@_selectedPayment.AmountDisplay</strong></div>
+                <div><span>Monto cobrado</span><strong>@_selectedPayment.AmountCollectedDisplay</strong></div>
+                <div><span>Saldo</span><strong>@_selectedPayment.BalanceDisplay</strong></div>
+            </div>
+
+            @if (_canEdit)
+            {
+                @if (CanCollect)
+                {
+                    <div class="billing-lines-section billing-abono-section">
+                        <div class="billing-section-title">
+                            <h3>Registrar abono</h3>
+                            <span>Saldo @_selectedPayment.BalanceDisplay</span>
+                        </div>
+                        <p class="billing-muted">Cada cobro debe confirmarse. El estado pasa a Pagado solo cuando el saldo llega a cero.</p>
+                        <div class="billing-add-line billing-abono-form">
+                            <div class="form-group">
+                                <label>Monto del abono</label>
+                                <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@_saving" @bind="_abonoAmountInput" placeholder="0.00" />
+                            </div>
+                            <div class="form-group">
+                                <label>Método</label>
+                                <select class="form-input" disabled="@_saving" @bind="_editPaymentMethod">
+                                    <option value="1">Efectivo</option>
+                                    <option value="2">Tarjeta</option>
+                                    <option value="3">InstaPay</option>
+                                </select>
+                            </div>
+                            <div class="form-group billing-notes">
+                                <label>Nota del abono</label>
+                                <input class="form-input" disabled="@_saving" @bind="_abonoNotes" placeholder="Opcional" />
+                            </div>
+                            <button class="btn-primary" disabled="@_saving" @onclick="() => AskCollectAsync(settle: false)">Solicitar abono</button>
+                            <button class="btn-outline" disabled="@(_saving || AmountCollectedBalanceZero)" @onclick="() => AskCollectAsync(settle: true)">Saldar factura</button>
+                        </div>
+                    </div>
+                }
+
+                <div class="billing-collect-actions">
+                    @if (CanRefund)
+                    {
+                        <button class="btn-outline" disabled="@_saving" @onclick="() => OpenConfirm(BillingConfirmKind.Refund)">Reembolsar</button>
+                    }
+                    @if (CanCancel)
+                    {
+                        <button class="btn-outline" disabled="@_saving" @onclick="() => OpenConfirm(BillingConfirmKind.Cancel)">Cancelar factura</button>
+                    }
+                    <a class="btn-outline" href="@PrintUrl("detalle")" target="_blank">Imprimir con detalle</a>
+                    <a class="btn-outline" href="@PrintUrl("resumen")" target="_blank">Imprimir solo total</a>
+                </div>
+
+                @if (CanRefund || CanCancel)
+                {
+                    <div class="form-group">
+                        <label>Motivo (reembolso o cancelación)</label>
+                        <input class="form-input" disabled="@_saving" @bind="_reason" placeholder="Opcional" />
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="billing-collect-actions">
+                    <a class="btn-outline" href="@PrintUrl("detalle")" target="_blank">Imprimir con detalle</a>
+                    <a class="btn-outline" href="@PrintUrl("resumen")" target="_blank">Imprimir solo total</a>
+                </div>
+            }
+
+            @if ((_selectedPayment.Receipts?.Count ?? 0) > 0)
+            {
+                <div class="billing-lines-section">
+                    <div class="billing-section-title">
+                        <h3>Abonos confirmados</h3>
+                        <span>@_selectedPayment.Receipts!.Count comprobante(s)</span>
+                    </div>
+                    <div class="billing-lines-list">
+                        @foreach (var receipt in _selectedPayment.Receipts.OrderBy(r => r.PaidAt))
+                        {
+                            <div class="billing-line-item">
+                                <div>
+                                    <strong>@receipt.AmountDisplay</strong>
+                                    <span>@FormatDate(receipt.PaidAt) · @receipt.PaymentMethodDisplay</span>
+                                    @if (!string.IsNullOrWhiteSpace(receipt.Notes))
+                                    {
+                                        <span>@receipt.Notes</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_selectedPayment.PatientId > 0)
+            {
+                <details class="billing-history-fold">
+                    <summary>Historial clínico del paciente</summary>
+                    <PatientClinicalHistoryPanel PatientId="@_selectedPayment.PatientId"
+                                                 PatientName="@_selectedPayment.PatientName" />
+                </details>
+            }
+
+            <div class="billing-edit-grid">
+                <div class="form-group">
+                    <label>Monto</label>
+                    <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@(_saving || !CanEditInvoice)" @bind="_editAmountInput" placeholder="0.00" />
+                </div>
+                <div class="form-group">
+                    <label>Método</label>
+                    <select class="form-input" disabled="@(_saving || !CanEditInvoice)" @bind="_editPaymentMethod">
+                        <option value="">Seleccione</option>
+                        <option value="1">Efectivo</option>
+                        <option value="2">Tarjeta</option>
+                        <option value="3">InstaPay</option>
+                    </select>
+                </div>
+                <div class="form-group billing-notes">
+                    <label>Notas</label>
+                    <textarea class="form-input" rows="3" disabled="@(_saving || !CanEditInvoice)" @bind="_editNotes"></textarea>
+                </div>
+                @if (CanEditInvoice)
+                {
+                    <div class="billing-edit-actions">
+                        <button class="btn-primary" disabled="@_saving" @onclick="() => OpenConfirm(BillingConfirmKind.SavePayment)">Guardar pago</button>
+                    </div>
+                }
+            </div>
+
+            <div class="billing-lines-section">
+                <div class="billing-section-title">
+                    <h3>Líneas de factura</h3>
+                    <span>@_invoiceLines.Count línea(s)</span>
+                </div>
+
+                @if (_linesLoading)
+                {
+                    <AnimatedLoader Compact="true" Message="Cargando líneas..." />
+                }
+                else if (_invoiceLines.Count == 0)
+                {
+                    <p class="billing-muted">Este pago aún no tiene desglose de tratamientos o conceptos.</p>
+                }
+                else
+                {
+                    <div class="billing-lines-list">
+                        @foreach (var line in _invoiceLines)
+                        {
+                            <div class="billing-line-item">
+                                <div>
+                                    <strong>@line.Description</strong>
+                                    <span>@line.MetaDisplay</span>
+                                </div>
+                                <div class="billing-line-actions">
+                                    <strong>@line.LineTotalDisplay</strong>
+                                    @if (CanEditInvoice)
+                                    {
+                                        <button class="btn-table" disabled="@_saving" @onclick="() => AskDeleteLine(line)">Eliminar</button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (CanEditInvoice)
+                {
+                    <div class="billing-add-line">
+                        <div class="form-group">
+                            <label>Catálogo</label>
+                            <select class="form-input" disabled="@_saving" value="@_selectedProcedureId" @onchange="OnProcedureSelected">
+                                <option value="">Texto libre</option>
+                                @foreach (var procedure in _procedures)
+                                {
+                                    <option value="@procedure.Id">@procedure.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Descripción</label>
+                            <input class="form-input" disabled="@_saving" placeholder="Ej. Limpieza dental" @bind="_newLine.Description" />
+                        </div>
+                        <div class="form-group">
+                            <label>Pieza FDI</label>
+                            <input class="form-input" type="number" min="11" disabled="@_saving" @bind="_newLine.ToothNumber" />
+                        </div>
+                        <div class="form-group">
+                            <label>Cant.</label>
+                            <input class="form-input" type="number" min="1" disabled="@_saving" @bind="_newLine.Quantity" />
+                        </div>
+                        <div class="form-group">
+                            <label>Precio</label>
+                            <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@_saving" @bind="_newLinePriceInput" placeholder="0.00" />
+                        </div>
+                        <button class="btn-primary" disabled="@_saving" @onclick="AddLineAsync">Agregar línea</button>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-outline" disabled="@_saving" @onclick="CloseDetailModal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_confirmKind != BillingConfirmKind.None && _selectedPayment != null)
+{
+    <div class="modal-overlay billing-confirm-overlay" @onclick="DeclineConfirm">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@_confirmTitle</h2>
+                <button class="modal-close" @onclick="DeclineConfirm">×</button>
+            </div>
+            <p class="modal-confirm-text">@_confirmBody</p>
+            <div class="modal-actions">
+                <button class="btn-outline" disabled="@_saving" @onclick="DeclineConfirm">Declinar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="AcceptConfirmAsync">
+                    @(_saving ? "Procesando..." : "Confirmar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private enum BillingConfirmKind
+    {
+        None,
+        CollectAbono,
+        CollectSettle,
+        Refund,
+        Cancel,
+        DeleteLine,
+        SavePayment
+    }
+
+    private List<PaymentListItem> _payments = [];
+    private List<InvoiceLineItem> _invoiceLines = [];
+    private List<TreatmentProcedureListItem> _procedures = [];
+    private DailyRevenue? _dailyRevenue;
+    private PaymentListItem? _selectedPayment;
+    private InvoiceLineInputItem _newLine = NewInvoiceLine();
+
+    private bool _loading = true;
+    private bool _saving;
+    private bool _linesLoading;
+    private bool _showDetailModal;
+    private bool _actionSuccess;
+    private bool _canEdit;
+
+    private string? _loadError;
+    private string? _actionMessage;
+    private string _search = string.Empty;
+    private string _methodFilter = string.Empty;
+    private string _statusFilter = string.Empty;
+    private string _fromDate = DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private string _toDate = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private string _selectedProcedureId = string.Empty;
+    private string _reason = string.Empty;
+
+    private int _pageNumber = 1;
+    private int _pageSize = 10;
+    private int _totalCount;
+    private int _totalPages = 1;
+    private int _pendingLineId;
+
+    private string _editAmountInput = string.Empty;
+    private string _abonoAmountInput = string.Empty;
+    private string _newLinePriceInput = string.Empty;
+    private string _editPaymentMethod = string.Empty;
+    private string? _editNotes;
+    private string? _abonoNotes;
+    private BillingConfirmKind _confirmKind = BillingConfirmKind.None;
+    private string _confirmTitle = string.Empty;
+    private string _confirmBody = string.Empty;
+
+    private int TotalPages => Math.Max(1, _totalPages);
+    private decimal AmountCollected => _selectedPayment?.AmountCollected ?? 0;
+    private bool AmountCollectedBalanceZero => (_selectedPayment?.Balance ?? 0) <= 0;
+    private bool CanEditInvoice => _canEdit && IsEditableStatus(_selectedPayment?.PaymentStatus) && AmountCollected <= 0;
+    private bool CanCollect => _canEdit && (_selectedPayment?.PaymentStatus is "Pending" or "Failed" or "PartiallyPaid") && !AmountCollectedBalanceZero;
+    private bool CanRefund => _canEdit && (_selectedPayment?.PaymentStatus is "Paid" or "PartiallyPaid");
+    private bool CanCancel => _canEdit && (_selectedPayment?.PaymentStatus is "Pending" or "Failed") && AmountCollected <= 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canEdit = PermissionService.HasPermission(authState.User, "facturacion.edit");
+        var proceduresTask = ProcedureService.GetActiveProceduresAsync();
+        await ReloadAsync();
+        var (procedures, _) = await proceduresTask;
+        _procedures = procedures;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        _actionMessage = null;
+
+        var filters = BuildFilters();
+        var revenueDate = filters.ToDate ?? DateTime.Today;
+
+        var paymentsTask = BillingService.GetPaymentsAsync(filters);
+        var revenueTask = BillingService.GetDailyRevenueAsync(revenueDate);
+
+        var (page, paymentsError) = await paymentsTask;
+        var (revenue, revenueError) = await revenueTask;
+
+        _payments = page.Items.ToList();
+        _pageNumber = page.CurrentPage > 0 ? page.CurrentPage : filters.PageNumber;
+        _pageSize = page.PageSize > 0 ? page.PageSize : filters.PageSize;
+        _totalCount = page.TotalCount;
+        _totalPages = page.TotalPages > 0 ? page.TotalPages : 1;
+        _dailyRevenue = revenue;
+        _loadError = paymentsError ?? revenueError;
+        _loading = false;
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        _pageNumber = 1;
+        await ReloadAsync();
+    }
+
+    private void OnFromDateChanged(ChangeEventArgs args)
+    {
+        _fromDate = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private void OnToDateChanged(ChangeEventArgs args)
+    {
+        _toDate = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _search = string.Empty;
+        _methodFilter = string.Empty;
+        _statusFilter = string.Empty;
+        _fromDate = DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        _toDate = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        _pageNumber = 1;
+        await ReloadAsync();
+    }
+
+    private async Task PrevPageAsync()
+    {
+        if (_pageNumber <= 1)
+            return;
+
+        _pageNumber--;
+        await ReloadAsync();
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_pageNumber >= TotalPages)
+            return;
+
+        _pageNumber++;
+        await ReloadAsync();
+    }
+
+    private async Task OpenDetailAsync(PaymentListItem payment)
+    {
+        _selectedPayment = payment;
+        _editAmountInput = payment.AmountRaw;
+        _editPaymentMethod = PaymentMethodToValue(payment.PaymentMethod);
+        if (string.IsNullOrWhiteSpace(_editPaymentMethod) && payment.PaymentStatus is "Pending" or "Failed")
+            _editPaymentMethod = "1";
+        _editNotes = payment.Notes is "N/A" ? null : payment.Notes;
+        _abonoAmountInput = string.IsNullOrWhiteSpace(payment.BalanceRaw) ? payment.AmountRaw : payment.BalanceRaw;
+        _abonoNotes = null;
+        _invoiceLines = [];
+        _newLine = NewInvoiceLine();
+        _newLinePriceInput = string.Empty;
+        _selectedProcedureId = string.Empty;
+        _reason = string.Empty;
+        _showDetailModal = true;
+        await LoadInvoiceLinesAsync(payment.PaymentId);
+    }
+
+    private async Task LoadInvoiceLinesAsync(int paymentId)
+    {
+        _linesLoading = true;
+        var (lines, error) = await BillingService.GetInvoiceLinesAsync(paymentId);
+        _invoiceLines = lines;
+        if (!string.IsNullOrWhiteSpace(error))
+            ShowAction(error, success: false);
+        _linesLoading = false;
+    }
+
+    private async Task SavePaymentAsync()
+    {
+        if (_selectedPayment == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(_editAmountInput))
+        {
+            ShowAction("El monto debe ser mayor a cero.", success: false);
+            return;
+        }
+
+        _saving = true;
+        var request = new UpdatePaymentRequest
+        {
+            AmountInput = _editAmountInput,
+            PaymentMethod = int.TryParse(_editPaymentMethod, out var method) ? method : null,
+            Notes = _editNotes
+        };
+
+        var (success, error) = await BillingService.UpdatePaymentAsync(_selectedPayment.PaymentId, request);
+        if (!success)
+        {
+            ShowAction(error ?? "No se pudo actualizar el pago.", success: false);
+            _saving = false;
+            return;
+        }
+
+        ShowAction("Pago actualizado correctamente.", success: true);
+        await RefreshSelectedPaymentAsync();
+        await ReloadAsync();
+        _saving = false;
+    }
+
+    private async Task AddLineAsync()
+    {
+        if (_selectedPayment == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(_newLine.Description))
+        {
+            ShowAction("La descripción de la línea es obligatoria.", success: false);
+            return;
+        }
+
+        if (_newLine.Quantity <= 0)
+        {
+            ShowAction("La cantidad debe ser mayor a cero.", success: false);
+            return;
+        }
+
+        _saving = true;
+        _newLine.UnitPriceInput = _newLinePriceInput;
+        var (_, error) = await BillingService.AddInvoiceLineAsync(_selectedPayment.PaymentId, _newLine);
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            ShowAction(error, success: false);
+            _saving = false;
+            return;
+        }
+
+        ShowAction("Línea de factura agregada.", success: true);
+        _newLine = NewInvoiceLine();
+        _newLinePriceInput = string.Empty;
+        _selectedProcedureId = string.Empty;
+        await LoadInvoiceLinesAsync(_selectedPayment.PaymentId);
+        await RefreshSelectedPaymentAsync();
+        await ReloadAsync();
+        _saving = false;
+    }
+
+    private async Task DeleteLineAsync(int lineId)
+    {
+        if (_selectedPayment == null)
+            return;
+
+        _saving = true;
+        var (success, error) = await BillingService.DeleteInvoiceLineAsync(lineId);
+        if (!success)
+        {
+            ShowAction(error ?? "No se pudo eliminar la línea.", success: false);
+            _saving = false;
+            return;
+        }
+
+        ShowAction("Línea eliminada.", success: true);
+        await LoadInvoiceLinesAsync(_selectedPayment.PaymentId);
+        await RefreshSelectedPaymentAsync();
+        await ReloadAsync();
+        _saving = false;
+    }
+
+    private async Task CollectAsync(bool settle)
+    {
+        if (_selectedPayment == null)
+            return;
+
+        if (!int.TryParse(_editPaymentMethod, out var method) || method is < 1 or > 3)
+            method = 1;
+
+        string? amountInput = null;
+        if (!settle)
+        {
+            if (string.IsNullOrWhiteSpace(_abonoAmountInput))
+            {
+                ShowAction("El abono debe ser mayor a cero.", success: false);
+                return;
+            }
+
+            amountInput = _abonoAmountInput;
+        }
+
+        _saving = true;
+        var notes = string.IsNullOrWhiteSpace(_abonoNotes)
+            ? (string.Equals(_editNotes, "N/A", StringComparison.OrdinalIgnoreCase) ? null : _editNotes)
+            : _abonoNotes;
+        var (success, error) = await BillingService.CollectPaymentAsync(_selectedPayment.PaymentId, new CollectPaymentRequest
+        {
+            PaymentMethod = method,
+            Notes = notes,
+            AmountInput = amountInput
+        });
+        if (!success)
+        {
+            ShowAction(error ?? "No se pudo registrar el abono.", success: false);
+            _saving = false;
+            return;
+        }
+
+        ShowAction(settle ? "Factura saldada." : "Abono registrado.", success: true);
+        await RefreshSelectedPaymentAsync();
+        await ReloadAsync();
+        _saving = false;
+    }
+
+    private async Task RefundAsync()
+    {
+        if (_selectedPayment == null)
+            return;
+
+        _saving = true;
+        var (success, error) = await BillingService.RefundPaymentAsync(_selectedPayment.PaymentId, _reason);
+        if (!success)
+        {
+            ShowAction(error ?? "No se pudo reembolsar el pago.", success: false);
+            _saving = false;
+            return;
+        }
+
+        ShowAction("Pago reembolsado.", success: true);
+        await RefreshSelectedPaymentAsync();
+        await ReloadAsync();
+        _saving = false;
+    }
+
+    private async Task CancelAsync()
+    {
+        if (_selectedPayment == null)
+            return;
+
+        _saving = true;
+        var (success, error) = await BillingService.CancelPaymentAsync(_selectedPayment.PaymentId, _reason);
+        if (!success)
+        {
+            ShowAction(error ?? "No se pudo cancelar el pago.", success: false);
+            _saving = false;
+            return;
+        }
+
+        ShowAction("Pago cancelado.", success: true);
+        await RefreshSelectedPaymentAsync();
+        await ReloadAsync();
+        _saving = false;
+    }
+
+    private void OnProcedureSelected(ChangeEventArgs args)
+    {
+        _selectedProcedureId = args.Value?.ToString() ?? string.Empty;
+        if (!int.TryParse(_selectedProcedureId, out var procedureId))
+            return;
+
+        var procedure = _procedures.FirstOrDefault(item => item.Id == procedureId);
+        if (procedure == null)
+            return;
+
+        _newLine.Description = procedure.Name;
+        if (_newLine.Quantity <= 0)
+            _newLine.Quantity = 1;
+    }
+
+    private async Task RefreshSelectedPaymentAsync()
+    {
+        if (_selectedPayment == null)
+            return;
+
+        var (payment, error) = await BillingService.GetPaymentAsync(_selectedPayment.PaymentId);
+        if (payment != null)
+        {
+            _selectedPayment = payment;
+            _editAmountInput = payment.AmountRaw;
+            _editPaymentMethod = PaymentMethodToValue(payment.PaymentMethod);
+            if (string.IsNullOrWhiteSpace(_editPaymentMethod) && payment.PaymentStatus is "Pending" or "Failed")
+                _editPaymentMethod = "1";
+            _editNotes = payment.Notes is "N/A" ? null : payment.Notes;
+            _abonoAmountInput = payment.Balance > 0 ? payment.BalanceRaw : string.Empty;
+            _abonoNotes = null;
+        }
+        else if (!string.IsNullOrWhiteSpace(error))
+        {
+            ShowAction(error, success: false);
+        }
+    }
+
+    private BillingPaymentFilters BuildFilters() => new()
+    {
+        PageNumber = _pageNumber,
+        PageSize = _pageSize,
+        FromDate = ParseDate(_fromDate),
+        ToDate = ParseDate(_toDate),
+        Method = string.IsNullOrWhiteSpace(_methodFilter) ? null : _methodFilter,
+        Status = string.IsNullOrWhiteSpace(_statusFilter) ? null : _statusFilter,
+        Search = string.IsNullOrWhiteSpace(_search) ? null : _search
+    };
+
+    private void CloseDetailModal()
+    {
+        _showDetailModal = false;
+        _selectedPayment = null;
+        _invoiceLines = [];
+        _reason = string.Empty;
+        _selectedProcedureId = string.Empty;
+        _confirmKind = BillingConfirmKind.None;
+        _newLinePriceInput = string.Empty;
+    }
+
+    private string PrintUrl(string vista) =>
+        _selectedPayment == null
+            ? "/facturacion"
+            : $"/facturacion/{_selectedPayment.PaymentId}/imprimir?vista={vista}";
+
+    private void AskCollectAsync(bool settle)
+    {
+        if (_selectedPayment == null)
+            return;
+
+        if (!settle && string.IsNullOrWhiteSpace(_abonoAmountInput))
+        {
+            ShowAction("Indique el monto del abono.", success: false);
+            return;
+        }
+
+        var methodLabel = MethodLabel(_editPaymentMethod);
+        if (settle)
+        {
+            _confirmTitle = "Confirmar saldo de factura";
+            _confirmBody = $"Se cobrará el saldo {_selectedPayment.BalanceDisplay} de la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName} con {methodLabel}. ¿Confirma o declina?";
+            _confirmKind = BillingConfirmKind.CollectSettle;
+            return;
+        }
+
+        _confirmTitle = "Confirmar abono";
+        _confirmBody = $"Se registrará un abono de {_abonoAmountInput} en la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName} con {methodLabel}. ¿Confirma o declina?";
+        _confirmKind = BillingConfirmKind.CollectAbono;
+    }
+
+    private void AskDeleteLine(InvoiceLineItem line)
+    {
+        _pendingLineId = line.Id;
+        _confirmTitle = "Eliminar línea";
+        _confirmBody = $"¿Eliminar «{line.Description}» por {line.LineTotalDisplay}?";
+        _confirmKind = BillingConfirmKind.DeleteLine;
+    }
+
+    private void OpenConfirm(BillingConfirmKind kind)
+    {
+        if (_selectedPayment == null)
+            return;
+
+        _confirmKind = kind;
+        (_confirmTitle, _confirmBody) = kind switch
+        {
+            BillingConfirmKind.Refund => ("Confirmar reembolso", $"Se reembolsará la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName} por {_selectedPayment.AmountCollectedDisplay}. ¿Confirma o declina?"),
+            BillingConfirmKind.Cancel => ("Cancelar factura", $"Se cancelará la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName}. No se cobrará nada. ¿Confirma o declina?"),
+            BillingConfirmKind.SavePayment => ("Guardar factura", $"Se actualizará el monto {_editAmountInput} y el método de la factura #{_selectedPayment.PaymentId}. ¿Confirma o declina?"),
+            _ => ("Confirmar", "¿Desea continuar?")
+        };
+    }
+
+    private void DeclineConfirm()
+    {
+        _confirmKind = BillingConfirmKind.None;
+        _pendingLineId = 0;
+    }
+
+    private async Task AcceptConfirmAsync()
+    {
+        var kind = _confirmKind;
+        _confirmKind = BillingConfirmKind.None;
+        switch (kind)
+        {
+            case BillingConfirmKind.CollectAbono:
+                await CollectAsync(settle: false);
+                break;
+            case BillingConfirmKind.CollectSettle:
+                await CollectAsync(settle: true);
+                break;
+            case BillingConfirmKind.Refund:
+                await RefundAsync();
+                break;
+            case BillingConfirmKind.Cancel:
+                await CancelAsync();
+                break;
+            case BillingConfirmKind.DeleteLine:
+                await DeleteLineAsync(_pendingLineId);
+                break;
+            case BillingConfirmKind.SavePayment:
+                await SavePaymentAsync();
+                break;
+        }
+
+        _pendingLineId = 0;
+    }
+
+    private static string MethodLabel(string value) => value switch
+    {
+        "1" => "efectivo",
+        "2" => "tarjeta",
+        "3" => "InstaPay",
+        _ => "el método seleccionado"
+    };
+
+    private void ShowAction(string message, bool success)
+    {
+        _actionMessage = message;
+        _actionSuccess = success;
+    }
+
+    private static InvoiceLineInputItem NewInvoiceLine() => new()
+    {
+        Quantity = 1
+    };
+
+    private static DateTime? ParseDate(string value) =>
+        DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date)
+            ? date
+            : null;
+
+    private static string FormatDate(string? value) =>
+        DateTime.TryParse(value, out var date)
+            ? date.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture)
+            : string.IsNullOrWhiteSpace(value) ? "Sin fecha" : value;
+
+    private static string GetPaymentStatusClass(string? status) => status switch
+    {
+        "Paid" => "status-completed",
+        "PartiallyPaid" => "status-planned",
+        "Pending" => "status-progress",
+        "Failed" => "status-cancelled",
+        "Refunded" => "status-planned",
+        "Cancelled" => "status-cancelled",
+        _ => "status-inactive"
+    };
+
+    private static string PaymentMethodToValue(string? method) => method switch
+    {
+        "Cash" => "1",
+        "CreditCard" => "2",
+        "InstaPay" => "3",
+        _ => string.Empty
+    };
+
+    private static bool IsEditableStatus(string? status) =>
+        status is "Pending" or "Failed";
+}

@@ -37,7 +37,17 @@
                 return NotFound<UpdatePatientDTO>($"Patient with Id {request.Id} not found");
             }
 
+            var previousEmail = patient.Email;
             mapper.Map(request, patient);
+            patient.Email = ContactEmail.NormalizeOrNull(request.Email);
+            if (!string.Equals(previousEmail, patient.Email, StringComparison.OrdinalIgnoreCase))
+                patient.EmailInvalid = false;
+            if (request.DateOfBirth.HasValue)
+                patient.DateOfBirth = request.DateOfBirth.Value.Date;
+            if (!string.IsNullOrWhiteSpace(request.Gender) && Enum.TryParse<Gender>(request.Gender, true, out var gender))
+                patient.Gender = gender;
+            if (request.OptOutEmailCampaigns.HasValue)
+                patient.OptOutEmailCampaigns = request.OptOutEmailCampaigns.Value;
 
             await patientService.UpdatePatient(patient, cancellationToken);
 

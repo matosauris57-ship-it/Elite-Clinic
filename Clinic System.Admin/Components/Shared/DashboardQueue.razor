@@ -1,0 +1,46 @@
+<div class="widget dash-panel dash-panel-queue">
+    <div class="widget-head">
+        <div>
+            <h3>Pacientes esperando</h3>
+            <p class="dash-panel-sub">Confirmados con hora ya vencida</p>
+        </div>
+        <span class="widget-pill">@Items.Count</span>
+    </div>
+
+    @if (Items.Count == 0)
+    {
+        <div class="dash-empty">
+            <Icon Name="users" Class="dash-empty-icon" />
+            <p>Nadie está en cola ahora.</p>
+        </div>
+    }
+    else
+    {
+        <div class="dash-list">
+            @foreach (var item in Items)
+            {
+                var appt = item.Appointment;
+                <a class="dash-row" href="/agenda">
+                    <span class="dash-wait">@FormatWait(item.WaitMinutes)</span>
+                    <span class="dash-row-main">
+                        <strong>@appt.PatientFullName</strong>
+                        <span>@appt.DoctorName · @(appt.ParsedDate?.ToString("HH:mm") ?? "--:--")</span>
+                    </span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<DashboardWaitingItem> Items { get; set; } = [];
+
+    private static string FormatWait(int minutes)
+    {
+        if (minutes < 60)
+            return $"{minutes} min";
+        var hours = minutes / 60;
+        var rest = minutes % 60;
+        return rest == 0 ? $"{hours} h" : $"{hours} h {rest}";
+    }
+}

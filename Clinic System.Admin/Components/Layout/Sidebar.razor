@@ -1,0 +1,168 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.Extensions.Caching.Memory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject AgendaMaintenanceService AgendaService
+@inject PermissionService PermissionService
+@inject ClinicProfileService ClinicProfile
+@inject IMemoryCache MemoryCache
+@implements IDisposable
+
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">
+            <div class="logo-mark">
+                @if (!string.IsNullOrWhiteSpace(_profile.DisplayLogoUrl))
+                {
+                    <img class="logo-image" src="@_profile.DisplayLogoUrl" alt="" />
+                }
+                else
+                {
+                    <Icon Name="tooth" Class="logo-svg" StrokeWidth="1.6" />
+                }
+            </div>
+            <div>
+                <div class="logo-title">@_profile.Name</div>
+                <div class="logo-badge">ADMIN</div>
+            </div>
+        </div>
+        <div class="status-pill online">
+            <span class="status-dot"></span>
+            SISTEMA EN LÍNEA
+        </div>
+    </div>
+
+    <nav class="sidebar-nav">
+        @foreach (var item in VisibleMenuItems)
+        {
+            <NavLink class="nav-item" href="@item.Href" Match="@item.Match" ActiveClass="active">
+                <Icon Name="@item.IconName" Class="nav-svg" />
+                <span class="nav-label">@item.Label</span>
+                @if (GetBadge(item) is int badge)
+                {
+                    <span class="nav-badge @item.BadgeClass">@badge</span>
+                }
+                else if (item.ShowAlert)
+                {
+                    <span class="nav-alert-icon">!</span>
+                }
+            </NavLink>
+        }
+    </nav>
+
+    <div class="sidebar-footer">
+        @if (_canViewConfig)
+        {
+            <NavLink class="nav-item" href="/configuracion" ActiveClass="active">
+                <Icon Name="settings" Class="nav-svg" />
+                <span class="nav-label">Configuración</span>
+            </NavLink>
+        }
+        <a href="/auth/logout" class="nav-item logout-btn">
+            <Icon Name="log-out" Class="nav-svg" />
+            <span class="nav-label">Cerrar sesión</span>
+        </a>
+
+        <div class="user-card">
+            <div class="user-avatar">@_initials</div>
+            <div class="user-info">
+                <div class="user-name">@_displayName</div>
+                <div class="user-role">@_roleLabel</div>
+            </div>
+        </div>
+    </div>
+</aside>
+
+@code {
+    private string _displayName = "Admin";
+    private string _roleLabel = "Staff";
+    private string _initials = "AD";
+    private int? _pendingToday;
+    private bool _canViewConfig;
+    private ClinicProfile _profile = new();
+
+    private readonly List<MenuItem> MenuItems =
+    [
+        new("layout-dashboard", "Dashboard", "/", NavLinkMatch.All, "dashboard.view", null, null),
+        new("calendar-plus", "Agendar Cita", "/agendar-cita", NavLinkMatch.Prefix, "agendar-cita.view", null, null),
+        new("calendar", "Agenda", "/agenda", NavLinkMatch.Prefix, "agenda.view", null, "badge-purple"),
+        new("users", "Pacientes", "/pacientes", NavLinkMatch.Prefix, "pacientes.view", null, null),
+        new("pill", "Enfermedades", "/enfermedades", NavLinkMatch.Prefix, "enfermedades.view", null, null),
+        new("stethoscope", "Médicos", "/medicos", NavLinkMatch.Prefix, "medicos.view", null, null),
+        new("pill", "Tratamientos", "/tratamientos", NavLinkMatch.All, "tratamientos.view", null, null),
+        new("activity", "Tratamientos clínicos", "/tratamientos-clinicos", NavLinkMatch.Prefix, "tratamientos.view", null, null),
+        new("clipboard-list", "Historial Clínico", "/historial", NavLinkMatch.Prefix, "historial.view", null, null),
+        new("credit-card", "Facturación", "/facturacion", NavLinkMatch.Prefix, "facturacion.view", null, null),
+        new("mail", "Campañas", "/campanas", NavLinkMatch.Prefix, "campanas.view", null, null),
+        new("bar-chart-2", "Analítica", "/analitica", NavLinkMatch.Prefix, "analitica.view", null, null),
+        new("package", "Inventario", "/inventario", NavLinkMatch.Prefix, "inventario.view", null, null, true),
+        new("file-bar-chart", "Reportes", "/reportes", NavLinkMatch.Prefix, "reportes.view", null, null)
+    ];
+
+    private List<MenuItem> VisibleMenuItems { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _profile = ClinicProfile.Get();
+        ClinicProfile.Changed += OnClinicProfileChanged;
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        VisibleMenuItems = MenuItems
+            .Where(item => PermissionService.HasPermission(user, item.RequiredPermission))
+            .ToList();
+
+        _canViewConfig = PermissionService.HasPermission(user, "configuracion.view")
+            || PermissionService.HasPermission(user, "usuarios.view");
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var name = user.Identity.Name ?? "Admin";
+            _displayName = name.Contains('@') ? name.Split('@')[0] : name;
+            _initials = string.Concat(_displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Take(2).Select(w => char.ToUpper(w[0])));
+            if (string.IsNullOrEmpty(_initials)) _initials = "AD";
+            _roleLabel = PermissionService.GetDisplayRole(user) ?? "Staff";
+        }
+
+        try
+        {
+            if (PermissionService.HasPermission(user, "agenda.view"))
+            {
+                var today = DateTime.Today;
+                var cacheKey = $"sidebar:daystats:{today:yyyy-MM-dd}";
+
+                if (!MemoryCache.TryGetValue(cacheKey, out AppointmentStats? stats))
+                {
+                    var (loadedStats, _) = await AgendaService.GetDayStatsAsync(today);
+                    stats = loadedStats;
+                    if (stats != null)
+                    {
+                        MemoryCache.Set(cacheKey, stats, TimeSpan.FromSeconds(60));
+                    }
+                }
+
+                if (stats?.Pending > 0)
+                    _pendingToday = stats.Pending;
+            }
+        }
+        catch
+        {
+            // Silently ignore if API unavailable during sidebar load
+        }
+    }
+
+    private int? GetBadge(MenuItem item) =>
+        item.Href == "/agenda" ? _pendingToday : item.Badge;
+
+    private void OnClinicProfileChanged() =>
+        _ = InvokeAsync(() =>
+        {
+            _profile = ClinicProfile.Get();
+            StateHasChanged();
+        });
+
+    public void Dispose() => ClinicProfile.Changed -= OnClinicProfileChanged;
+
+    private record MenuItem(string IconName, string Label, string Href, NavLinkMatch Match, string RequiredPermission, int? Badge, string? BadgeClass, bool ShowAlert = false);
+}

@@ -1,0 +1,29 @@
+@using System.Globalization
+<div class="widget dash-panel">
+    <div class="widget-head">
+        <h3>Métodos de pago</h3>
+        <span class="widget-pill">Hoy</span>
+    </div>
+    @if (Cash == 0 && Card == 0 && InstaPay == 0)
+    {
+        <div class="dash-empty">
+            <p>Aún no hay cobros registrados hoy.</p>
+        </div>
+    }
+    else
+    {
+        <div class="payment-methods">
+            <div class="payment-method-row"><span>Efectivo</span><strong>@Format(Cash)</strong></div>
+            <div class="payment-method-row"><span>Tarjeta</span><strong>@Format(Card)</strong></div>
+            <div class="payment-method-row"><span>InstaPay</span><strong>@Format(InstaPay)</strong></div>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo EsDo = CultureInfo.GetCultureInfo("es-DO");
+    [Parameter] public decimal Cash { get; set; }
+    [Parameter] public decimal Card { get; set; }
+    [Parameter] public decimal InstaPay { get; set; }
+    private static string Format(decimal amount) => amount.ToString("C0", EsDo);
+}

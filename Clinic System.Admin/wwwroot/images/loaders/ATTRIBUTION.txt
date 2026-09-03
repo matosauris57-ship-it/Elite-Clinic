@@ -1,0 +1,2 @@
+Animated loaders from Flaticon (MP4 / GIF). Attribution required for the free download formats.
+Place additional .gif, .webp or .mp4 files in this folder; they are picked at random.

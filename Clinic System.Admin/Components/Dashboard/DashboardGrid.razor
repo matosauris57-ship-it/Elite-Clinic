@@ -1,0 +1,85 @@
+@using Clinic_System.Core.Dashboard
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div id="@GridId"
+     class="dashboard-grid @(_columnsClass) @(EditMode ? "is-editing" : "")">
+    @foreach (var item in VisibleItems)
+    {
+        var def = DashboardWidgetCatalog.ByKey[item.WidgetKey];
+        <div class="dash-cell"
+             data-widget-id="@item.Id"
+             data-min-w="@def.MinW"
+             data-min-h="@def.MinH"
+             data-max-w="@def.MaxW"
+             data-max-h="@def.MaxH"
+             style="--x:@item.X;--y:@item.Y;--w:@item.W;--h:@item.H;grid-column:@(item.X + 1) / span @(item.W);grid-row:@(item.Y + 1) / span @(item.H)">
+            <DashboardGridCell Item="item"
+                                Definition="def"
+                                Data="Data"
+                                EditMode="EditMode"
+                                OnRetry="OnRetry"
+                                OnHide="OnHide"
+                                OnConfigure="OnConfigure"
+                                OnPreset="OnPreset" />
+            @if (EditMode)
+            {
+                <button type="button" class="widget-resize-handle" title="Redimensionar" aria-label="Redimensionar @def.Title"></button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    public const string GridId = "clinic-dashboard-grid";
+
+    [Parameter] public List<DashboardWidgetPlacement> VisibleItems { get; set; } = [];
+    [Parameter] public DashboardData? Data { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public EventCallback<string> OnHide { get; set; }
+    [Parameter] public EventCallback<string> OnConfigure { get; set; }
+    [Parameter] public EventCallback<(string Key, string Preset)> OnPreset { get; set; }
+    [Parameter] public EventCallback<List<GridNodeChange>> LayoutChanged { get; set; }
+
+    private DotNetObjectReference<DashboardGrid>? _dotNet;
+    private bool _jsReady;
+    private string _columnsClass = "cols-12";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (!_jsReady)
+            {
+                _dotNet ??= DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("dentalCareDashboardGrid.init", GridId, EditMode, _dotNet);
+                _jsReady = true;
+                return;
+            }
+
+            await JS.InvokeVoidAsync("dentalCareDashboardGrid.setEditMode", GridId, EditMode);
+        }
+        catch
+        {
+            _jsReady = false;
+        }
+    }
+
+    [JSInvokable]
+    public Task OnCellMoved(string id, int x, int y, int w, int h) =>
+        LayoutChanged.InvokeAsync(
+        [
+            new GridNodeChange { Id = id, X = x, Y = y, W = w, H = h }
+        ]);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsReady)
+        {
+            try { await JS.InvokeVoidAsync("dentalCareDashboardGrid.destroy", GridId); }
+            catch { }
+        }
+        _dotNet?.Dispose();
+    }
+}

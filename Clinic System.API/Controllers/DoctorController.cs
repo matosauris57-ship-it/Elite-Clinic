@@ -1,24 +1,22 @@
 ﻿namespace Clinic_System.API.Controllers
 {
-    [Authorize]
-    [Route("api/doctors")]
+[Route("api/doctors")]
     [ApiController]
     public class DoctorController : AppControllerBase
     {
         public DoctorController(IMediator mediator) : base(mediator)
         {
         }
-
-        [Authorize(Roles = "Admin")]
-        [HttpGet]
-        public async Task<IActionResult> GetDoctorList()
+[HttpGet]
+        public async Task<IActionResult> GetDoctorList([FromQuery] bool includeInactive = true)
         {
-            var response = await mediator.Send(new GetDoctorListQuery());
+            var response = await mediator.Send(new GetDoctorListQuery
+            {
+                IncludeInactive = includeInactive
+            });
             return Ok(response);
         }
-
-        [Authorize(Roles = "Admin")]
-        [HttpGet("paging")]
+[HttpGet("paging")]
         public async Task<IActionResult> GetDoctorListPaging([FromQuery] GetDoctorListPagingQuery query)
         {
             var response = await mediator.Send(query);
@@ -34,9 +32,7 @@
             });
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpGet("{id:int}")]
+[HttpGet("{id:int}")]
         public async Task<IActionResult> GetDoctorById(int id)
         {
             var response = await mediator.Send(new GetDoctorByIdQuery
@@ -45,9 +41,7 @@
             });
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpGet("{id:int}/appointments")]
+[HttpGet("{id:int}/appointments")]
         public async Task<IActionResult> GetDoctorWithAppointmentsById(int id)
         {
             var response = await mediator.Send(new GetDoctorWithAppointmentsByIdQuery
@@ -66,18 +60,14 @@
             });
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin")]
-        [HttpPost]
+[HttpPost]
         public async Task<IActionResult> CreateDoctor([FromBody] CreateDoctorCommand command)
         {
             command.BaseUrl = $"{Request.Scheme}://{Request.Host.Value}";
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpPut("{id:int}")]
+[HttpPut("{id:int}")]
         public async Task<IActionResult> UpdateDoctor(int id, [FromBody] UpdateDoctorCommand command)
         {
             if (id != command.Id)
@@ -88,9 +78,7 @@
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin")]
-        [HttpDelete("{id:int}")]
+[HttpDelete("{id:int}")]
         public async Task<IActionResult> SoftDeleteDoctor(int id)
         {
             var response = await mediator.Send(new SoftDeleteDoctorCommand
@@ -99,9 +87,16 @@
             });
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin")]
-        [HttpDelete("{id:int}/hard")]
+[HttpPut("{id:int}/enable")]
+        public async Task<IActionResult> RestoreDoctor(int id)
+        {
+            var response = await mediator.Send(new RestoreDoctorCommand
+            {
+                Id = id
+            });
+            return NewResult(response);
+        }
+[HttpDelete("{id:int}/hard")]
         public async Task<IActionResult> HardDeleteDoctor(int id)
         {
             var response = await mediator.Send(new HardDeleteDoctorCommand

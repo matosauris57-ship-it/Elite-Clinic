@@ -1,0 +1,111 @@
+@using System.Globalization
+@inject ClinicProfileService ClinicProfile
+
+<article class="invoice-document rx-document">
+    <header class="invoice-letterhead">
+        <div class="invoice-brand">
+            @if (!string.IsNullOrWhiteSpace(Clinic.DisplayLogoUrl))
+            {
+                <img class="invoice-logo" src="@Clinic.DisplayLogoUrl" alt="@Clinic.Name" />
+            }
+            <div class="invoice-brand-copy">
+                <h1>@Clinic.Name</h1>
+                <p class="invoice-contact">
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Address)) { <span>@Clinic.Address</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Phone)) { <span>Tel. @Clinic.Phone</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Email)) { <span>@Clinic.Email</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.TaxId)) { <span>RNC @Clinic.TaxId</span> }
+                </p>
+            </div>
+        </div>
+        <aside class="invoice-meta">
+            <p class="invoice-kicker">Receta N.º @Prescription.Id</p>
+            <p class="invoice-meta-line">@Prescription.IssuedAt.ToString("dd/MM/yyyy", Culture)</p>
+        </aside>
+    </header>
+
+    <section class="invoice-parties">
+        <p><span>Paciente</span> <strong>@Prescription.PatientName</strong>
+            @if (!string.IsNullOrWhiteSpace(Prescription.PatientNationalId))
+            {
+                <span class="invoice-party-extra">Céd. @Prescription.PatientNationalId</span>
+            }
+            @if (Prescription.PatientDateOfBirth.HasValue)
+            {
+                <span class="invoice-party-extra">@AgeLabel(Prescription.PatientDateOfBirth.Value)</span>
+            }
+        </p>
+        <p><span>Médico</span> <strong>@(Prescription.DoctorName ?? "—")</strong>
+            @if (!string.IsNullOrWhiteSpace(Prescription.DoctorSpecialization))
+            {
+                <span class="invoice-party-extra">@Prescription.DoctorSpecialization</span>
+            }
+        </p>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(Prescription.Allergies) || !string.IsNullOrWhiteSpace(Prescription.CurrentMedication))
+    {
+        <p class="rx-alert">
+            @if (!string.IsNullOrWhiteSpace(Prescription.Allergies))
+            {
+                <span>Alergias: @Prescription.Allergies</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Prescription.CurrentMedication))
+            {
+                <span>Medicación actual: @Prescription.CurrentMedication</span>
+            }
+        </p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Prescription.Diagnosis))
+    {
+        <p class="rx-diagnosis"><span>Dx</span> @Prescription.Diagnosis</p>
+    }
+
+    <p class="rx-symbol" aria-hidden="true">Rp/</p>
+    <ol class="rx-lines">
+        @foreach (var item in Prescription.Items.OrderBy(x => x.SortOrder))
+        {
+            <li>
+                <strong>@item.MedicationName</strong>
+                <span>@item.Dosage · @item.Frequency · @item.DurationDays día(s)</span>
+                @if (!string.IsNullOrWhiteSpace(item.SpecialInstructions))
+                {
+                    <em>@item.SpecialInstructions</em>
+                }
+            </li>
+        }
+    </ol>
+
+    @if (!string.IsNullOrWhiteSpace(Prescription.Notes))
+    {
+        <p class="invoice-notes"><span>Indicaciones</span> @Prescription.Notes</p>
+    }
+
+    <footer class="rx-signoff">
+        <div>
+            <p>______________________________</p>
+            <p>@(Prescription.DoctorName ?? "Médico tratante")</p>
+            <p>Firma y sello</p>
+        </div>
+        <p class="rx-disclaimer">Uso personal del paciente. No se automedique. Ante alergia, erupción o malestar intenso, suspenda y consulte.</p>
+    </footer>
+</article>
+
+@code {
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-DO");
+
+    [Parameter, EditorRequired]
+    public PatientPrescriptionDetail Prescription { get; set; } = new();
+
+    private ClinicProfile Clinic => ClinicProfile.Get();
+
+    private static string AgeLabel(DateTime birth)
+    {
+        var today = DateTime.Today;
+        var years = today.Year - birth.Year;
+        if (birth.Date > today.AddYears(-years))
+            years--;
+        return years >= 0 ? $"{years} años" : "";
+    }
+}

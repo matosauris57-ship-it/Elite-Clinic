@@ -1,0 +1,436 @@
+@using Clinic_System.Core.Validation
+@using Clinic_System.Core.Odontogram
+@inject OdontogramSymbolConfigService SymbolConfig
+@implements IDisposable
+<div class="clinical-odontogram">
+    <div class="odontogram-head">
+        <div>
+            <h2>Odontograma clínico</h2>
+            <p>Seleccione una o varias piezas y registre un diagnóstico.</p>
+        </div>
+        <div class="odontogram-head-actions">
+            <div class="maintenance-tabs odontogram-view-tabs" role="tablist" aria-label="Vista clínica">
+                <button type="button" role="tab" aria-selected="@(_view == "odontogram")"
+                        class="toggle-btn @(_view == "odontogram" ? "active" : "")"
+                        @onclick="() => SetViewAsync(false)">Odontograma</button>
+                <button type="button" role="tab" aria-selected="@(_view == "periodontogram")"
+                        class="toggle-btn @(_view == "periodontogram" ? "active" : "")"
+                        @onclick="() => SetViewAsync(true)">Periodontograma</button>
+            </div>
+            @if (_view == "odontogram")
+            {
+                <div class="maintenance-tabs odontogram-dentition-tabs" role="tablist" aria-label="Tipo de dentición">
+                    <button type="button" role="tab" aria-selected="@(_dentition == "permanent")"
+                            class="toggle-btn @(_dentition == "permanent" ? "active" : "")"
+                            @onclick='() => SetDentition("permanent")'>Permanente</button>
+                    <button type="button" role="tab" aria-selected="@(_dentition == "deciduous")"
+                            class="toggle-btn @(_dentition == "deciduous" ? "active" : "")"
+                            @onclick='() => SetDentition("deciduous")'>Temporal</button>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (_view == "periodontogram")
+    {
+        <PeriodontogramChart PatientId="PatientId" PatientName="PatientName" CanEdit="CanEditPeriodontogram" />
+    }
+    else
+    {
+        <div class="odontogram-legend-block">
+            <div class="odontogram-phase-legend" aria-label="Leyenda de fases">
+                @foreach (var phase in SymbolConfig.Current.Phases)
+                {
+                    <span>
+                        <i class="phase-dot" style="@OdontogramSymbolPaint.PhaseCssVariables(phase)"></i>
+                        @OdontogramSymbolDefaults.PhaseLabel(phase.Phase)
+                    </span>
+                }
+                <span><i class="phase-dot phase-empty"></i> Sin registro</span>
+            </div>
+            <div class="odontogram-condition-legend" aria-label="Simbología de condiciones">
+                <strong>Simbología</strong>
+                @foreach (var row in SymbolConfig.Current.Conditions.Where(x => x.Enabled))
+                {
+                    <span>
+                        <OdontogramSymbolGlyph Symbol="row" Class="legend-symbol" />
+                        @OdontogramSymbolDefaults.ConditionLabel(row.Condition)
+                    </span>
+                }
+            </div>
+        </div>
+        <p class="odontogram-legend-hint">Clic selecciona una pieza. Active «Varias piezas» o use Ctrl para agregar más y aplicar el mismo diagnóstico.</p>
+
+        <div class="odontogram-arches" aria-label="Selector de piezas dentales">
+            @foreach (var arch in CurrentArches)
+            {
+                <section class="odontogram-arch-card">
+                    <div class="odontogram-quadrant-labels">
+                        <span>Cuadrante @arch.LeftQuadrant</span>
+                        <strong>@arch.Label</strong>
+                        <span>Cuadrante @arch.RightQuadrant</span>
+                    </div>
+                        <div class="odontogram-teeth-row-wrap">
+                    <div class="odontogram-teeth-row">
+                        @foreach (var tooth in arch.Teeth)
+                        {
+                            var entry = LatestWholeOrAny(tooth);
+                            var selected = IsToothSelected(tooth);
+                            var inBridge = entry is { BridgeSpanId: not null, Condition: ToothCondition.Bridge };
+                            <button type="button"
+                                    class="clinical-tooth @(selected ? "selected" : "") @(IsPrimaryTooth(tooth) ? "selected-primary" : "") @(inBridge ? "bridge-unit" : "")"
+                                    style="@EntryStyle(entry)"
+                                    aria-label="@ToothAriaLabel(tooth, entry)"
+                                    aria-pressed="@selected"
+                                    @onclick="e => SelectToothAsync(tooth, e)">
+                                <ToothGraphic ToothNumber="tooth" Selected="@selected" Entries="Entries" />
+                                <span class="tooth-fdi @(entry == null ? "" : "has-record")">@tooth</span>
+                            </button>
+                        }
+                    </div>
+                        <svg class="bridge-overlay" viewBox="0 0 @arch.Teeth.Length 1" preserveAspectRatio="none" aria-hidden="true">
+                            @foreach (var span in BridgeSpansOn(arch.Teeth))
+                            {
+                                var points = span
+                                    .Select(u => Array.IndexOf(arch.Teeth, u.ToothNumber))
+                                    .Where(i => i >= 0)
+                                    .Select(i => i + 0.5)
+                                    .ToList();
+                                if (points.Count < 2)
+                                    continue;
+                                <polyline class="bridge-bar"
+                                          style="@EntryStyle(span[0])"
+                                          fill="none"
+                                          vector-effect="non-scaling-stroke"
+                                          points="@string.Join(" ", points.Select(x => $"{x.ToString(System.Globalization.CultureInfo.InvariantCulture)},0.42"))" />
+                            }
+                        </svg>
+                    </div>
+                </section>
+            }
+        </div>
+
+        <div class="surface-selector-card">
+            <div class="surface-selector-copy">
+                <span class="eyebrow">@(HasSelection && SelectedTeeth.Count > 1 ? "Piezas seleccionadas" : "Pieza seleccionada")</span>
+                <h3>@SelectionHeading</h3>
+                <label class="checkbox-label rx-hint" style="margin: 0.35rem 0 0.65rem">
+                    <input type="checkbox" @bind="_multiSelect" />
+                    Varias piezas
+                </label>
+                @if (SelectedTooth.HasValue)
+                {
+                    <p class="tooth-anatomy-name">@SelectionAnatomy</p>
+                    <p>
+                        Estado:
+                        <strong>@(WholeToothEntry == null ? "Sin registro" : ToothClinicalLabels.Condition(WholeToothEntry.Condition))</strong>
+                        @if (WholeToothEntry != null)
+                        {
+                            <span> · @ToothClinicalLabels.Phase(WholeToothEntry.Phase)</span>
+                        }
+                    </p>
+                    <ul class="tooth-surface-summary">
+                        @foreach (var surface in ChartSurfaces)
+                        {
+                            var surfaceEntry = LatestForSurface(surface);
+                            <li>
+                                <span>@SurfaceLabelFor(SelectedTooth.Value, surface)</span>
+                                <strong>@(surfaceEntry == null ? "Sin registro" : ToothClinicalLabels.Condition(surfaceEntry.Condition))</strong>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p>Elija una o varias piezas del arco para registrar un diagnóstico.</p>
+                }
+                <button type="button"
+                        class="whole-tooth-btn @(SelectedSurface == ToothSurface.WholeTooth ? "selected" : "")"
+                        style="@EntryStyle(LatestForSurface(ToothSurface.WholeTooth))"
+                        disabled="@(!HasSelection)"
+                        @onclick="() => SelectSurfaceAsync(ToothSurface.WholeTooth)">
+                    Pieza completa
+                </button>
+            </div>
+
+            <div class="surface-detail-visuals">
+                @if (SelectedTooth.HasValue && ToothSvgCatalog.OcclusalPath(SelectedTooth.Value) is { } occlusal)
+                {
+                    <figure class="occlusal-preview">
+                        <img src="@occlusal"
+                             alt="Vista oclusal de la pieza @SelectedTooth"
+                             class="@(ToothSvgCatalog.FlipHorizontal(SelectedTooth.Value) ? "flip-x" : null)" />
+                        <figcaption>Vista oclusal</figcaption>
+                    </figure>
+                }
+                <svg class="tooth-surface-map" viewBox="0 0 300 270" role="group"
+                     aria-label="Selector interactivo de cinco superficies dentales">
+                    <text x="150" y="18" text-anchor="middle">@BuccalLabel</text>
+                    <text x="150" y="263" text-anchor="middle">@LingualLabel</text>
+                    <text x="17" y="138" text-anchor="middle" transform="rotate(-90 17 138)">Mesial</text>
+                    <text x="283" y="138" text-anchor="middle" transform="rotate(90 283 138)">Distal</text>
+
+                    <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.BuccalFacial)"
+                       class="surface-zone @(SelectedSurface == ToothSurface.BuccalFacial ? "selected" : "")"
+                       style="@SurfacePaintStyle(ToothSurface.BuccalFacial)"
+                       @onclick="() => SelectSurfaceAsync(ToothSurface.BuccalFacial)"
+                       @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.BuccalFacial)">
+                        <path d="M58 50 Q150 13 242 50 L205 102 Q150 82 95 102 Z" />
+                    </g>
+                    <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.Mesial)"
+                       class="surface-zone @(SelectedSurface == ToothSurface.Mesial ? "selected" : "")"
+                       style="@SurfacePaintStyle(ToothSurface.Mesial)"
+                       @onclick="() => SelectSurfaceAsync(ToothSurface.Mesial)"
+                       @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.Mesial)">
+                        <path d="M58 50 L95 102 L95 168 L58 220 Q18 135 58 50 Z" />
+                    </g>
+                    <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.Distal)"
+                       class="surface-zone @(SelectedSurface == ToothSurface.Distal ? "selected" : "")"
+                       style="@SurfacePaintStyle(ToothSurface.Distal)"
+                       @onclick="() => SelectSurfaceAsync(ToothSurface.Distal)"
+                       @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.Distal)">
+                        <path d="M242 50 Q282 135 242 220 L205 168 L205 102 Z" />
+                    </g>
+                    <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.LingualPalatal)"
+                       class="surface-zone @(SelectedSurface == ToothSurface.LingualPalatal ? "selected" : "")"
+                       style="@SurfacePaintStyle(ToothSurface.LingualPalatal)"
+                       @onclick="() => SelectSurfaceAsync(ToothSurface.LingualPalatal)"
+                       @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.LingualPalatal)">
+                        <path d="M58 220 L95 168 Q150 188 205 168 L242 220 Q150 257 58 220 Z" />
+                    </g>
+                    <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.OcclusalIncisal)"
+                       class="surface-zone @(SelectedSurface == ToothSurface.OcclusalIncisal ? "selected" : "")"
+                       style="@SurfacePaintStyle(ToothSurface.OcclusalIncisal)"
+                       @onclick="() => SelectSurfaceAsync(ToothSurface.OcclusalIncisal)"
+                       @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.OcclusalIncisal)">
+                        <path d="M95 102 Q150 82 205 102 L205 168 Q150 188 95 168 Z" />
+                        <text x="150" y="139" text-anchor="middle">@OcclusalShort</text>
+                    </g>
+                </svg>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ToothChartEntry> Entries { get; set; } = [];
+    [Parameter] public int? SelectedTooth { get; set; }
+    [Parameter] public IReadOnlyList<int> SelectedTeeth { get; set; } = [];
+    [Parameter] public ToothSurface SelectedSurface { get; set; } = ToothSurface.WholeTooth;
+    [Parameter] public EventCallback<int> SelectedToothChanged { get; set; }
+    [Parameter] public EventCallback<(int Tooth, bool Additive)> ToothSelectionChanged { get; set; }
+    [Parameter] public EventCallback<ToothSurface> SelectedSurfaceChanged { get; set; }
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public string PatientName { get; set; } = "";
+    [Parameter] public bool CanEditPeriodontogram { get; set; }
+    [Parameter] public bool ShowingPeriodontogram { get; set; }
+    [Parameter] public EventCallback<bool> ShowingPeriodontogramChanged { get; set; }
+
+    private string _dentition = "permanent";
+    private string _view = "odontogram";
+    private bool _multiSelect;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SymbolConfig.Changed += OnSymbolConfigChanged;
+        await SymbolConfig.GetAsync();
+    }
+
+    public void Dispose()
+    {
+        SymbolConfig.Changed -= OnSymbolConfigChanged;
+    }
+
+    private void OnSymbolConfigChanged() => InvokeAsync(StateHasChanged);
+
+    private bool HasSelection => SelectedTeeth.Count > 0 || SelectedTooth.HasValue;
+
+    private string SelectionHeading =>
+        SelectedTeeth.Count > 1
+            ? string.Join(" · ", SelectedTeeth.OrderBy(x => x))
+            : SelectedTooth?.ToString() ?? "Seleccione una pieza";
+
+    private string SelectionAnatomy =>
+        SelectedTeeth.Count > 1
+            ? $"{SelectedTeeth.Count} piezas — el diagnóstico se aplica a todas"
+            : SelectedTooth.HasValue
+                ? FdiToothNumber.Describe(SelectedTooth.Value)
+                : "";
+
+    private static readonly ToothSurface[] ChartSurfaces =
+    [
+        ToothSurface.Mesial,
+        ToothSurface.Distal,
+        ToothSurface.BuccalFacial,
+        ToothSurface.LingualPalatal,
+        ToothSurface.OcclusalIncisal
+    ];
+
+    private static readonly ArchDefinition[] PermanentArches =
+    [
+        new("Arco superior", 1, 2, [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]),
+        new("Arco inferior", 4, 3, [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38])
+    ];
+
+    private static readonly ArchDefinition[] DeciduousArches =
+    [
+        new("Arco superior temporal", 5, 6, [55, 54, 53, 52, 51, 61, 62, 63, 64, 65]),
+        new("Arco inferior temporal", 8, 7, [85, 84, 83, 82, 81, 71, 72, 73, 74, 75])
+    ];
+
+    private IReadOnlyList<ArchDefinition> CurrentArches =>
+        _dentition == "permanent" ? PermanentArches : DeciduousArches;
+
+    private ToothChartEntry? WholeToothEntry =>
+        SelectedTooth.HasValue ? LatestForToothSurface(SelectedTooth.Value, ToothSurface.WholeTooth) : null;
+
+    private string BuccalLabel =>
+        SelectedTooth is int t && FdiToothNumber.IsValid(t) && FdiToothNumber.IsAnterior(t)
+            ? "Vestibular / Facial"
+            : "Vestibular / Buccal";
+
+    private string LingualLabel =>
+        SelectedTooth is int t && FdiToothNumber.IsValid(t) && FdiToothNumber.IsUpper(t)
+            ? "Palatino"
+            : "Lingual";
+
+    private string OcclusalShort =>
+        SelectedTooth is int t && FdiToothNumber.IsValid(t) && FdiToothNumber.IsAnterior(t)
+            ? "I"
+            : "O";
+
+    private void SetDentition(string dentition)
+    {
+        _dentition = dentition;
+    }
+
+    private async Task SetViewAsync(bool periodontogram)
+    {
+        _view = periodontogram ? "periodontogram" : "odontogram";
+        await ShowingPeriodontogramChanged.InvokeAsync(periodontogram);
+    }
+
+    private async Task SelectToothAsync(int tooth, MouseEventArgs e)
+    {
+        var additive = _multiSelect || e.CtrlKey || e.MetaKey || e.ShiftKey;
+        if (ToothSelectionChanged.HasDelegate)
+            await ToothSelectionChanged.InvokeAsync((tooth, additive));
+        else
+            await SelectedToothChanged.InvokeAsync(tooth);
+    }
+
+    private bool IsToothSelected(int tooth) =>
+        SelectedTeeth.Contains(tooth) || SelectedTooth == tooth;
+
+    private bool IsPrimaryTooth(int tooth) =>
+        SelectedTooth == tooth && SelectedTeeth.Count > 1;
+
+    private async Task SelectSurfaceAsync(ToothSurface surface)
+    {
+        if (!HasSelection)
+            return;
+
+        await SelectedSurfaceChanged.InvokeAsync(surface);
+    }
+
+    private Task SelectSurfaceByKeyboardAsync(KeyboardEventArgs e, ToothSurface surface) =>
+        e.Key is "Enter" or " " ? SelectSurfaceAsync(surface) : Task.CompletedTask;
+
+    private IEnumerable<List<ToothChartEntry>> BridgeSpansOn(int[] archTeeth)
+    {
+        return archTeeth
+            .Select(t => LatestForToothSurface(t, ToothSurface.WholeTooth))
+            .Where(e => e is { Condition: ToothCondition.Bridge, BridgeSpanId: not null })
+            .GroupBy(e => e!.BridgeSpanId!.Value)
+            .Select(g => g.OrderBy(e => Array.IndexOf(archTeeth, e!.ToothNumber)).Cast<ToothChartEntry>().ToList())
+            .Where(g => g.Count >= 2);
+    }
+
+    private ToothChartEntry? LatestWholeOrAny(int tooth)
+    {
+        var whole = LatestForToothSurface(tooth, ToothSurface.WholeTooth);
+        if (whole != null)
+            return whole;
+        return Entries.Where(x => x.ToothNumber == tooth)
+            .OrderByDescending(x => x.RecordedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+    }
+
+    private ToothChartEntry? LatestForToothSurface(int tooth, ToothSurface surface) =>
+        Entries.Where(x => x.ToothNumber == tooth && x.Surface == surface)
+            .OrderByDescending(x => x.RecordedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+
+    private ToothChartEntry? LatestForSurface(ToothSurface surface) =>
+        !SelectedTooth.HasValue ? null : LatestForToothSurface(SelectedTooth.Value, surface);
+
+    private string SurfacePaintStyle(ToothSurface surface)
+    {
+        var entry = LatestForSurface(surface);
+        if (entry == null)
+            return "--phase-color: var(--text-dim); --phase-soft: var(--surface-2);";
+
+        var condition = SymbolConfig.Current.ForCondition((Clinic_System.Core.Enums.ToothCondition)(int)entry.Condition);
+        var phase = SymbolConfig.Current.ForPhase((Clinic_System.Core.Enums.ToothChartPhase)(int)entry.Phase);
+        var color = OdontogramSymbolColor.Normalize(condition.Color);
+        return $"{OdontogramSymbolPaint.PhaseCssVariables(phase)} --phase-color: {color}; --phase-soft: {OdontogramSymbolColor.ToRgba(color, Math.Clamp(condition.Opacity, 0.2, 0.7))};";
+    }
+
+    private string EntryStyle(ToothChartEntry? entry)
+    {
+        if (entry == null)
+            return "";
+        var phase = SymbolConfig.Current.ForPhase((Clinic_System.Core.Enums.ToothChartPhase)(int)entry.Phase);
+        var condition = SymbolConfig.Current.ForCondition((Clinic_System.Core.Enums.ToothCondition)(int)entry.Condition);
+        return $"{OdontogramSymbolPaint.PhaseCssVariables(phase)} --whole-symbol-color: {OdontogramSymbolColor.Normalize(condition.Color)};";
+    }
+
+    private string ToothAriaLabel(int tooth, ToothChartEntry? entry) =>
+        entry == null
+            ? $"Pieza {tooth}, sin registro"
+            : $"Pieza {tooth}, {ToothClinicalLabels.Phase(entry.Phase)}, {ToothClinicalLabels.Condition(entry.Condition)}";
+
+    private string SurfaceAriaLabel(ToothSurface surface)
+    {
+        var entry = LatestForSurface(surface);
+        var label = SelectedTooth.HasValue
+            ? SurfaceLabelFor(SelectedTooth.Value, surface)
+            : SurfaceLabel(surface);
+        return entry == null
+            ? $"{label}, sin registro"
+            : $"{label}, {ToothClinicalLabels.Phase(entry.Phase)}, {ToothClinicalLabels.Condition(entry.Condition)}";
+    }
+
+    public static string SurfaceLabel(ToothSurface surface) => surface switch
+    {
+        ToothSurface.WholeTooth => "Pieza completa",
+        ToothSurface.Mesial => "Mesial",
+        ToothSurface.Distal => "Distal",
+        ToothSurface.BuccalFacial => "Vestibular / Facial",
+        ToothSurface.LingualPalatal => "Lingual / Palatal",
+        ToothSurface.OcclusalIncisal => "Oclusal / Incisal",
+        _ => surface.ToString()
+    };
+
+    public static string SurfaceLabelFor(int toothNumber, ToothSurface surface)
+    {
+        if (!FdiToothNumber.IsValid(toothNumber))
+            return SurfaceLabel(surface);
+
+        return surface switch
+        {
+            ToothSurface.BuccalFacial => FdiToothNumber.IsAnterior(toothNumber) ? "Vestibular / Facial" : "Vestibular / Buccal",
+            ToothSurface.LingualPalatal => FdiToothNumber.IsUpper(toothNumber) ? "Palatino" : "Lingual",
+            ToothSurface.OcclusalIncisal => FdiToothNumber.IsAnterior(toothNumber) ? "Incisal" : "Oclusal",
+            _ => SurfaceLabel(surface)
+        };
+    }
+
+    private sealed record ArchDefinition(
+        string Label,
+        int LeftQuadrant,
+        int RightQuadrant,
+        int[] Teeth);
+}

@@ -1,0 +1,530 @@
+@page "/tratamientos-clinicos"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "tratamientos.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ClinicalTreatmentMaintenanceService ClinicalService
+@inject AuthService AuthService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Tratamientos clínicos — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page tx-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Tratamientos clínicos</h1>
+            <p>Procedimientos en curso y ya realizados en pacientes.</p>
+        </div>
+        <div class="command-actions">
+            <a href="/tratamientos" class="btn-outline">Ver catálogo</a>
+        </div>
+    </div>
+
+    <div class="agenda-kpi-row">
+        <button type="button" class="agenda-kpi tx-kpi-btn @(_statusFilter == "" ? "is-selected" : "")" @onclick='() => SetStatusFilterAsync("")'>
+            <span class="agenda-kpi-value">@_page.AllCount</span>
+            <span class="agenda-kpi-label">Total</span>
+        </button>
+        <button type="button" class="agenda-kpi accent-yellow tx-kpi-btn @(_statusFilter == "Active" ? "is-selected" : "")" @onclick='() => SetStatusFilterAsync("Active")'>
+            <span class="agenda-kpi-value">@_page.ActiveCount</span>
+            <span class="agenda-kpi-label">En uso</span>
+        </button>
+        <button type="button" class="agenda-kpi accent-green tx-kpi-btn @(_statusFilter == "Completed" ? "is-selected" : "")" @onclick='() => SetStatusFilterAsync("Completed")'>
+            <span class="agenda-kpi-value">@_page.CompletedCount</span>
+            <span class="agenda-kpi-label">Realizados</span>
+        </button>
+        <button type="button" class="agenda-kpi accent-purple tx-kpi-btn @(_statusFilter == "Cancelled" ? "is-selected" : "")" @onclick='() => SetStatusFilterAsync("Cancelled")'>
+            <span class="agenda-kpi-value">@_page.CancelledCount</span>
+            <span class="agenda-kpi-label">Cancelados</span>
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_loadError))
+    {
+        <ErrorBanner Message="@_loadError" OnRetry="ReloadAsync" />
+    }
+
+    <div class="maintenance-toolbar">
+        <div class="search-field maintenance-search">
+            <Icon Name="search" Class="field-icon" />
+            <input type="text"
+                   placeholder="Buscar por paciente o procedimiento..."
+                   disabled="@_loading"
+                   @bind="_search"
+                   @bind:event="oninput"
+                   @bind:after="OnSearchChangedAsync" />
+        </div>
+        <select class="form-input maintenance-status-filter" disabled="@_loading" @bind="_statusFilter" @bind:after="OnFilterChangedAsync">
+            <option value="">Todos</option>
+            <option value="Active">En uso</option>
+            <option value="Planned">Planificados</option>
+            <option value="InProgress">En progreso</option>
+            <option value="Completed">Realizados</option>
+            <option value="Cancelled">Cancelados</option>
+        </select>
+        <select class="form-input maintenance-status-filter" disabled="@_loading" @bind="_dateMode" @bind:after="OnDateModeChangedAsync">
+            <option value="all">Todas las fechas</option>
+            <option value="range">Rango</option>
+        </select>
+        @if (_dateMode == "range")
+        {
+            <label class="agenda-date-jump">
+                Desde
+                <input type="date" disabled="@_loading" value="@_fromDate.ToString("yyyy-MM-dd")" @onchange="OnFromChanged" />
+            </label>
+            <label class="agenda-date-jump">
+                Hasta
+                <input type="date" disabled="@_loading" value="@_toDate.ToString("yyyy-MM-dd")" @onchange="OnToChanged" />
+            </label>
+        }
+        <span class="maintenance-count">@($"{_items.Count} visibles de {_page.TotalCount}")</span>
+        @if (HasActiveFilters)
+        {
+            <button class="btn-outline" disabled="@_loading" @onclick="ClearFiltersAsync">Limpiar</button>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando tratamientos clínicos..." />
+    }
+    else if (!_items.Any() && string.IsNullOrEmpty(_loadError))
+    {
+        <div class="agenda-empty-state">
+            <h3>No hay tratamientos clínicos</h3>
+            <p>@(HasActiveFilters ? "Ningún tratamiento coincide con los filtros." : "Aún no se han registrado tratamientos en pacientes.")</p>
+            <div class="agenda-empty-actions">
+                @if (HasActiveFilters)
+                {
+                    <button class="btn-outline" @onclick="ClearFiltersAsync">Limpiar filtros</button>
+                }
+                <a href="/tratamientos" class="btn-outline">Ir al catálogo</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Paciente</th>
+                        <th>Procedimiento</th>
+                        <th>Estado</th>
+                        <th>Costo</th>
+                        <th>Pieza</th>
+                        <th>Fecha</th>
+                        <th class="col-actions">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _items)
+                    {
+                        <tr>
+                            <td><a class="clinical-patient-link" href="/pacientes/@item.PatientId?tab=tratamientos">@item.PatientName</a></td>
+                            <td>
+                                <div class="tx-proc-cell">
+                                    <strong>@item.ProcedureName</strong>
+                                    @if (!string.IsNullOrWhiteSpace(item.ProcedureDetails))
+                                    {
+                                        <span>@item.ProcedureDetails</span>
+                                    }
+                                </div>
+                            </td>
+                            <td><span class="status-badge @GetStatusClass(item.Status)">@FormatStatus(item.Status)</span></td>
+                            <td>$@item.Cost.ToString("N0")</td>
+                            <td>@(item.ToothNumber?.ToString() ?? "—")</td>
+                            <td>@FormatDate(item)</td>
+                            <td class="col-actions">
+                                @if (item.Status == "Planned" && _canEdit)
+                                {
+                                    <button class="btn-table" disabled="@_saving" @onclick="() => StartAsync(item)">Iniciar</button>
+                                }
+                                @if (item.Status is "Planned" or "InProgress" && _canEdit)
+                                {
+                                    <button class="btn-table" disabled="@_saving" @onclick="() => OpenEditModal(item)">Editar</button>
+                                    @if (item.Status == "InProgress")
+                                    {
+                                        <button class="btn-table" disabled="@_saving" @onclick="() => CompleteAsync(item)">Completar</button>
+                                    }
+                                    <button class="btn-table" disabled="@_saving" @onclick="() => CancelAsync(item)">Cancelar</button>
+                                }
+                                @if (_canDelete)
+                                {
+                                    <button class="btn-table btn-table-danger" disabled="@_saving" @onclick="() => OpenDeleteModal(item)">Eliminar</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_page.TotalCount > 0)
+        {
+            <div class="billing-pagination agenda-pagination">
+                <label class="agenda-date-jump">
+                    Por página
+                    <select class="form-input" disabled="@_loading" @bind="_pageSize" @bind:after="OnPageSizeChangedAsync">
+                        <option value="10">10</option>
+                        <option value="15">15</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                    </select>
+                </label>
+                <span>Página @_pageNumber de @TotalPages</span>
+                <button class="btn-outline" disabled="@(_loading || _pageNumber <= 1)" @onclick="PrevPageAsync">Anterior</button>
+                <button class="btn-outline" disabled="@(_loading || _pageNumber >= TotalPages)" @onclick="NextPageAsync">Siguiente</button>
+            </div>
+        }
+    }
+</div>
+
+@if (_showEditModal && _editing != null)
+{
+    <div class="modal-overlay" @onclick="CloseEditModal">
+        <div class="modal-panel modal-panel-wide" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Editar tratamiento clínico</h2>
+                <button class="modal-close" @onclick="CloseEditModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_formError)) { <div class="wizard-error">@_formError</div> }
+            <div class="new-patient-form">
+                <div class="form-group">
+                    <label>Paciente</label>
+                    <input class="form-input" value="@_editing.PatientName" disabled />
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Procedimiento</label>
+                        <input class="form-input" @bind="_form.ProcedureName" />
+                    </div>
+                    <div class="form-group">
+                        <label>Costo</label>
+                        <input class="form-input" type="number" min="0" step="0.01" @bind="_form.Cost" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Pieza (opcional)</label>
+                        <input class="form-input" type="number" min="1" max="48" @bind="_form.ToothNumber" />
+                    </div>
+                    <div class="form-group">
+                        <label>Detalles</label>
+                        <input class="form-input" @bind="_form.ProcedureDetails" />
+                    </div>
+                </div>
+            </div>
+            <PatientClinicalHistoryPanel PatientId="_editing.PatientId" PatientName="@_editing.PatientName" />
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseEditModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Guardando..." : "Guardar cambios")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showDeleteModal && _deleting != null)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Eliminar tratamiento</h2>
+                <button class="modal-close" @onclick="CloseDeleteModal">×</button>
+            </div>
+            <p class="modal-confirm-text">¿Eliminar el tratamiento de <strong>@_deleting.PatientName</strong>?</p>
+            @if (!string.IsNullOrEmpty(_deleteError)) { <div class="wizard-error">@_deleteError</div> }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseDeleteModal">Cancelar</button>
+                <button class="btn-danger" disabled="@_saving" @onclick="ConfirmDeleteAsync">@(_saving ? "Eliminando..." : "Eliminar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DentalTreatmentListItem> _items = [];
+    private DentalTreatmentsAdminPage _page = new();
+    private string _search = string.Empty;
+    private string _statusFilter = "Active";
+    private string _dateMode = "all";
+    private DateTime _fromDate = DateTime.Today.AddDays(-30);
+    private DateTime _toDate = DateTime.Today;
+    private int _pageNumber = 1;
+    private int _pageSize = 15;
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _saving;
+    private CancellationTokenSource? _searchCts;
+
+    private bool _canEdit;
+    private bool _canDelete;
+
+    private bool _showEditModal;
+    private DentalTreatmentListItem? _editing;
+    private UpdateDentalTreatmentRequest _form = new();
+    private string? _formError;
+
+    private bool _showDeleteModal;
+    private DentalTreatmentListItem? _deleting;
+    private string? _deleteError;
+
+    private int TotalPages => Math.Max(1, _page.TotalPages);
+    private bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(_search) ||
+        _statusFilter != "Active" ||
+        _dateMode != "all";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        _canEdit = PermissionService.HasPermission(user, "tratamientos.edit");
+        _canDelete = PermissionService.HasPermission(user, "tratamientos.delete");
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+
+        if (_dateMode == "range" && _fromDate > _toDate)
+            (_fromDate, _toDate) = (_toDate, _fromDate);
+
+        DateTime? from = _dateMode == "range" ? _fromDate.Date : null;
+        DateTime? to = _dateMode == "range" ? _toDate.Date : null;
+
+        var (page, error) = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var result = await ClinicalService.GetTreatmentsPageAsync(
+                    string.IsNullOrWhiteSpace(_search) ? null : _search.Trim(),
+                    string.IsNullOrWhiteSpace(_statusFilter) ? null : _statusFilter,
+                    from,
+                    to,
+                    _pageNumber,
+                    _pageSize);
+                return (result.Page, result.Error);
+            },
+            AuthService.IsTokenError);
+
+        _page = page;
+        _items = page.Items ?? [];
+        if (page.CurrentPage > 0)
+            _pageNumber = page.CurrentPage;
+        _loadError = error;
+        _loading = false;
+    }
+
+    private Task SetStatusFilterAsync(string status)
+    {
+        _statusFilter = status;
+        _pageNumber = 1;
+        return ReloadAsync();
+    }
+
+    private Task OnFilterChangedAsync()
+    {
+        _pageNumber = 1;
+        return ReloadAsync();
+    }
+
+    private Task OnDateModeChangedAsync()
+    {
+        if (_dateMode == "range")
+        {
+            _fromDate = DateTime.Today.AddDays(-30);
+            _toDate = DateTime.Today;
+        }
+        _pageNumber = 1;
+        return ReloadAsync();
+    }
+
+    private Task OnFromChanged(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), out var date))
+            return Task.CompletedTask;
+        _fromDate = date.Date;
+        _pageNumber = 1;
+        return ReloadAsync();
+    }
+
+    private Task OnToChanged(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), out var date))
+            return Task.CompletedTask;
+        _toDate = date.Date;
+        _pageNumber = 1;
+        return ReloadAsync();
+    }
+
+    private async Task OnSearchChangedAsync()
+    {
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+        try
+        {
+            await Task.Delay(400, token);
+            _pageNumber = 1;
+            await ReloadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private Task OnPageSizeChangedAsync()
+    {
+        _pageNumber = 1;
+        return ReloadAsync();
+    }
+
+    private Task PrevPageAsync()
+    {
+        if (_pageNumber <= 1) return Task.CompletedTask;
+        _pageNumber--;
+        return ReloadAsync();
+    }
+
+    private Task NextPageAsync()
+    {
+        if (_pageNumber >= TotalPages) return Task.CompletedTask;
+        _pageNumber++;
+        return ReloadAsync();
+    }
+
+    private Task ClearFiltersAsync()
+    {
+        _search = string.Empty;
+        _statusFilter = "Active";
+        _dateMode = "all";
+        _pageNumber = 1;
+        return ReloadAsync();
+    }
+
+    private void OpenEditModal(DentalTreatmentListItem item)
+    {
+        _editing = item;
+        _formError = null;
+        _form = new UpdateDentalTreatmentRequest
+        {
+            Id = item.Id,
+            ProcedureName = item.ProcedureName,
+            Cost = item.Cost,
+            ToothNumber = item.ToothNumber,
+            ProcedureDetails = item.ProcedureDetails
+        };
+        _showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        _showEditModal = false;
+        _editing = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing == null) return;
+        if (string.IsNullOrWhiteSpace(_form.ProcedureName))
+        {
+            _formError = "El nombre del procedimiento es obligatorio.";
+            return;
+        }
+
+        _saving = true;
+        _formError = null;
+        var (success, error) = await ClinicalService.UpdateTreatmentAsync(_editing.Id, _form);
+        _saving = false;
+        if (!success)
+        {
+            _formError = error;
+            return;
+        }
+        CloseEditModal();
+        await ReloadAsync();
+    }
+
+    private async Task StartAsync(DentalTreatmentListItem item)
+    {
+        _saving = true;
+        var (success, error) = await ClinicalService.StartTreatmentAsync(item.Id);
+        _saving = false;
+        if (!success)
+            _loadError = error;
+        else
+            await ReloadAsync();
+    }
+
+    private async Task CompleteAsync(DentalTreatmentListItem item)
+    {
+        _saving = true;
+        var (success, error) = await ClinicalService.CompleteTreatmentAsync(item.Id);
+        _saving = false;
+        if (!success)
+            _loadError = error;
+        else
+            await ReloadAsync();
+    }
+
+    private async Task CancelAsync(DentalTreatmentListItem item)
+    {
+        _saving = true;
+        var (success, error) = await ClinicalService.CancelTreatmentAsync(item.Id, null);
+        _saving = false;
+        if (!success)
+            _loadError = error;
+        else
+            await ReloadAsync();
+    }
+
+    private void OpenDeleteModal(DentalTreatmentListItem item)
+    {
+        _deleting = item;
+        _deleteError = null;
+        _showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        _showDeleteModal = false;
+        _deleting = null;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleting == null) return;
+        _saving = true;
+        _deleteError = null;
+        var (success, error) = await ClinicalService.DeleteTreatmentAsync(_deleting.Id);
+        _saving = false;
+        if (!success)
+        {
+            _deleteError = error;
+            return;
+        }
+        CloseDeleteModal();
+        await ReloadAsync();
+    }
+
+    private static string FormatDate(DentalTreatmentListItem item) =>
+        (item.PerformedDate ?? item.CreatedAt).ToString("dd/MM/yyyy");
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "Planned" => "Planificado",
+        "InProgress" => "En progreso",
+        "Completed" => "Realizado",
+        "Cancelled" => "Cancelado",
+        _ => status
+    };
+
+    private static string GetStatusClass(string status) => status switch
+    {
+        "Planned" => "status-planned",
+        "InProgress" => "status-progress",
+        "Completed" => "status-completed",
+        "Cancelled" => "status-cancelled",
+        _ => ""
+    };
+}

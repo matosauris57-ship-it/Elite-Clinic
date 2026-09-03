@@ -21,12 +21,19 @@
 
                 var (total, cash, insta, card, count) = await _unitOfWork.PaymentsRepository.GetDailyTotalsAsync(targetDate);
 
+                var cashAndInsta = Money.Normalize(cash + insta);
                 var response = new DailyRevenueDTO
                 {
-                    TotalRevenue = total,
-                    CashTotal = cash,
-                    InstaPayTotal = insta,
-                    CardTotal = card,
+                    TotalRevenue = Money.Normalize(total),
+                    TotalRevenueDisplay = Money.Format(total),
+                    CashTotal = Money.Normalize(cash),
+                    CashTotalDisplay = Money.Format(cash),
+                    InstaPayTotal = Money.Normalize(insta),
+                    InstaPayTotalDisplay = Money.Format(insta),
+                    CardTotal = Money.Normalize(card),
+                    CardTotalDisplay = Money.Format(card),
+                    CashAndInstaPayTotal = cashAndInsta,
+                    CashAndInstaPayTotalDisplay = Money.Format(cashAndInsta),
                     TotalTransactions = count,
                     ReportDate = targetDate.ToString("yyyy-MM-dd")
                 };

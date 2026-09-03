@@ -1,0 +1,49 @@
+@using Clinic_System.Core.Dashboard
+
+<div class="widget-frame @(EditMode ? "is-editing" : "") @(Item.Visible ? "" : "is-hidden")">
+    @if (EditMode)
+    {
+        <div class="widget-toolbar">
+            <button type="button" class="widget-drag-handle" title="Arrastrar widget" aria-label="Arrastrar @Title" draggable="false">
+                <Icon Name="grip-vertical" Class="widget-tool-icon" />
+            </button>
+            <span class="widget-toolbar-title">@Title</span>
+            <div class="widget-toolbar-actions">
+                <button type="button" class="widget-tool-btn" title="Tamaño pequeño" aria-label="Tamaño pequeño" @onclick="ApplySmall">S</button>
+                <button type="button" class="widget-tool-btn" title="Tamaño mediano" aria-label="Tamaño mediano" @onclick="ApplyMedium">M</button>
+                <button type="button" class="widget-tool-btn" title="Tamaño grande" aria-label="Tamaño grande" @onclick="ApplyLarge">L</button>
+                @if (HasSettings)
+                {
+                    <button type="button" class="widget-tool-btn" title="Opciones del widget" aria-label="Opciones de @Title" @onclick="OnConfigure">
+                        <Icon Name="sliders" Class="widget-tool-icon" />
+                    </button>
+                }
+                @if (!Required)
+                {
+                    <button type="button" class="widget-tool-btn danger" title="Ocultar widget" aria-label="Ocultar @Title" @onclick="OnHide">
+                        <Icon Name="x" Class="widget-tool-icon" />
+                    </button>
+                }
+            </div>
+        </div>
+    }
+    <div class="widget-frame-body">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter] public DashboardWidgetPlacement Item { get; set; } = new();
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public bool Required { get; set; }
+    [Parameter] public bool HasSettings { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnHide { get; set; }
+    [Parameter] public EventCallback OnConfigure { get; set; }
+    [Parameter] public EventCallback<string> OnPreset { get; set; }
+
+    private Task ApplySmall() => OnPreset.InvokeAsync("small");
+    private Task ApplyMedium() => OnPreset.InvokeAsync("medium");
+    private Task ApplyLarge() => OnPreset.InvokeAsync("large");
+}

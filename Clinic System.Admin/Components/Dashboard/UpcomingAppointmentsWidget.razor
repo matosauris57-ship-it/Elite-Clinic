@@ -1,0 +1,58 @@
+<div class="widget dash-panel">
+    <div class="widget-head">
+        <div>
+            <h3>Próximas citas</h3>
+            <p class="dash-panel-sub">Hora, paciente, odontólogo y estado</p>
+        </div>
+        <a class="widget-pill dash-link-pill" href="/agenda">Ver agenda</a>
+    </div>
+
+    @if (Items.Count == 0)
+    {
+        <div class="dash-empty">
+            <Icon Name="calendar" Class="dash-empty-icon" />
+            <p>No hay citas programadas para el resto del día.</p>
+        </div>
+    }
+    else
+    {
+        <div class="dash-list">
+            @foreach (var item in Items)
+            {
+                var href = $"/agenda?fecha={(item.ParsedDate ?? DateTime.Today):yyyy-MM-dd}&id={item.Id}";
+                <a class="dash-row" href="@href">
+                    <span class="dash-time">@(item.ParsedDate?.ToString("HH:mm") ?? "--:--")</span>
+                    <span class="dash-row-main">
+                        <strong>@item.PatientFullName</strong>
+                        <span>@item.DoctorName · @(string.IsNullOrWhiteSpace(item.Specialization) ? "Consulta" : item.Specialization)</span>
+                    </span>
+                    <span class="status-badge @StatusClass(item.Status)">@StatusLabel(item.Status)</span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<AppointmentAgendaItem> Items { get; set; } = [];
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "Confirmed" => "Confirmada",
+        "Pending" => "Pendiente",
+        "Completed" => "Completada",
+        "Rescheduled" => "Reprogramada",
+        "Cancelled" => "Cancelada",
+        "NoShow" => "No asistió",
+        _ => status
+    };
+
+    private static string StatusClass(string status) => status switch
+    {
+        "Confirmed" => "status-progress",
+        "Pending" => "status-planned",
+        "Completed" => "status-completed",
+        "Rescheduled" => "status-active",
+        _ => "status-inactive"
+    };
+}

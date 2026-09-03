@@ -1,0 +1,46 @@
+<div class="widget dash-panel">
+    <div class="widget-head">
+        <div>
+            <h3>Tratamientos pendientes</h3>
+            <p class="dash-panel-sub">Planificados e inicios en curso</p>
+        </div>
+        <a class="widget-pill dash-link-pill" href="/tratamientos-clinicos">Ver todos</a>
+    </div>
+
+    @if (Restricted)
+    {
+        <div class="dash-empty">
+            <Icon Name="clipboard-list" Class="dash-empty-icon" />
+            <p>No tienes permiso para ver tratamientos.</p>
+        </div>
+    }
+    else if (Items.Count == 0)
+    {
+        <div class="dash-empty">
+            <Icon Name="check-circle-2" Class="dash-empty-icon" />
+            <p>No hay tratamientos abiertos.</p>
+        </div>
+    }
+    else
+    {
+        <div class="dash-list">
+            @foreach (var item in Items)
+            {
+                <a class="dash-row" href="@($"/pacientes/{item.PatientId}")">
+                    <span class="dash-row-main">
+                        <strong>@item.PatientName</strong>
+                        <span>@item.ProcedureName@(item.ToothNumber is int tooth ? $" · pieza {tooth}" : "")</span>
+                    </span>
+                    <span class="status-badge @(item.Status == "InProgress" ? "status-progress" : "status-planned")">
+                        @(item.Status == "InProgress" ? "En curso" : "Planificado")
+                    </span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<DentalTreatmentListItem> Items { get; set; } = [];
+    [Parameter] public bool Restricted { get; set; }
+}

@@ -1,4 +1,4 @@
-﻿using Clinic_System.Core.Exceptions;
+using Clinic_System.Core.Exceptions;
 using System.Threading.Channels;
 
 namespace Clinic_System.Core.Entities
@@ -15,8 +15,12 @@ namespace Clinic_System.Core.Entities
         public virtual int DoctorId { get; set; }
         public virtual Doctor Doctor { get; set; } = null!;
 
+        public virtual DateTime? DayBeforeReminderSentAt { get; set; }
+        public virtual DateTime? SameDayReminderSentAt { get; set; }
+
         public virtual MedicalRecord? MedicalRecord { get; set; }
         public virtual Payment? Payment { get; set; }
+        public virtual ICollection<DentalTreatment> DentalTreatments { get; set; } = new List<DentalTreatment>();
 
         // Soft Delete
         public virtual bool IsDeleted { get; set; } = false;
@@ -49,6 +53,8 @@ namespace Clinic_System.Core.Entities
 
             this.AppointmentDate = newDate;
             this.Status = AppointmentStatus.Rescheduled;
+            this.DayBeforeReminderSentAt = null;
+            this.SameDayReminderSentAt = null;
             this.UpdatedAt = DateTime.Now;
         }
 

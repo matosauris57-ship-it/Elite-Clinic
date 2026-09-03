@@ -1,0 +1,31 @@
+<div class="widget dash-panel">
+    <div class="widget-head">
+        <h3>Actividad reciente</h3>
+        <a class="widget-pill dash-link-pill" href="/historial">Historial</a>
+    </div>
+    @if (Items.Count == 0)
+    {
+        <div class="dash-empty">
+            <p>No hay actividad clínica en el periodo seleccionado.</p>
+        </div>
+    }
+    else
+    {
+        <div class="dash-list">
+            @foreach (var item in Items)
+            {
+                <a class="dash-row" href="@($"/pacientes/{item.PatientId}")">
+                    <span class="dash-row-main">
+                        <strong>@item.PatientName</strong>
+                        <span>@item.Title</span>
+                    </span>
+                    <span class="dash-wait">@item.RecordedAt.ToString("dd MMM HH:mm")</span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<RecentClinicalActivityItem> Items { get; set; } = [];
+}

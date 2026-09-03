@@ -1,0 +1,60 @@
+<div class="widget dash-panel">
+    <div class="widget-head">
+        <div>
+            <h3>Citas de hoy</h3>
+            <p class="dash-panel-sub">Agenda activa, ordenada por hora</p>
+        </div>
+        <a class="widget-pill dash-link-pill" href="/agenda">Ver agenda</a>
+    </div>
+
+    @if (Items.Count == 0)
+    {
+        <div class="dash-empty">
+            <Icon Name="calendar" Class="dash-empty-icon" />
+            <p>No hay citas activas para hoy.</p>
+        </div>
+    }
+    else
+    {
+        <div class="dash-list">
+            @foreach (var item in Items)
+            {
+                <a class="dash-row" href="/agenda">
+                    <span class="dash-time">@FormatTime(item)</span>
+                    <span class="dash-row-main">
+                        <strong>@item.PatientFullName</strong>
+                        <span>@item.DoctorName</span>
+                    </span>
+                    <span class="status-badge @StatusClass(item.Status)">@StatusLabel(item.Status)</span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<AppointmentAgendaItem> Items { get; set; } = [];
+
+    private static string FormatTime(AppointmentAgendaItem item) =>
+        item.ParsedDate?.ToString("HH:mm") ?? "--:--";
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "Confirmed" => "Confirmada",
+        "Pending" => "Por confirmar",
+        "Completed" => "Completada",
+        "Rescheduled" => "Reprogramada",
+        "Cancelled" => "Cancelada",
+        "NoShow" => "No asistió",
+        _ => status
+    };
+
+    private static string StatusClass(string status) => status switch
+    {
+        "Confirmed" => "status-progress",
+        "Pending" => "status-planned",
+        "Completed" => "status-completed",
+        "Rescheduled" => "status-active",
+        _ => "status-inactive"
+    };
+}

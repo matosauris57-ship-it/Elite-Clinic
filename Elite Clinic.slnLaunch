@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "API + Admin",
+    "Projects": [
+      {
+        "Path": "Clinic System.API\\Elite Clinic.csproj",
+        "Action": "Start",
+        "DebugTarget": "http"
+      },
+      {
+        "Path": "Clinic System.Admin\\DentalCare.Admin.csproj",
+        "Action": "Start",
+        "DebugTarget": "http"
+      }
+    ]
+  }
+]

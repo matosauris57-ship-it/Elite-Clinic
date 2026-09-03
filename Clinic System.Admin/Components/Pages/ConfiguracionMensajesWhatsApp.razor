@@ -1,0 +1,160 @@
+@page "/configuracion/mensajes-whatsapp"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject WhatsAppMessageSettingsService WhatsAppSettings
+@inject IJSRuntime JS
+
+<PageTitle>Mensajes WhatsApp — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/configuracion" class="back-link-inline">← Configuración</a>
+            <h1>Mensajes WhatsApp</h1>
+            <p>Plantillas que se abren al enviar un recordatorio o confirmación de cita</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_saveMessage))
+    {
+        <div class="wizard-success">@_saveMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(_saveError))
+    {
+        <div class="wizard-error">@_saveError</div>
+    }
+
+    <form class="new-patient-form whatsapp-settings-form" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <p class="modal-confirm-text">
+            El nombre de la clínica y el código de país se toman de
+            <a href="/configuracion/clinica">Datos de la clínica</a>.
+            Variables (pulse una para insertarla en la plantilla activa):
+        </p>
+        <div class="whatsapp-placeholder-list" role="group" aria-label="Variables de plantilla">
+            @foreach (var token in Placeholders)
+            {
+                <button type="button"
+                        class="whatsapp-placeholder-chip"
+                        title="Insertar @token"
+                        @onclick="() => InsertPlaceholderAsync(token)">@token</button>
+            }
+        </div>
+        <p class="whatsapp-placeholder-hint">Se insertará en: <strong>@_activeTemplateLabel</strong></p>
+
+        <div class="form-group">
+            <label>Plantilla de recordatorio (Agenda)</label>
+            <textarea @ref="_reminderEditor"
+                      class="form-input"
+                      rows="4"
+                      @bind="_form.ReminderTemplate"
+                      @bind:event="oninput"
+                      @onfocus="() => SetActiveTemplate(WhatsAppMessageKind.Reminder)"></textarea>
+            <div class="whatsapp-preview-label">Vista previa</div>
+            <div class="whatsapp-preview">@ReminderPreview</div>
+        </div>
+
+        <div class="form-group">
+            <label>Plantilla de confirmación (al agendar)</label>
+            <textarea @ref="_confirmationEditor"
+                      class="form-input"
+                      rows="4"
+                      @bind="_form.ConfirmationTemplate"
+                      @bind:event="oninput"
+                      @onfocus="() => SetActiveTemplate(WhatsAppMessageKind.Confirmation)"></textarea>
+            <div class="whatsapp-preview-label">Vista previa</div>
+            <div class="whatsapp-preview">@ConfirmationPreview</div>
+        </div>
+
+        <button class="btn-primary" type="submit" disabled="@_saving">
+            @(_saving ? "Guardando..." : "Guardar plantillas")
+        </button>
+    </form>
+</div>
+
+@code {
+    private static readonly string[] Placeholders = ["{nombre}", "{clinica}", "{fecha}", "{hora}", "{doctor}"];
+
+    private WhatsAppMessageSettings _form = new();
+    private ElementReference _reminderEditor;
+    private ElementReference _confirmationEditor;
+    private WhatsAppMessageKind _activeTemplate = WhatsAppMessageKind.Reminder;
+    private bool _saving;
+    private string? _saveMessage;
+    private string? _saveError;
+
+    private string _activeTemplateLabel =>
+        _activeTemplate == WhatsAppMessageKind.Confirmation
+            ? "Plantilla de confirmación"
+            : "Plantilla de recordatorio";
+
+    private string ReminderPreview =>
+        WhatsAppSettings.Preview(_form.ReminderTemplate);
+
+    private string ConfirmationPreview =>
+        WhatsAppSettings.Preview(_form.ConfirmationTemplate);
+
+    protected override void OnInitialized()
+    {
+        _form = WhatsAppSettings.Get();
+    }
+
+    private void SetActiveTemplate(WhatsAppMessageKind kind) => _activeTemplate = kind;
+
+    private async Task InsertPlaceholderAsync(string token)
+    {
+        var editor = _activeTemplate == WhatsAppMessageKind.Confirmation
+            ? _confirmationEditor
+            : _reminderEditor;
+
+        try
+        {
+            var next = await JS.InvokeAsync<string?>("dentalCareUi.insertAtCursor", editor, token);
+            if (!string.IsNullOrEmpty(next))
+            {
+                if (_activeTemplate == WhatsAppMessageKind.Confirmation)
+                    _form.ConfirmationTemplate = next;
+                else
+                    _form.ReminderTemplate = next;
+            }
+        }
+        catch (JSException)
+        {
+            InsertPlaceholderFallback(token);
+        }
+    }
+
+    private void InsertPlaceholderFallback(string token)
+    {
+        if (_activeTemplate == WhatsAppMessageKind.Confirmation)
+            _form.ConfirmationTemplate += token;
+        else
+            _form.ReminderTemplate += token;
+    }
+
+    private void SaveAsync()
+    {
+        _saving = true;
+        _saveMessage = null;
+        _saveError = null;
+
+        if (string.IsNullOrWhiteSpace(_form.ReminderTemplate) || string.IsNullOrWhiteSpace(_form.ConfirmationTemplate))
+        {
+            _saveError = "Ambas plantillas son obligatorias.";
+            _saving = false;
+            return;
+        }
+
+        try
+        {
+            WhatsAppSettings.Save(_form);
+            _form = WhatsAppSettings.Get();
+            _saveMessage = "Plantillas guardadas. Los próximos recordatorios usarán este texto.";
+        }
+        catch (Exception)
+        {
+            _saveError = "No se pudieron guardar las plantillas. Revise los permisos de la carpeta App_Data.";
+        }
+
+        _saving = false;
+    }
+}

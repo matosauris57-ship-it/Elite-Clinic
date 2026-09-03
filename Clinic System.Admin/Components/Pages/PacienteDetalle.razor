@@ -1,0 +1,1609 @@
+@page "/pacientes/{PatientId:int}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "pacientes.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Clinic_System.Core.Validation
+@using System.Globalization
+@inject PatientMaintenanceService PatientService
+@inject MedicalConditionMaintenanceService ConditionService
+@inject ToothChartService ToothChartService
+@inject ClinicalTreatmentMaintenanceService TreatmentService
+@inject TreatmentPlanMaintenanceService PlanService
+@inject TreatmentProcedureMaintenanceService ProcedureService
+@inject AuthService AuthService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+@implements IDisposable
+
+<PageTitle>@(_profile?.FullName ?? "Paciente") — DentalCare Admin</PageTitle>
+
+@if (_loading)
+{
+    <AnimatedLoader Message="Cargando ficha..." />
+}
+else if (!string.IsNullOrEmpty(_loadError))
+{
+    <div class="wizard-error">@_loadError</div>
+}
+else if (_profile != null)
+{
+    <div class="maintenance-page patient-detail-page">
+        <header class="patient-record-hero">
+            <a href="/pacientes" class="patient-record-back">
+                <Icon Name="chevron-left" Class="patient-record-back-icon" StrokeWidth="2" />
+                Pacientes
+            </a>
+            <div class="patient-record-identity">
+                <div class="patient-identity-avatar avatar-@(_profile.Id % 4)" aria-hidden="true">@GetInitials(_profile.FullName)</div>
+                <div class="patient-record-copy">
+                    <h1>@_profile.FullName</h1>
+                    <div class="patient-record-meta">
+                        <span class="patient-chip">P-@_profile.Id.ToString("D4")</span>
+                        <span class="status-badge @(_profile.IsActive ? "status-active" : "status-inactive")">
+                            @(_profile.IsActive ? "Activo" : "Inactivo")
+                        </span>
+                        @if (TryGetBirthDate(out var headerBirth) && GetAgeYears(headerBirth) is int headerAge)
+                        {
+                            <span class="patient-chip">@headerAge años</span>
+                        }
+                    </div>
+                </div>
+            </div>
+            <nav class="patient-record-tabs" role="tablist" aria-label="Secciones de la ficha clínica">
+                @foreach (var tab in Tabs)
+                {
+                    if (tab.Key == "odontograma" && !_canViewOdontogram)
+                        continue;
+                    if (tab.Key == "recetas" && !_canViewRecetas)
+                        continue;
+                    if (tab.Key == "facturas" && !_canViewFacturas)
+                        continue;
+                    <button type="button"
+                            role="tab"
+                            aria-selected="@(_tab == tab.Key)"
+                            class="patient-record-tab @(_tab == tab.Key ? "is-active" : "")"
+                            @onclick="() => SetTab(tab.Key)">
+                        <Icon Name="@tab.Icon" Class="patient-record-tab-icon" StrokeWidth="1.8" />
+                        <span>@tab.Label</span>
+                    </button>
+                }
+            </nav>
+        </header>
+
+        <div class="app-toast-host" aria-live="polite" aria-atomic="true">
+            @if (!string.IsNullOrEmpty(_saveMessage))
+            {
+                <div class="app-toast is-success" role="status">@_saveMessage</div>
+            }
+            @if (!string.IsNullOrEmpty(_saveError))
+            {
+                <div class="app-toast is-error" role="alert">@_saveError</div>
+            }
+        </div>
+
+        @if (_tab == "datos")
+        {
+            <div class="new-patient-form patient-detail-form">
+                <div class="patient-identity-card">
+                    <div class="patient-identity-avatar avatar-@(_profile.Id % 4)" aria-hidden="true">@GetInitials(_profile.FullName)</div>
+                    <div class="patient-identity-copy">
+                        <strong>@_profile.FullName</strong>
+                        <div class="patient-identity-chips">
+                            @if (TryGetBirthDate(out var birthDate) && GetAgeYears(birthDate) is int age)
+                            {
+                                <span class="patient-chip">@age años</span>
+                                <span class="patient-chip">Nac. @FormatBirthLong(birthDate)</span>
+                                <span class="patient-chip patient-chip-birthday">@NextBirthdayLabel(birthDate)</span>
+                            }
+                            else
+                            {
+                                <span class="patient-chip">Sin fecha de nacimiento</span>
+                            }
+                            <span class="patient-chip">@GenderLabel(_profile.Gender)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Nombre</label><input class="form-input" @bind="_profile.FullName" disabled="@(!_canEditPatient)" /></div>
+                    <div class="form-group"><label>Cédula</label><input class="form-input" @bind="_profile.NationalId" disabled="@(!_canEditPatient)" /></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Fecha de nacimiento</label>
+                        <input class="form-input" type="date"
+                               max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                               value="@BirthIsoValue"
+                               disabled="@(!_canEditPatient)"
+                               @onchange="OnBirthDateChanged" />
+                        @if (TryGetBirthDate(out var dobHint) && GetAgeYears(dobHint) is int years)
+                        {
+                            <span class="form-hint">@years años · @dobHint.ToString("dd/MM/yyyy")</span>
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label>Género</label>
+                        <select class="form-input" @bind="_profile.Gender" disabled="@(!_canEditPatient)">
+                            <option value="Male">Masculino</option>
+                            <option value="Female">Femenino</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Teléfono</label><input class="form-input" @bind="_profile.Phone" disabled="@(!_canEditPatient)" /></div>
+                    <div class="form-group"><label>Celular</label><input class="form-input" @bind="_profile.MobilePhone" disabled="@(!_canEditPatient)" /></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Correo (opcional)</label><input class="form-input" type="email" @bind="_profile.Email" disabled="@(!_canEditPatient)" placeholder="paciente@correo.com" /></div>
+                    <div class="form-group"><label>Dirección</label><input class="form-input" @bind="_profile.Address" disabled="@(!_canEditPatient)" /></div>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" @bind="_profile.OptOutEmailCampaigns" disabled="@(!_canEditPatient)" />
+                        No enviar campañas de correo
+                    </label>
+                    <span class="form-hint">Los recordatorios de cita se siguen pudiendo enviar. Las campañas del módulo Campañas no incluirán a este paciente.</span>
+                </div>
+                @if (_canEditPatient)
+                {
+                    <div class="patient-detail-actions">
+                        <button class="btn-primary" disabled="@_saving" @onclick="SavePersonalDataAsync">@(_saving ? "Guardando..." : "Guardar datos")</button>
+                    </div>
+                }
+            </div>
+        }
+        else if (_tab == "antecedentes" && _history != null)
+        {
+            <div class="new-patient-form patient-detail-form">
+                <div class="form-row">
+                    <div class="form-group"><label>Presión sanguínea</label><input class="form-input" @bind="_history.BloodPressure" disabled="@(!_canEditPatient)" placeholder="120/80" /></div>
+                    <div class="form-group"><label>Alergias</label><input class="form-input" @bind="_history.Allergies" disabled="@(!_canEditPatient)" /></div>
+                </div>
+                <div class="form-group"><label>Medicación actual</label><input class="form-input" @bind="_history.CurrentMedication" disabled="@(!_canEditPatient)" /></div>
+                <div class="form-group">
+                    <label>Enfermedades (catálogo)</label>
+                    <div class="condition-checkbox-grid">
+                        @foreach (var condition in _conditions)
+                        {
+                            <label class="checkbox-label">
+                                <input type="checkbox" checked="@_history.SelectedConditionIds.Contains(condition.Id)"
+                                       disabled="@(!_canEditPatient)"
+                                       @onchange="e => ToggleCondition(condition.Id, (bool)(e.Value ?? false))" />
+                                @condition.Name
+                            </label>
+                        }
+                    </div>
+                </div>
+                <div class="form-group"><label>Otras enfermedades</label><textarea class="form-input" rows="2" @bind="_history.OtherDiseases" disabled="@(!_canEditPatient)"></textarea></div>
+                <div class="form-group"><label>Enfermedades sistémicas</label><textarea class="form-input" rows="2" @bind="_history.SystemicDiseases" disabled="@(!_canEditPatient)"></textarea></div>
+                <div class="form-group"><label>Tratamientos dentales previos</label><textarea class="form-input" rows="2" @bind="_history.PreviousDentalTreatments" disabled="@(!_canEditPatient)"></textarea></div>
+                <div class="form-group"><label>Motivo de consulta</label><textarea class="form-input" rows="2" @bind="_history.ReasonForConsultation" disabled="@(!_canEditPatient)"></textarea></div>
+                <div class="form-group"><label>Diagnóstico</label><textarea class="form-input" rows="2" @bind="_history.Diagnosis" disabled="@(!_canEditPatient)"></textarea></div>
+                <div class="form-group"><label>Observaciones clínicas</label><textarea class="form-input" rows="3" @bind="_history.ClinicalObservations" disabled="@(!_canEditPatient)"></textarea></div>
+                <div class="form-group"><label>Notas adicionales</label><textarea class="form-input" rows="3" @bind="_history.AdditionalNotes" disabled="@(!_canEditPatient)"></textarea></div>
+                <div class="form-row checkbox-label">
+                    <label><input type="checkbox" @bind="_history.HasBleedingGums" disabled="@(!_canEditPatient)" /> Sangrado de encías</label>
+                    <label><input type="checkbox" @bind="_history.HasSensitiveTeeth" disabled="@(!_canEditPatient)" /> Sensibilidad dental</label>
+                    <label><input type="checkbox" @bind="_history.HasBruxism" disabled="@(!_canEditPatient)" /> Bruxismo</label>
+                    <label><input type="checkbox" @bind="_history.IsSmoker" disabled="@(!_canEditPatient)" /> Fumador</label>
+                </div>
+                @if (_canEditPatient)
+                {
+                    <button class="btn-primary" disabled="@_saving" @onclick="SaveHistoryAsync">@(_saving ? "Guardando..." : "Guardar antecedentes")</button>
+                }
+            </div>
+        }
+        else if (_tab == "odontograma" && _canViewOdontogram)
+        {
+            @if (!string.IsNullOrWhiteSpace(_chartError))
+            {
+                <ErrorBanner Message="@_chartError" OnRetry="LoadToothChartAsync" />
+            }
+
+            <OdontogramChart Entries="_chartEntries"
+                              SelectedTooth="_selectedTooth"
+                              SelectedTeeth="_selectedTeeth"
+                              SelectedSurface="_selectedSurface"
+                              SelectedToothChanged="SelectToothAsync"
+                              ToothSelectionChanged="OnToothSelection"
+                              SelectedSurfaceChanged="SelectSurface"
+                              PatientId="PatientId"
+                              PatientName="@(_profile?.FullName ?? "Paciente")"
+                              CanEditPeriodontogram="_canEditPeriodontogram"
+                              ShowingPeriodontogram="_showingPeriodontogram"
+                              ShowingPeriodontogramChanged="OnPeriodontogramVisible" />
+
+            @if (!_showingPeriodontogram)
+            {
+            <div class="odontogram-clinical-grid">
+                <section class="clinical-entry-panel" aria-labelledby="entry-heading">
+                    <div class="clinical-section-heading">
+                        <div>
+                            <h3 id="entry-heading">Registrar hallazgo</h3>
+                            <p>Las modificaciones se guardan como entradas clínicas inmutables.</p>
+                        </div>
+                    </div>
+
+                    @if (!_canEditOdontogram)
+                    {
+                        <div class="clinical-readonly-note">Tiene permiso de lectura. La edición requiere <code>odontograma.edit</code>.</div>
+                    }
+
+                    <div class="new-patient-form compact-clinical-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Piezas</label>
+                                <div class="tooth-selection-chips">
+                                    @if (_selectedTeeth.Count == 0)
+                                    {
+                                        <span class="rx-hint">Seleccione en el odontograma</span>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var tooth in _selectedTeeth.OrderBy(x => x))
+                                        {
+                                            <button type="button" class="tooth-chip @(_selectedTooth == tooth ? "is-primary" : "")"
+                                                    disabled="@(!_canEditOdontogram)"
+                                                    @onclick="() => RemoveSelectedTooth(tooth)">
+                                                @tooth ×
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Tipo</label>
+                                <input class="form-input" value="@SelectedTeethDescription" disabled />
+                            </div>
+                        </div>
+                        <fieldset class="rx-hint" style="border:0;padding:0;margin:0 0 0.75rem">
+                            <legend class="form-group" style="margin:0 0 0.35rem">Alcance</legend>
+                            <div class="form-row checkbox-label">
+                                <label>
+                                    <input type="radio" name="finding-scope" checked="@(_findingScope == ToothFindingScope.WholeTooth)"
+                                           disabled="@(!_canEditOdontogram)" @onchange="() => SetFindingScope(ToothFindingScope.WholeTooth)" />
+                                    Pieza completa
+                                </label>
+                                <label>
+                                    <input type="radio" name="finding-scope" checked="@(_findingScope == ToothFindingScope.Surface)"
+                                           disabled="@(!_canEditOdontogram)" @onchange="() => SetFindingScope(ToothFindingScope.Surface)" />
+                                    Superficie
+                                </label>
+                            </div>
+                        </fieldset>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Superficie</label>
+                                <input class="form-input" value="@(_findingScope == ToothFindingScope.WholeTooth ? "Pieza completa" : SurfaceLabelForSelected())" disabled />
+                            </div>
+                            <div class="form-group">
+                                <label for="tooth-condition">Condición clínica</label>
+                                <select id="tooth-condition" class="form-input" value="@_entryForm.Condition"
+                                        disabled="@(!_canEditOdontogram)" @onchange="OnConditionSelected">
+                                    @foreach (var value in VisibleConditions())
+                                    {
+                                        <option value="@value">@ConditionLabel(value)</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        @if (_entryForm.Condition == ToothCondition.Bridge)
+                        {
+                            <div class="bridge-draft">
+                                <p class="rx-hint">El tramo se marcará con un círculo en cada unidad y una línea que las une. Los pónticos se ven ausentes (X).</p>
+                                @if (!string.IsNullOrWhiteSpace(BridgeDraftError))
+                                {
+                                    <p class="clinical-readonly-note">@BridgeDraftError</p>
+                                }
+                                @if (_bridgeUnits.Count > 0)
+                                {
+                                    <div class="data-table-wrap">
+                                        <table class="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>FDI</th>
+                                                    <th>Rol</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var unit in _bridgeUnits)
+                                                {
+                                                    <tr>
+                                                        <td>@unit.ToothNumber</td>
+                                                        <td>
+                                                            <select class="form-input" disabled="@(!_canEditOdontogram)"
+                                                                    value="@unit.Role"
+                                                                    @onchange="e => SetBridgeRole(unit.ToothNumber, e)">
+                                                                <option value="@BridgeRole.Abutment">Pilar</option>
+                                                                <option value="@BridgeRole.Pontic">Póntico</option>
+                                                            </select>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        @if (_entryForm.Condition != ToothCondition.Healthy)
+                        {
+                            <div class="form-group">
+                                <label for="tooth-phase">Fase</label>
+                                <select id="tooth-phase" class="form-input" @bind="_entryForm.Phase" disabled="@(!_canEditOdontogram)">
+                                    @foreach (var value in Enum.GetValues<ToothChartPhase>())
+                                    {
+                                        <option value="@value">@PhaseLabel(value)</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        @if (ToothClinicalLabels.ShowsCariesDetails(_entryForm.Condition))
+                        {
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="caries-type">Tipo de caries</label>
+                                    <select id="caries-type" class="form-input" @bind="_entryForm.CariesType" disabled="@(!_canEditOdontogram)">
+                                        <option value="">Seleccione</option>
+                                        @foreach (var value in Enum.GetValues<CariesType>())
+                                        {
+                                            <option value="@value">@ToothClinicalLabels.CariesKind(value)</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="caries-icdas">Clasificación ICDAS</label>
+                                    <select id="caries-icdas" class="form-input" @bind="_entryForm.Icdas" disabled="@(!_canEditOdontogram)">
+                                        <option value="">Seleccione</option>
+                                        @foreach (var value in Enum.GetValues<IcdasCode>())
+                                        {
+                                            <option value="@value">@ToothClinicalLabels.Icdas(value)</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="tooth-severity">Profundidad</label>
+                                <select id="tooth-severity" class="form-input" @bind="_entryForm.Severity" disabled="@(!_canEditOdontogram)">
+                                    <option value="">Sin especificar</option>
+                                    @foreach (var value in Enum.GetValues<ToothSeverity>())
+                                    {
+                                        <option value="@value">@SeverityLabel(value)</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        @if (ToothClinicalLabels.ShowsMaterial(_entryForm.Condition))
+                        {
+                            <div class="form-group">
+                                <label for="tooth-material">Material</label>
+                                <select id="tooth-material" class="form-input" @bind="_entryForm.RestorationMaterial" disabled="@(!_canEditOdontogram)">
+                                    <option value="">Sin especificar</option>
+                                    @foreach (var value in AllowedMaterials())
+                                    {
+                                        <option value="@value">@ToothClinicalLabels.Material(value)</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        @if (_entryForm.Condition != ToothCondition.Healthy)
+                        {
+                            <div class="form-group">
+                                <label for="tooth-dx">Diagnóstico odontológico</label>
+                                <input id="tooth-dx" class="form-input" @bind="_entryForm.ClinicalDiagnosis" disabled="@(!_canEditOdontogram)"
+                                       placeholder="Ej. Caries dental" />
+                            </div>
+                            <div class="form-group">
+                                <label for="tooth-tx">Tratamiento propuesto</label>
+                                <input id="tooth-tx" class="form-input" @bind="_entryForm.ProposedTreatment" disabled="@(!_canEditOdontogram)"
+                                       placeholder="Ej. Restauración con resina" />
+                            </div>
+                            <div class="form-group">
+                                <label for="tooth-notes">Observaciones</label>
+                                <textarea id="tooth-notes" class="form-input" rows="3" maxlength="1000"
+                                          @bind="_entryForm.Notes" disabled="@(!_canEditOdontogram)"></textarea>
+                            </div>
+                        }
+                        <p class="rx-hint">El color se aplica solo a la superficie o a la pieza completa según el alcance.</p>
+                        @if (!string.IsNullOrEmpty(_saveMessage))
+                        {
+                            <div class="wizard-success">@_saveMessage</div>
+                        }
+                        @if (!string.IsNullOrEmpty(_saveError))
+                        {
+                            <div class="wizard-error">@_saveError</div>
+                        }
+                        @if (_canEditOdontogram)
+                        {
+                            <button type="button" class="btn-primary" disabled="@(_savingEntry || _selectedTeeth.Count == 0)" @onclick="SaveToothEntryAsync">
+                                @(_savingEntry
+                                    ? "Registrando..."
+                                    : _selectedTeeth.Count > 1
+                                        ? $"Guardar diagnóstico en {_selectedTeeth.Count} piezas"
+                                        : "Guardar cambios")
+                            </button>
+                        }
+                    </div>
+                </section>
+
+                <DentalTimeline Title="@OdontogramHistoryTitle"
+                                Subtitle="@OdontogramHistorySubtitle"
+                                Events="@OdontogramHistoryEvents"
+                                Loading="_fullTimelineLoading"
+                                Error="@_fullTimelineError">
+                    <HeaderActions>
+                        <div class="maintenance-tabs odontogram-history-tabs" role="tablist" aria-label="Alcance del historial">
+                            <button type="button" role="tab" aria-selected="@_odontogramHistoryAll"
+                                    class="toggle-btn @(_odontogramHistoryAll ? "active" : "")"
+                                    @onclick="() => ShowAllTeethHistory()">Todas las piezas</button>
+                            <button type="button" role="tab" aria-selected="@(!_odontogramHistoryAll)"
+                                    class="toggle-btn @(!_odontogramHistoryAll ? "active" : "")"
+                                    disabled="@(_selectedTeeth.Count == 0)"
+                                    @onclick="ShowSelectedTeethHistoryAsync">
+                                @(_selectedTeeth.Count == 0
+                                    ? "Pieza seleccionada"
+                                    : _selectedTeeth.Count == 1
+                                        ? $"Pieza {_selectedTooth}"
+                                        : $"{_selectedTeeth.Count} piezas")
+                            </button>
+                        </div>
+                    </HeaderActions>
+                </DentalTimeline>
+            </div>
+            }
+        }
+        else if (_tab == "planes")
+        {
+            <section class="record-section-card">
+                <div class="clinical-section-heading"><div><h3>Planes de tratamiento</h3><p>Seguimiento de propuestas clínicas del paciente.</p></div></div>
+                @if (_canCreatePlans)
+                {
+                    <div class="new-patient-form compact-clinical-form">
+                        <div class="form-row">
+                            <div class="form-group"><label>Título</label><input class="form-input" @bind="_planForm.Title" /></div>
+                            <div class="form-group"><label>Válido hasta</label><input type="date" class="form-input" @bind="_planForm.ValidUntil" /></div>
+                            <div class="form-group"><label>Descuento</label><input type="number" min="0" step="0.01" class="form-input" @bind="_planForm.DiscountAmount" /></div>
+                        </div>
+                        <div class="form-group"><label>Notas del plan</label><textarea class="form-input" rows="2" @bind="_planForm.Notes"></textarea></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Procedimiento activo</label>
+                                <select class="form-input" @bind="_planProcedureId">
+                                    <option value="0">Seleccione...</option>
+                                    @foreach (var procedure in _activeProcedures)
+                                    {
+                                        <option value="@procedure.Id">@procedure.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="form-group"><label>Cantidad</label><input type="number" min="1" class="form-input" @bind="_planItemQuantity" /></div>
+                            <div class="form-group"><label>Precio unitario</label><input type="number" min="0" step="0.01" class="form-input" @bind="_planItemPrice" /></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Pieza</label><input class="form-input" value="@(_selectedTooth?.ToString() ?? "Sin pieza")" disabled /></div>
+                            <div class="form-group"><label>Superficie</label><input class="form-input" value="@SurfaceLabel(_selectedSurface)" disabled /></div>
+                            <div class="form-group"><label>Notas del ítem</label><input class="form-input" @bind="_planItemNotes" /></div>
+                        </div>
+                        <button type="button" class="btn-outline" @onclick="AddPlanItem">Agregar ítem</button>
+                        @if (_planForm.Items.Count > 0)
+                        {
+                            <div class="data-table-wrap">
+                                <table class="data-table">
+                                    <thead><tr><th>Procedimiento</th><th>Pieza/superficie</th><th>Cantidad</th><th>Precio</th><th>Total</th><th></th></tr></thead>
+                                    <tbody>
+                                    @foreach (var item in _planForm.Items)
+                                    {
+                                        <tr>
+                                            <td>@item.ProcedureName</td>
+                                            <td>@(item.ToothNumber?.ToString() ?? "—") / @(item.ToothSurface.HasValue ? SurfaceLabel(item.ToothSurface.Value) : "—")</td>
+                                            <td>@item.Quantity</td>
+                                            <td>$@item.UnitPrice.ToString("N2")</td>
+                                            <td>$@((item.UnitPrice * item.Quantity).ToString("N2"))</td>
+                                            <td><button type="button" class="btn-table btn-table-danger" @onclick="() => RemovePlanItem(item)">Quitar</button></td>
+                                        </tr>
+                                    }
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p><strong>Total:</strong> $@PlanTotal.ToString("N2") · <strong>Final:</strong> $@PlanFinalTotal.ToString("N2")</p>
+                        }
+                        <button type="button" class="btn-primary" disabled="@(_savingPlan || _planForm.Items.Count == 0)" @onclick="CreatePlanAsync">
+                            @(_savingPlan ? "Creando..." : "Crear plan")
+                        </button>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_plansError)) { <div class="wizard-error">@_plansError</div> }
+                else if (_plans.Count == 0) { <div class="maintenance-empty"><p>No hay planes registrados.</p></div> }
+                else
+                {
+                    <div class="form-group"><label>Motivo de rechazo (opcional)</label><input class="form-input" @bind="_planRejectionReason" /></div>
+                    @foreach (var plan in _plans)
+                    {
+                        <article class="record-section-card">
+                            <div class="clinical-section-heading">
+                                <div><h4>@plan.Title</h4><p>@PlanStatusLabel(plan.Status) · Final $@plan.FinalAmount.ToString("N2")</p></div>
+                                @if (_canEditPlans)
+                                {
+                                    <div>
+                                        @if (plan.Status == "Draft")
+                                        {
+                                            <button class="btn-primary" @onclick="() => ApprovePlanAsync(plan.Id)">Aprobar</button>
+                                            <button class="btn-outline" @onclick="() => RejectPlanAsync(plan.Id)">Rechazar</button>
+                                        }
+                                        else if (plan.Status == "Approved")
+                                        {
+                                            <button class="btn-primary" @onclick="() => CompletePlanAsync(plan.Id)">Completar</button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <div class="data-table-wrap"><table class="data-table">
+                                <thead><tr><th>Procedimiento</th><th>Pieza</th><th>Cant.</th><th>Total</th></tr></thead>
+                                <tbody>@foreach (var item in plan.Items) { <tr><td>@item.ProcedureName</td><td>@(item.ToothNumber?.ToString() ?? "—")</td><td>@item.Quantity</td><td>$@item.LineTotal.ToString("N2")</td></tr> }</tbody>
+                            </table></div>
+                        </article>
+                    }
+                }
+            </section>
+        }
+        else if (_tab == "tratamientos")
+        {
+            <section class="record-section-card">
+                <div class="clinical-section-heading"><div><h3>Tratamientos</h3><p>Tratamientos clínicos registrados para este paciente.</p></div></div>
+                @if (_canCreateTreatments)
+                {
+                    <div class="new-patient-form compact-clinical-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Procedimiento activo</label>
+                                <select class="form-input" @bind="_treatmentProcedureId">
+                                    <option value="0">Seleccione...</option>
+                                    @foreach (var procedure in _activeProcedures)
+                                    {
+                                        <option value="@procedure.Id">@procedure.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="form-group"><label>Costo</label><input type="number" min="0" step="0.01" class="form-input" @bind="_treatmentCost" /></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Pieza</label><input class="form-input" value="@(_selectedTooth?.ToString() ?? "Sin pieza")" disabled /></div>
+                            <div class="form-group"><label>Superficie</label><input class="form-input" value="@SurfaceLabel(_selectedSurface)" disabled /></div>
+                        </div>
+                        <div class="form-group"><label>Detalles</label><textarea class="form-input" rows="2" @bind="_treatmentDetails"></textarea></div>
+                        <button class="btn-primary" disabled="@(_savingTreatment || _treatmentProcedureId == 0)" @onclick="CreateTreatmentAsync">
+                            @(_savingTreatment ? "Creando..." : "Crear tratamiento")
+                        </button>
+                    </div>
+                }
+                @if (_canEditTreatments) { <div class="form-group"><label>Motivo de cancelación (opcional)</label><input class="form-input" @bind="_treatmentCancellationReason" /></div> }
+                @if (!string.IsNullOrWhiteSpace(_treatmentsError))
+                {
+                    <div class="wizard-error">@_treatmentsError</div>
+                }
+                else if (_patientTreatments.Count == 0)
+                {
+                    <div class="maintenance-empty"><p>No hay tratamientos registrados para este paciente.</p></div>
+                }
+                else
+                {
+                    <div class="data-table-wrap">
+                        <table class="data-table">
+                            <thead><tr><th>Procedimiento</th><th>Pieza</th><th>Estado</th><th>Costo</th><th>Registro</th><th>Acciones</th></tr></thead>
+                            <tbody>
+                                @foreach (var treatment in _patientTreatments)
+                                {
+                                    <tr>
+                                        <td>@treatment.ProcedureName</td>
+                                        <td>@(treatment.ToothNumber?.ToString() ?? "—")</td>
+                                        <td><span class="status-badge @TreatmentStatusClass(treatment.Status)">@TreatmentStatusLabel(treatment.Status)</span></td>
+                                        <td>$@treatment.Cost.ToString("N0")</td>
+                                        <td>@treatment.CreatedAt.ToString("dd/MM/yyyy")</td>
+                                        <td>
+                                            @if (_canEditTreatments && treatment.Status == "Planned")
+                                            {
+                                                <button class="btn-primary" @onclick="() => StartTreatmentAsync(treatment.Id)">Iniciar</button>
+                                                <button class="btn-outline" @onclick="() => CancelTreatmentAsync(treatment.Id)">Cancelar</button>
+                                            }
+                                            else if (_canEditTreatments && treatment.Status == "InProgress")
+                                            {
+                                                <button class="btn-primary" @onclick="() => OpenCompleteTreatment(treatment)">Completar</button>
+                                                <button class="btn-outline" @onclick="() => CancelTreatmentAsync(treatment.Id)">Cancelar</button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+            @if (_treatmentToComplete != null)
+            {
+                <div class="modal-overlay">
+                    <div class="modal-panel modal-panel-sm">
+                        <h3>Resultado clínico explícito</h3>
+                        <p>@_treatmentToComplete.ProcedureName · pieza @(_treatmentToComplete.ToothNumber?.ToString() ?? "sin pieza")</p>
+                        <div class="form-group"><label>Superficie</label><select class="form-input" @bind="_completionResult.Surface">@foreach (var value in Enum.GetValues<ToothSurface>()) { <option value="@value">@SurfaceLabel(value)</option> }</select></div>
+                        <div class="form-group"><label>Condición resultante</label><select class="form-input" @bind="_completionResult.Condition">@foreach (var value in Enum.GetValues<ToothCondition>()) { <option value="@value">@ConditionLabel(value)</option> }</select></div>
+                        <div class="form-group"><label>Severidad</label><select class="form-input" @bind="_completionResult.Severity"><option value="">Sin especificar</option>@foreach (var value in Enum.GetValues<ToothSeverity>()) { <option value="@value">@SeverityLabel(value)</option> }</select></div>
+                        <div class="form-group"><label>Notas</label><textarea class="form-input" rows="3" @bind="_completionResult.Notes"></textarea></div>
+                        <div class="modal-actions">
+                            <button class="btn-outline" @onclick="CloseCompleteTreatment">Cancelar</button>
+                            <button class="btn-primary" disabled="@_savingTreatment" @onclick="CompleteTreatmentAsync">Confirmar resultado y completar</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+        else if (_tab == "historial")
+        {
+            <DentalTimeline Title="Historial clínico completo"
+                            Subtitle="Eventos reales del odontograma, planes, tratamientos, recetas y notas clínicas."
+                            Events="_fullTimeline"
+                            Loading="_fullTimelineLoading"
+                            Error="@_fullTimelineError" />
+        }
+        else if (_tab == "recetas" && _canViewRecetas)
+        {
+            <PatientPrescriptionsPanel PatientId="PatientId" CanEdit="_canEditRecetas" />
+        }
+        else if (_tab == "facturas" && _canViewFacturas)
+        {
+            <PatientInvoicesPanel PatientId="PatientId" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [SupplyParameterFromQuery(Name = "tab")] public string? QueryTab { get; set; }
+
+    private static readonly (string Key, string Label, string Icon)[] Tabs =
+    [
+        ("datos", "Datos personales", "user"),
+        ("antecedentes", "Antecedentes", "stethoscope"),
+        ("odontograma", "Odontograma", "tooth"),
+        ("planes", "Planes", "clipboard-list"),
+        ("tratamientos", "Tratamientos", "package"),
+        ("recetas", "Recetas", "pill"),
+        ("facturas", "Facturas", "credit-card"),
+        ("historial", "Historial", "clock")
+    ];
+
+    private PatientClinicalProfile? _profile;
+    private DentalHistoryForm? _history;
+    private List<MedicalConditionListItem> _conditions = [];
+    private List<ToothChartEntry> _chartEntries = [];
+    private List<DentalClinicalEvent> _fullTimeline = [];
+    private List<DentalTreatmentListItem> _patientTreatments = [];
+    private List<TreatmentPlanListItem> _plans = [];
+    private List<TreatmentProcedureListItem> _activeProcedures = [];
+    private CreateToothChartEntryRequest _entryForm = new();
+    private CreateTreatmentPlanRequest _planForm = new();
+    private DentalTreatmentClinicalResultRequest _completionResult = new();
+    private DentalTreatmentListItem? _treatmentToComplete;
+    private int? _selectedTooth;
+    private readonly List<int> _selectedTeeth = [];
+    private List<BridgeUnitInput> _bridgeUnits = [];
+    private ToothSurface _selectedSurface = ToothSurface.WholeTooth;
+    private ToothFindingScope _findingScope = ToothFindingScope.WholeTooth;
+    private bool _odontogramHistoryAll = true;
+    private bool _showingPeriodontogram;
+    private string _tab = "datos";
+    private bool _loading = true;
+    private bool _saving;
+    private bool _savingEntry;
+    private bool _fullTimelineLoading;
+    private bool _canEditPatient;
+    private bool _canViewOdontogram;
+    private bool _canEditOdontogram;
+    private bool _canEditPeriodontogram;
+    private bool _canCreatePlans;
+    private bool _canEditPlans;
+    private bool _canCreateTreatments;
+    private bool _canEditTreatments;
+    private bool _canViewRecetas;
+    private bool _canEditRecetas;
+    private bool _canViewFacturas;
+    private bool _savingPlan;
+    private bool _savingTreatment;
+    private int _planProcedureId;
+    private int _planItemQuantity = 1;
+    private decimal _planItemPrice;
+    private string? _planItemNotes;
+    private string? _planRejectionReason;
+    private int _treatmentProcedureId;
+    private decimal _treatmentCost;
+    private string? _treatmentDetails;
+    private string? _treatmentCancellationReason;
+    private string? _loadError;
+    private string? _saveError;
+    private string? _saveMessage;
+    private string? _chartError;
+    private string? _fullTimelineError;
+    private string? _treatmentsError;
+    private string? _plansError;
+
+    private decimal PlanTotal => _planForm.Items.Sum(x => x.UnitPrice * x.Quantity);
+    private decimal PlanFinalTotal => Math.Max(0, PlanTotal - _planForm.DiscountAmount);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        var isDoctor = user.IsInRole("Doctor");
+        _canEditPatient = PermissionService.HasPermission(user, "pacientes.edit");
+        _canViewOdontogram = PermissionService.HasPermission(user, "odontograma.view") || isDoctor || _canEditPatient;
+        _canEditOdontogram = PermissionService.HasPermission(user, "odontograma.edit") || isDoctor || _canEditPatient;
+        _canEditPeriodontogram = PermissionService.HasPermission(user, "periodontograma.edit") || _canEditOdontogram;
+        _canCreatePlans = PermissionService.HasPermission(user, "planes-tratamiento.create") || isDoctor;
+        _canEditPlans = PermissionService.HasPermission(user, "planes-tratamiento.edit") || isDoctor;
+        _canCreateTreatments = PermissionService.HasPermission(user, "tratamientos.create") || isDoctor;
+        _canEditTreatments = PermissionService.HasPermission(user, "tratamientos.edit") || isDoctor;
+        _canViewRecetas = PermissionService.HasPermission(user, "recetas.view")
+            || PermissionService.HasPermission(user, "historial.view")
+            || isDoctor;
+        _canEditRecetas = PermissionService.HasPermission(user, "recetas.create")
+            || PermissionService.HasPermission(user, "recetas.edit")
+            || PermissionService.HasPermission(user, "historial.create")
+            || PermissionService.HasPermission(user, "historial.edit")
+            || isDoctor;
+        _canViewFacturas = PermissionService.HasPermission(user, "facturacion.view");
+
+        if (_tab == "odontograma" && !_canViewOdontogram)
+            _tab = "datos";
+        if (_tab == "facturas" && !_canViewFacturas)
+            _tab = "datos";
+
+        await LoadAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrWhiteSpace(QueryTab) && Tabs.Any(x => x.Key == QueryTab.ToLowerInvariant()))
+        {
+            var tab = QueryTab.ToLowerInvariant();
+            if (tab == "odontograma" && !_canViewOdontogram)
+                return;
+            if (tab == "recetas" && !_canViewRecetas)
+                return;
+            if (tab == "facturas" && !_canViewFacturas)
+                return;
+            _tab = tab;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+
+        var (profile, error) = await PatientService.GetClinicalProfileAsync(PatientId);
+        if (error != null)
+        {
+            _loadError = error;
+            _loading = false;
+            return;
+        }
+
+        _profile = profile;
+        _history = profile?.DentalHistory ?? new DentalHistoryForm { PatientId = PatientId };
+        _planForm.PatientId = PatientId;
+
+        var (conditions, _) = await ConditionService.GetConditionsAsync(activeOnly: true);
+        _conditions = conditions;
+        var (procedures, _) = await ProcedureService.GetActiveProceduresAsync();
+        _activeProcedures = procedures;
+
+        if (_canViewOdontogram)
+        {
+            await LoadToothChartAsync();
+            await LoadFullTimelineAsync();
+        }
+
+        await Task.WhenAll(LoadTreatmentsAsync(), LoadPlansAsync());
+        _loading = false;
+    }
+
+    private void OnPeriodontogramVisible(bool visible) => _showingPeriodontogram = visible;
+
+    private async Task SetTab(string tab)
+    {
+        _tab = tab;
+        ClearNotice();
+        if ((tab is "odontograma" or "historial") && _canViewOdontogram && _fullTimeline.Count == 0)
+            await LoadFullTimelineAsync();
+    }
+
+    private async Task LoadToothChartAsync()
+    {
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await ToothChartService.GetChartAsync(PatientId);
+                return (response.Entries, response.Error);
+            },
+            AuthService.IsTokenError);
+
+        _chartEntries = result.Data;
+        _chartError = result.Error;
+    }
+
+    private async Task LoadFullTimelineAsync()
+    {
+        _fullTimelineLoading = true;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await ToothChartService.GetTimelineAsync(PatientId);
+                return (response.Events, response.Error);
+            },
+            AuthService.IsTokenError);
+        _fullTimeline = result.Data;
+        _fullTimelineError = result.Error;
+        _fullTimelineLoading = false;
+    }
+
+    private async Task LoadTreatmentsAsync()
+    {
+        if (_profile == null)
+            return;
+
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await TreatmentService.GetByPatientAsync(PatientId);
+                return (response.Items, response.Error);
+            },
+            AuthService.IsTokenError);
+        _patientTreatments = result.Data;
+        _treatmentsError = result.Error;
+    }
+
+    private async Task LoadPlansAsync()
+    {
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PlanService.GetByPatientAsync(PatientId);
+                return (response.Items, response.Error);
+            },
+            AuthService.IsTokenError);
+        _plans = result.Data;
+        _plansError = result.Error;
+    }
+
+    private async Task SelectToothAsync(int tooth) => await OnToothSelection((tooth, false));
+
+    private async Task OnToothSelection((int Tooth, bool Additive) click)
+    {
+        if (click.Additive)
+        {
+            if (_selectedTeeth.Contains(click.Tooth))
+            {
+                if (_selectedTeeth.Count > 1)
+                    _selectedTeeth.Remove(click.Tooth);
+            }
+            else
+                _selectedTeeth.Add(click.Tooth);
+        }
+        else
+        {
+            _selectedTeeth.Clear();
+            _selectedTeeth.Add(click.Tooth);
+        }
+
+        _selectedTooth = _selectedTeeth.Count == 0
+            ? null
+            : _selectedTeeth.Contains(click.Tooth) ? click.Tooth : _selectedTeeth[^1];
+
+        _entryForm.ToothNumber = _selectedTooth ?? 0;
+        if (!_selectedTooth.HasValue)
+        {
+            _odontogramHistoryAll = true;
+            return;
+        }
+
+        _odontogramHistoryAll = false;
+        if (_fullTimeline.Count == 0)
+            await LoadFullTimelineAsync();
+        RefreshBridgeDraft();
+    }
+
+    private async Task RemoveSelectedTooth(int tooth)
+    {
+        if (_selectedTeeth.Count <= 1)
+            return;
+
+        _selectedTeeth.Remove(tooth);
+        _selectedTooth = _selectedTeeth[^1];
+        _entryForm.ToothNumber = _selectedTooth.Value;
+        RefreshBridgeDraft();
+        if (!_odontogramHistoryAll && _fullTimeline.Count == 0)
+            await LoadFullTimelineAsync();
+    }
+
+    private void SelectSurface(ToothSurface surface)
+    {
+        _selectedSurface = surface;
+        _entryForm.Surface = surface;
+        _findingScope = surface == ToothSurface.WholeTooth
+            ? ToothFindingScope.WholeTooth
+            : ToothFindingScope.Surface;
+        if (!VisibleConditions().Contains(_entryForm.Condition))
+        {
+            _entryForm.Condition = VisibleConditions().First();
+            OnConditionChanged();
+        }
+    }
+
+    private void SetFindingScope(ToothFindingScope scope)
+    {
+        _findingScope = scope;
+        if (scope == ToothFindingScope.WholeTooth)
+            SelectSurface(ToothSurface.WholeTooth);
+        else if (_selectedSurface == ToothSurface.WholeTooth)
+            SelectSurface(ToothSurface.OcclusalIncisal);
+        else
+            SelectSurface(_selectedSurface);
+    }
+
+    private void OnConditionSelected(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ToothCondition>(e.Value?.ToString(), out var condition))
+            _entryForm.Condition = condition;
+        OnConditionChanged();
+    }
+
+    private void OnConditionChanged()
+    {
+        if (!ToothClinicalLabels.ShowsMaterial(_entryForm.Condition))
+            _entryForm.RestorationMaterial = null;
+        if (!ToothClinicalLabels.ShowsCariesDetails(_entryForm.Condition))
+        {
+            _entryForm.CariesType = null;
+            _entryForm.Icdas = null;
+            _entryForm.Severity = null;
+        }
+        if (_entryForm.Condition == ToothCondition.Healthy)
+        {
+            _entryForm.Phase = ToothChartPhase.Diagnosis;
+            _entryForm.ClinicalDiagnosis = null;
+            _entryForm.ProposedTreatment = null;
+            _entryForm.Notes = null;
+        }
+
+        if (_entryForm.Condition == ToothCondition.Bridge)
+        {
+            if (_findingScope != ToothFindingScope.WholeTooth)
+                SetFindingScope(ToothFindingScope.WholeTooth);
+            var suggested = Clinic_System.Core.Validation.ToothFindingRules.SuggestedDiagnosis(
+                Clinic_System.Core.Enums.ToothCondition.Bridge);
+            if (string.IsNullOrWhiteSpace(_entryForm.ClinicalDiagnosis))
+                _entryForm.ClinicalDiagnosis = suggested;
+            RefreshBridgeDraft();
+        }
+        else
+        {
+            _bridgeUnits = [];
+            _entryForm.BridgeUnits = [];
+            _entryForm.BridgeSpanId = null;
+        }
+    }
+
+    private string? BridgeDraftError =>
+        _entryForm.Condition != ToothCondition.Bridge || _bridgeUnits.Count == 0
+            ? null
+            : ToothBridgeRules.Validate(_bridgeUnits
+                .Select(u => new BridgeUnit(u.ToothNumber, (Clinic_System.Core.Enums.BridgeRole)(int)u.Role))
+                .ToList());
+
+    private bool IsChartAbsent(int tooth)
+    {
+        var entry = _chartEntries
+            .Where(x => x.ToothNumber == tooth && x.Surface == ToothSurface.WholeTooth)
+            .OrderByDescending(x => x.RecordedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        if (entry == null)
+            return false;
+        return ToothBridgeRules.IsAbsentCondition(
+            (Clinic_System.Core.Enums.ToothCondition)(int)entry.Condition,
+            entry.BridgeRole.HasValue ? (Clinic_System.Core.Enums.BridgeRole)(int)entry.BridgeRole.Value : null);
+    }
+
+    private void RefreshBridgeDraft()
+    {
+        if (_entryForm.Condition != ToothCondition.Bridge)
+        {
+            _bridgeUnits = [];
+            _entryForm.BridgeUnits = [];
+            _entryForm.BridgeSpanId = null;
+            return;
+        }
+
+        var inferred = ToothBridgeRules.InferRoles(_selectedTeeth, IsChartAbsent);
+        _bridgeUnits = inferred.Select(u => new BridgeUnitInput
+        {
+            ToothNumber = u.ToothNumber,
+            Role = (BridgeRole)(int)u.Role
+        }).ToList();
+        foreach (var tooth in inferred.Select(u => u.ToothNumber))
+        {
+            if (!_selectedTeeth.Contains(tooth))
+                _selectedTeeth.Add(tooth);
+        }
+    }
+
+    private void SetBridgeRole(int tooth, ChangeEventArgs e)
+    {
+        if (!Enum.TryParse<BridgeRole>(e.Value?.ToString(), out var role))
+            return;
+        var unit = _bridgeUnits.FirstOrDefault(u => u.ToothNumber == tooth);
+        if (unit != null)
+            unit.Role = role;
+    }
+
+    private IEnumerable<ToothCondition> VisibleConditions()
+    {
+        var whole = _findingScope == ToothFindingScope.WholeTooth;
+        return Enum.GetValues<ToothCondition>()
+            .Where(c =>
+            {
+                var core = (Clinic_System.Core.Enums.ToothCondition)(int)c;
+                return whole
+                    ? Clinic_System.Core.Validation.ToothFindingRules.AllowedOnWholeTooth(core)
+                    : Clinic_System.Core.Validation.ToothFindingRules.AllowedOnSurface(core);
+            });
+    }
+
+    private async Task SaveToothEntryAsync()
+    {
+        if (_selectedTeeth.Count == 0)
+        {
+            ShowNotice(error: "Seleccione una o más piezas antes de guardar.");
+            return;
+        }
+
+        _savingEntry = true;
+        ClearNotice();
+        _entryForm.PatientId = PatientId;
+        var selectedTeeth = _selectedTeeth.Distinct().ToList();
+        if (selectedTeeth.Count == 0 && _selectedTooth is int onlyTooth)
+            selectedTeeth.Add(onlyTooth);
+        _entryForm.ToothNumber = selectedTeeth.ElementAtOrDefault(0);
+        _entryForm.ToothNumbers = selectedTeeth;
+        _entryForm.Surface = _selectedSurface;
+        if (_findingScope == ToothFindingScope.WholeTooth)
+            _entryForm.Surface = ToothSurface.WholeTooth;
+        if (_entryForm.Condition == ToothCondition.Bridge)
+        {
+            var error = BridgeDraftError;
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                _savingEntry = false;
+                ShowNotice(error: error);
+                return;
+            }
+
+            _entryForm.Surface = ToothSurface.WholeTooth;
+            _entryForm.BridgeSpanId = Guid.NewGuid();
+            _entryForm.BridgeUnits = _bridgeUnits;
+            selectedTeeth = _bridgeUnits.Select(u => u.ToothNumber).Distinct().ToList();
+            _entryForm.ToothNumbers = selectedTeeth;
+        }
+        else
+        {
+            _entryForm.BridgeSpanId = null;
+            _entryForm.BridgeUnits = [];
+        }
+        if (!ToothClinicalLabels.ShowsMaterial(_entryForm.Condition))
+            _entryForm.RestorationMaterial = null;
+        if (!ToothClinicalLabels.ShowsCariesDetails(_entryForm.Condition))
+        {
+            _entryForm.CariesType = null;
+            _entryForm.Icdas = null;
+        }
+        if (_entryForm.Condition == ToothCondition.Healthy)
+        {
+            _entryForm.ClinicalDiagnosis = null;
+            _entryForm.ProposedTreatment = null;
+            _entryForm.Phase = ToothChartPhase.Diagnosis;
+        }
+
+        var result = await AuthService.WithTokenRetryAsync(
+            () => ToothChartService.SaveForTeethAsync(_entryForm, selectedTeeth),
+            AuthService.IsTokenError);
+        _savingEntry = false;
+        if (result.Error != null)
+        {
+            ShowNotice(error: result.Error);
+            return;
+        }
+
+        ShowNotice(success: result.Data > 1
+            ? $"Diagnóstico registrado en {result.Data} piezas."
+            : "Entrada clínica registrada.");
+        _entryForm = new CreateToothChartEntryRequest
+        {
+            PatientId = PatientId,
+            ToothNumber = _selectedTooth ?? _selectedTeeth[0],
+            Surface = _selectedSurface
+        };
+
+        await LoadToothChartAsync();
+        await LoadFullTimelineAsync();
+    }
+
+    private void ToggleCondition(int id, bool selected)
+    {
+        if (_history == null)
+            return;
+        if (selected && !_history.SelectedConditionIds.Contains(id))
+            _history.SelectedConditionIds.Add(id);
+        else if (!selected)
+            _history.SelectedConditionIds.Remove(id);
+    }
+
+    private async Task SavePersonalDataAsync()
+    {
+        if (_profile == null)
+            return;
+
+        _saving = true;
+        ClearNotice();
+        if (!ContactEmail.TryValidate(_profile.Email, out var email, out var emailError))
+        {
+            ShowNotice(error: emailError);
+            _saving = false;
+            return;
+        }
+        _profile.Email = email;
+        DateTime? dateOfBirth = TryGetBirthDate(out var parsedBirth) ? parsedBirth : null;
+        var (success, error) = await PatientService.UpdatePatientAsync(PatientId, new UpdatePatientRequest
+        {
+            Id = PatientId,
+            FullName = _profile.FullName,
+            Phone = _profile.Phone,
+            MobilePhone = _profile.MobilePhone,
+            NationalId = _profile.NationalId,
+            Email = _profile.Email,
+            Address = _profile.Address,
+            DateOfBirth = dateOfBirth,
+            Gender = _profile.Gender,
+            OptOutEmailCampaigns = _profile.OptOutEmailCampaigns
+        });
+        _saving = false;
+        if (!success)
+            ShowNotice(error: error);
+        else
+            ShowNotice(success: "Datos actualizados.");
+    }
+
+    private async Task SaveHistoryAsync()
+    {
+        if (_history == null)
+            return;
+
+        _history.PatientId = PatientId;
+        _saving = true;
+        ClearNotice();
+        var (success, error) = await PatientService.SaveDentalHistoryAsync(_history);
+        _saving = false;
+        if (!success)
+            ShowNotice(error: error);
+        else
+            ShowNotice(success: "Antecedentes guardados.");
+    }
+
+    private void AddPlanItem()
+    {
+        var procedure = _activeProcedures.FirstOrDefault(x => x.Id == _planProcedureId);
+        if (procedure == null)
+        {
+            ShowNotice(error: "Seleccione un procedimiento activo.");
+            return;
+        }
+
+        if (_planItemPrice < 0)
+        {
+            ShowNotice(error: "Indique el precio unitario del procedimiento.");
+            return;
+        }
+
+        _planForm.Items.Add(new CreateTreatmentPlanItemRequest
+        {
+            ProcedureName = procedure.Name,
+            TreatmentProcedureId = procedure.Id,
+            ToothNumber = _selectedTooth,
+            ToothSurface = _selectedTooth.HasValue ? _selectedSurface : null,
+            Quantity = Math.Max(1, _planItemQuantity),
+            UnitPrice = _planItemPrice,
+            Notes = _planItemNotes
+        });
+        _planProcedureId = 0;
+        _planItemQuantity = 1;
+        _planItemPrice = 0;
+        _planItemNotes = null;
+        ClearNotice();
+    }
+
+    private void RemovePlanItem(CreateTreatmentPlanItemRequest item) => _planForm.Items.Remove(item);
+
+    private async Task CreatePlanAsync()
+    {
+        _savingPlan = true;
+        ClearNotice();
+        _planForm.PatientId = PatientId;
+        var result = await PlanService.CreateAsync(_planForm);
+        _savingPlan = false;
+        if (!result.Success)
+        {
+            ShowNotice(error: result.Error);
+            return;
+        }
+
+        ShowNotice(success: "Plan de tratamiento creado.");
+        _planForm = new CreateTreatmentPlanRequest { PatientId = PatientId };
+        await RefreshClinicalDataAsync(includeChart: false);
+    }
+
+    private Task ApprovePlanAsync(int id) => ChangePlanStatusAsync(id, "approve");
+    private Task RejectPlanAsync(int id) => ChangePlanStatusAsync(id, "reject");
+    private Task CompletePlanAsync(int id) => ChangePlanStatusAsync(id, "complete");
+
+    private async Task ChangePlanStatusAsync(int id, string action)
+    {
+        _savingPlan = true;
+        ClearNotice();
+        (bool Success, string? Error) result = action switch
+        {
+            "approve" => await PlanService.ApproveAsync(id),
+            "reject" => await PlanService.RejectAsync(id, _planRejectionReason),
+            "complete" => await PlanService.CompleteAsync(id),
+            _ => (false, "Acción no válida.")
+        };
+        _savingPlan = false;
+        if (!result.Success)
+        {
+            ShowNotice(error: result.Error);
+            return;
+        }
+
+        ShowNotice(success: "Estado del plan actualizado.");
+        _planRejectionReason = null;
+        await RefreshClinicalDataAsync(includeChart: false);
+    }
+
+    private async Task CreateTreatmentAsync()
+    {
+        var procedure = _activeProcedures.FirstOrDefault(x => x.Id == _treatmentProcedureId);
+        if (procedure == null)
+        {
+            ShowNotice(error: "Seleccione un procedimiento activo.");
+            return;
+        }
+
+        _savingTreatment = true;
+        ClearNotice();
+        var result = await TreatmentService.CreateTreatmentAsync(new CreateDentalTreatmentRequest
+        {
+            PatientId = PatientId,
+            ProcedureName = procedure.Name,
+            TreatmentProcedureId = procedure.Id,
+            Cost = _treatmentCost,
+            ToothNumber = _selectedTooth,
+            ToothSurface = _selectedTooth.HasValue ? _selectedSurface : null,
+            ProcedureDetails = _treatmentDetails
+        });
+        _savingTreatment = false;
+        if (!result.Success)
+        {
+            ShowNotice(error: result.Error);
+            return;
+        }
+
+        ShowNotice(success: "Tratamiento creado.");
+        _treatmentProcedureId = 0;
+        _treatmentCost = 0;
+        _treatmentDetails = null;
+        await RefreshClinicalDataAsync(includeChart: false);
+    }
+
+    private async Task StartTreatmentAsync(int id)
+    {
+        _savingTreatment = true;
+        var result = await TreatmentService.StartTreatmentAsync(id);
+        _savingTreatment = false;
+        await FinishTreatmentOperationAsync(result, "Tratamiento iniciado.", false);
+    }
+
+    private async Task CancelTreatmentAsync(int id)
+    {
+        _savingTreatment = true;
+        var result = await TreatmentService.CancelTreatmentAsync(id, _treatmentCancellationReason);
+        _savingTreatment = false;
+        _treatmentCancellationReason = null;
+        await FinishTreatmentOperationAsync(result, "Tratamiento cancelado.", false);
+    }
+
+    private void OpenCompleteTreatment(DentalTreatmentListItem treatment)
+    {
+        _treatmentToComplete = treatment;
+        _completionResult = new DentalTreatmentClinicalResultRequest
+        {
+            Surface = treatment.ToothSurface ?? _selectedSurface,
+            Condition = ToothCondition.Healthy
+        };
+    }
+
+    private void CloseCompleteTreatment() => _treatmentToComplete = null;
+
+    private async Task CompleteTreatmentAsync()
+    {
+        if (_treatmentToComplete == null)
+            return;
+
+        _savingTreatment = true;
+        var result = await TreatmentService.CompleteTreatmentAsync(
+            _treatmentToComplete.Id,
+            new CompleteDentalTreatmentRequest { ClinicalResult = _completionResult });
+        _savingTreatment = false;
+        if (result.Success)
+            _treatmentToComplete = null;
+        await FinishTreatmentOperationAsync(result, "Tratamiento completado.", true);
+    }
+
+    private async Task FinishTreatmentOperationAsync(
+        (bool Success, string? Error) result, string message, bool includeChart)
+    {
+        if (!result.Success)
+        {
+            ShowNotice(error: result.Error);
+            return;
+        }
+
+        ShowNotice(success: message);
+        await RefreshClinicalDataAsync(includeChart);
+    }
+
+    private async Task RefreshClinicalDataAsync(bool includeChart)
+    {
+        await Task.WhenAll(LoadPlansAsync(), LoadTreatmentsAsync(), LoadFullTimelineAsync());
+        if (_selectedTooth.HasValue)
+            await SelectToothAsync(_selectedTooth.Value);
+        if (includeChart)
+            await LoadToothChartAsync();
+    }
+
+    private static string SurfaceLabel(ToothSurface surface) => OdontogramChart.SurfaceLabel(surface);
+
+    private string SurfaceLabelForSelected() =>
+        _selectedTooth.HasValue
+            ? OdontogramChart.SurfaceLabelFor(_selectedTooth.Value, _selectedSurface)
+            : SurfaceLabel(_selectedSurface);
+
+    private string SelectedTeethDescription =>
+        _selectedTeeth.Count == 0
+            ? "—"
+            : _selectedTeeth.Count == 1 && _selectedTooth.HasValue
+                ? Clinic_System.Core.Validation.FdiToothNumber.Describe(_selectedTooth.Value)
+                : $"{_selectedTeeth.Count} piezas seleccionadas";
+
+    private string OdontogramHistoryTitle =>
+        _odontogramHistoryAll || _selectedTeeth.Count == 0
+            ? "Historial de todas las piezas"
+            : _selectedTeeth.Count == 1
+                ? $"Historial de pieza {_selectedTooth}"
+                : $"Historial de {_selectedTeeth.Count} piezas";
+
+    private string OdontogramHistorySubtitle =>
+        _odontogramHistoryAll || _selectedTeeth.Count == 0
+            ? "Consulta general de hallazgos y evolución de toda la dentición."
+            : _selectedTeeth.Count == 1
+                ? "Evolución clínica de la pieza seleccionada."
+                : "Evolución clínica de las piezas seleccionadas.";
+
+    private List<DentalClinicalEvent> OdontogramHistoryEvents
+    {
+        get
+        {
+            if (_odontogramHistoryAll || _selectedTeeth.Count == 0)
+                return _fullTimeline;
+
+            return _fullTimeline
+                .Where(e => e.ToothNumber.HasValue && _selectedTeeth.Contains(e.ToothNumber.Value))
+                .ToList();
+        }
+    }
+
+    private void ShowAllTeethHistory() => _odontogramHistoryAll = true;
+
+    private async Task ShowSelectedTeethHistoryAsync()
+    {
+        if (_selectedTeeth.Count == 0)
+            return;
+
+        _odontogramHistoryAll = false;
+        if (_fullTimeline.Count == 0)
+            await LoadFullTimelineAsync();
+    }
+
+    private IEnumerable<RestorationMaterial> AllowedMaterials()
+    {
+        if (_selectedTeeth.Count == 0)
+            return [];
+
+        var condition = (Clinic_System.Core.Enums.ToothCondition)(int)_entryForm.Condition;
+        return Enum.GetValues<RestorationMaterial>()
+            .Where(material => _selectedTeeth.All(tooth =>
+                Clinic_System.Core.Validation.RestorationMaterialRules.IsAllowed(
+                    tooth,
+                    condition,
+                    (Clinic_System.Core.Enums.RestorationMaterial)(int)material)));
+    }
+
+    private static string ConditionLabel(ToothCondition condition) => ToothClinicalLabels.Condition(condition);
+
+    private static string PhaseLabel(ToothChartPhase phase) => ToothClinicalLabels.Phase(phase);
+
+    private static string SeverityLabel(ToothSeverity severity) => severity switch
+    {
+        ToothSeverity.Mild => "Leve",
+        ToothSeverity.Moderate => "Moderada",
+        ToothSeverity.Severe => "Severa",
+        _ => severity.ToString()
+    };
+
+    private static string TreatmentStatusLabel(string status) => status switch
+    {
+        "Planned" => "Planificado",
+        "InProgress" => "En progreso",
+        "Completed" => "Completado",
+        "Cancelled" => "Cancelado",
+        _ => status
+    };
+
+    private static string TreatmentStatusClass(string status) => status switch
+    {
+        "Planned" => "status-planned",
+        "InProgress" => "status-progress",
+        "Completed" => "status-completed",
+        "Cancelled" => "status-cancelled",
+        _ => string.Empty
+    };
+
+    private static string PlanStatusLabel(string status) => status switch
+    {
+        "Draft" => "Borrador",
+        "Approved" => "Aprobado",
+        "Rejected" => "Rechazado",
+        "Completed" => "Completado",
+        _ => status
+    };
+
+    private CancellationTokenSource? _noticeCts;
+
+    private void ClearNotice()
+    {
+        _saveError = null;
+        _saveMessage = null;
+        _noticeCts?.Cancel();
+        _noticeCts?.Dispose();
+        _noticeCts = null;
+    }
+
+    private void ShowNotice(string? success = null, string? error = null)
+    {
+        _saveMessage = success;
+        _saveError = error;
+        _noticeCts?.Cancel();
+        _noticeCts?.Dispose();
+        _noticeCts = new CancellationTokenSource();
+        var token = _noticeCts.Token;
+        _ = DismissNoticeLaterAsync(token);
+    }
+
+    private async Task DismissNoticeLaterAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(string.IsNullOrEmpty(_saveError) ? 4500 : 7000, token);
+            if (token.IsCancellationRequested)
+                return;
+            _saveMessage = null;
+            _saveError = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private static readonly CultureInfo EsCulture = CultureInfo.GetCultureInfo("es-DO");
+
+    private string BirthIsoValue =>
+        !string.IsNullOrWhiteSpace(_profile?.DateOfBirthIso)
+            ? _profile.DateOfBirthIso
+            : TryGetBirthDate(out var dob)
+                ? dob.ToString("yyyy-MM-dd")
+                : string.Empty;
+
+    private void OnBirthDateChanged(ChangeEventArgs e)
+    {
+        if (_profile == null || !TryParseBirth(e.Value?.ToString(), out var date))
+            return;
+
+        _profile.DateOfBirthIso = date.ToString("yyyy-MM-dd");
+        _profile.DateOfBirth = date.ToString("dd/MM/yyyy");
+    }
+
+    private bool TryGetBirthDate(out DateTime date) =>
+        TryParseBirth(_profile?.DateOfBirthIso, out date) || TryParseBirth(_profile?.DateOfBirth, out date);
+
+    private static bool TryParseBirth(string? value, out DateTime date)
+    {
+        date = default;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        string[] formats = ["yyyy-MM-dd", "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy"];
+        if (DateTime.TryParseExact(value.Trim(), formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
+            return true;
+
+        return DateTime.TryParse(value, EsCulture, DateTimeStyles.None, out date);
+    }
+
+    private static string FormatBirthLong(DateTime birthDate) =>
+        birthDate.ToString("d 'de' MMMM 'de' yyyy", EsCulture);
+
+    private static int? GetAgeYears(DateTime birthDate)
+    {
+        var today = DateTime.Today;
+        var age = today.Year - birthDate.Year;
+        if (birthDate.Date > today.AddYears(-age))
+            age--;
+        return age >= 0 ? age : null;
+    }
+
+    private static string NextBirthdayLabel(DateTime birthDate)
+    {
+        var today = DateTime.Today;
+        var day = Math.Min(birthDate.Day, DateTime.DaysInMonth(today.Year, birthDate.Month));
+        var next = new DateTime(today.Year, birthDate.Month, day);
+        if (next < today)
+        {
+            var nextYear = today.Year + 1;
+            day = Math.Min(birthDate.Day, DateTime.DaysInMonth(nextYear, birthDate.Month));
+            next = new DateTime(nextYear, birthDate.Month, day);
+        }
+
+        if (next == today)
+            return "Hoy es su cumpleaños";
+
+        var days = (next - today).Days;
+        if (days == 1)
+            return "Cumpleaños mañana";
+
+        return $"Cumpleaños en {days} días · {next.ToString("d MMM", EsCulture)}";
+    }
+
+    private static string GenderLabel(string gender) => gender switch
+    {
+        "Male" => "Masculino",
+        "Female" => "Femenino",
+        _ => string.IsNullOrWhiteSpace(gender) ? "Género no indicado" : gender
+    };
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{char.ToUpper(parts[0][0])}{char.ToUpper(parts[1][0])}";
+        return name.Length > 0 ? char.ToUpper(name[0]).ToString() : "?";
+    }
+
+    public void Dispose()
+    {
+        _noticeCts?.Cancel();
+        _noticeCts?.Dispose();
+    }
+}

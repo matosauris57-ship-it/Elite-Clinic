@@ -1,0 +1,302 @@
+@page "/configuracion/odontograma/simbologia"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Clinic_System.Core.Odontogram
+@inject OdontogramSymbolConfigService SymbolConfig
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Simbología del odontograma — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page symbol-config-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/configuracion/odontograma" class="back-link-inline">← Odontograma</a>
+            <h1>Configuración del odontograma</h1>
+            <p>Personaliza cómo se representan las condiciones clínicas. El diagnóstico guardado no cambia, solo la vista.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_saveMessage))
+    {
+        <div class="wizard-success">@_saveMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(_saveError))
+    {
+        <div class="wizard-error">@_saveError</div>
+    }
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando simbología..." />
+    }
+    else
+    {
+        <div class="symbol-config-layout">
+            <div class="symbol-config-table-wrap">
+                <h2 class="symbol-config-section-title">Condiciones</h2>
+                <div class="symbol-config-table" role="table" aria-label="Simbología de condiciones">
+                    <div class="symbol-config-row is-head" role="row">
+                        <span>Condición</span>
+                        <span>Forma</span>
+                        <span>Color</span>
+                        <span>Vista</span>
+                    </div>
+                    @foreach (var row in _form.Conditions)
+                    {
+                        <button type="button"
+                                class="symbol-config-row @(_selectedCondition == row.Condition ? "is-active" : "")"
+                                role="row"
+                                @onclick="() => SelectCondition(row.Condition)">
+                            <span>@OdontogramSymbolDefaults.ConditionLabel(row.Condition)</span>
+                            <span>@OdontogramSymbolDefaults.ShapeLabel(row.Shape)</span>
+                            <span class="symbol-color-cell">
+                                <i class="symbol-color-swatch" style="background: @row.Color"></i>
+                                @row.Color
+                            </span>
+                            <span class="symbol-mini-preview">
+                                <OdontogramSymbolGlyph Symbol="row" />
+                            </span>
+                        </button>
+                    }
+                </div>
+
+                <h2 class="symbol-config-section-title">Fases</h2>
+                <p class="billing-muted">La fase indica el estado del hallazgo (diagnóstico, planificado, en tratamiento o completado), no la condición.</p>
+                <div class="symbol-phase-grid">
+                    @foreach (var phase in _form.Phases)
+                    {
+                        <label class="symbol-phase-card">
+                            <span>@OdontogramSymbolDefaults.PhaseLabel(phase.Phase)</span>
+                            <span class="symbol-color-field">
+                                <input type="color" disabled="@(!_canEdit || _saving)" value="@phase.Color" @onchange="e => SetPhaseColor(phase, e.Value?.ToString())" />
+                                <input class="form-input" disabled="@(!_canEdit || _saving)" value="@phase.Color" maxlength="7" @onchange="e => SetPhaseColor(phase, e.Value?.ToString())" />
+                            </span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <aside class="symbol-editor-card">
+                @if (SelectedRow != null)
+                {
+                    <span class="eyebrow">Vista previa en tiempo real</span>
+                    <h2>@OdontogramSymbolDefaults.ConditionLabel(SelectedRow.Condition)</h2>
+                    <OdontogramSymbolPreview Symbol="SelectedRow" Caption="Así se verá en el odontograma" />
+
+                    <div class="form-group">
+                        <label>Forma</label>
+                        <select class="form-input" disabled="@(!_canEdit || _saving)" @bind="SelectedRow.Shape" @bind:event="onchange">
+                            @foreach (var shape in OdontogramSymbolShapes.All)
+                            {
+                                <option value="@shape">@OdontogramSymbolDefaults.ShapeLabel(shape)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Color</label>
+                        <div class="symbol-color-field">
+                            <input type="color" disabled="@(!_canEdit || _saving)" value="@SelectedRow.Color" @onchange="e => SetConditionColor(SelectedRow, e.Value?.ToString())" />
+                            <input class="form-input" disabled="@(!_canEdit || _saving)" value="@SelectedRow.Color" maxlength="7" @onchange="e => SetConditionColor(SelectedRow, e.Value?.ToString())" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Estilo</label>
+                        <select class="form-input" disabled="@(!_canEdit || _saving)" @bind="SelectedRow.Style" @bind:event="onchange">
+                            @foreach (var style in OdontogramSymbolStyles.All)
+                            {
+                                <option value="@style">@OdontogramSymbolDefaults.StyleLabel(style)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Grosor (@SelectedRow.StrokeWidth.ToString("0.#") px)</label>
+                            <input type="range" min="0.5" max="6" step="0.1" disabled="@(!_canEdit || _saving)" @bind="SelectedRow.StrokeWidth" @bind:event="oninput" />
+                        </div>
+                        <div class="form-group">
+                            <label>Opacidad (@((int)(SelectedRow.Opacity * 100)) %)</label>
+                            <input type="range" min="0.1" max="1" step="0.05" disabled="@(!_canEdit || _saving)" @bind="SelectedRow.Opacity" @bind:event="oninput" />
+                        </div>
+                    </div>
+                }
+            </aside>
+        </div>
+
+        @if (_form.UpdatedAt.HasValue)
+        {
+            <p class="billing-muted symbol-config-meta">
+                Última modificación: @_form.UpdatedAt.Value.ToLocalTime().ToString("g")
+                @if (!string.IsNullOrWhiteSpace(_form.UpdatedBy))
+                {
+                    <span> · @_form.UpdatedBy</span>
+                }
+            </p>
+        }
+
+        @if (_form.History.Count > 0)
+        {
+            <details class="symbol-history">
+                <summary>Historial de cambios de simbología</summary>
+                <ul>
+                    @foreach (var item in _form.History.Take(12))
+                    {
+                        <li>
+                            <strong>@item.At.ToLocalTime().ToString("g")</strong>
+                            · @item.User
+                            · @(item.Action == "restore" ? "Restauró valores predeterminados" : "Guardó la configuración")
+                        </li>
+                    }
+                </ul>
+            </details>
+        }
+
+        <div class="symbol-config-actions">
+            <button type="button" class="btn-primary" disabled="@(!_canEdit || _saving)" @onclick="SaveAsync">
+                @(_saving ? "Guardando..." : "Guardar configuración")
+            </button>
+            <button type="button" class="btn-outline" disabled="@(!_canEdit || _saving)" @onclick="() => _showRestore = true">
+                Restaurar valores predeterminados
+            </button>
+        </div>
+    }
+</div>
+
+@if (_showRestore)
+{
+    <div class="modal-overlay" @onclick="() => _showRestore = false">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header"><h2>Restaurar simbología</h2></div>
+            <p class="modal-confirm-text">¿Está seguro de restaurar la simbología predeterminada?</p>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="() => _showRestore = false">Cancelar</button>
+                <button class="btn-danger" disabled="@_saving" @onclick="RestoreAsync">Restaurar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private OdontogramSymbolConfigDocument _form = OdontogramSymbolDefaults.Create();
+    private Clinic_System.Core.Enums.ToothCondition _selectedCondition = Clinic_System.Core.Enums.ToothCondition.Caries;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _canEdit;
+    private bool _showRestore;
+    private string? _saveMessage;
+    private string? _saveError;
+
+    private OdontogramConditionSymbol? SelectedRow =>
+        _form.Conditions.FirstOrDefault(x => x.Condition == _selectedCondition);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canEdit = PermissionService.HasPermission(user, "configuracion.view");
+
+        var (config, error) = await SymbolConfig.GetAsync(forceRefresh: true);
+        _form = Clone(config);
+        _saveError = error;
+        _loading = false;
+    }
+
+    private void SelectCondition(Clinic_System.Core.Enums.ToothCondition condition)
+    {
+        _selectedCondition = condition;
+        _saveMessage = null;
+    }
+
+    private void SetConditionColor(OdontogramConditionSymbol row, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+        if (!OdontogramSymbolColor.IsValid(value))
+        {
+            _saveError = "Ingrese un color hexadecimal válido, por ejemplo #FF0000.";
+            return;
+        }
+
+        _saveError = null;
+        row.Color = OdontogramSymbolColor.Normalize(value);
+    }
+
+    private void SetPhaseColor(OdontogramPhaseSymbol row, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+        if (!OdontogramSymbolColor.IsValid(value))
+        {
+            _saveError = "Ingrese un color hexadecimal válido, por ejemplo #FF0000.";
+            return;
+        }
+
+        _saveError = null;
+        row.Color = OdontogramSymbolColor.Normalize(value);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_canEdit)
+            return;
+
+        _saving = true;
+        _saveError = null;
+        _saveMessage = null;
+        var error = OdontogramSymbolDefaults.Validate(_form);
+        if (error != null)
+        {
+            _saveError = error;
+            _saving = false;
+            return;
+        }
+
+        var (saved, saveError) = await SymbolConfig.SaveAsync(_form);
+        if (saved != null)
+        {
+            _form = Clone(saved);
+            _saveMessage = "Simbología guardada. El odontograma usará estos símbolos de inmediato.";
+        }
+        else
+        {
+            _saveError = saveError;
+        }
+
+        _saving = false;
+    }
+
+    private async Task RestoreAsync()
+    {
+        _showRestore = false;
+        if (!_canEdit)
+            return;
+
+        _saving = true;
+        _saveError = null;
+        _saveMessage = null;
+        var (restored, error) = await SymbolConfig.RestoreAsync();
+        if (restored != null)
+        {
+            _form = Clone(restored);
+            _saveMessage = "Se restauró la simbología predeterminada.";
+        }
+        else
+        {
+            _saveError = error;
+        }
+
+        _saving = false;
+    }
+
+    private static OdontogramSymbolConfigDocument Clone(OdontogramSymbolConfigDocument source)
+    {
+        var merged = OdontogramSymbolDefaults.Merge(source);
+        merged.History = source.History.Select(x => new OdontogramSymbolConfigChange
+        {
+            At = x.At,
+            User = x.User,
+            ClinicKey = x.ClinicKey,
+            Action = x.Action
+        }).ToList();
+        return merged;
+    }
+}

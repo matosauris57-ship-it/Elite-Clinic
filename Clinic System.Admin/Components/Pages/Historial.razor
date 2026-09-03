@@ -1,0 +1,98 @@
+@page "/historial"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "historial.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject PatientMaintenanceService PatientService
+@inject AuthService AuthService
+
+<PageTitle>Historial clínico — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page history-index-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Historial clínico</h1>
+            <p>Acceso al historial odontológico por paciente</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <ErrorBanner Message="@_loadError" OnRetry="ReloadAsync" />
+    }
+
+    <div class="maintenance-toolbar">
+        <div class="search-field maintenance-search">
+            <Icon Name="search" Class="field-icon" />
+            <input type="search"
+                   placeholder="Buscar por nombre, cédula o teléfono..."
+                   aria-label="Buscar paciente"
+                   @bind="_search"
+                   @bind:event="oninput" />
+        </div>
+        <span class="maintenance-count">@FilteredPatients.Count() paciente(s)</span>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando pacientes..." />
+    }
+    else if (!FilteredPatients.Any() && string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="maintenance-empty"><p>No hay pacientes que coincidan con la búsqueda.</p></div>
+    }
+    else
+    {
+        <div class="history-patient-grid">
+            @foreach (var patient in FilteredPatients)
+            {
+                <article class="history-patient-card">
+                    <div class="history-patient-avatar" aria-hidden="true">@GetInitials(patient.FullName)</div>
+                    <div>
+                        <h2>@patient.FullName</h2>
+                        <p>@(patient.NationalId ?? "Sin cédula") · @patient.Phone</p>
+                    </div>
+                    <a class="btn-outline" href="/pacientes/@patient.Id?tab=historial">Ver historial</a>
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<PatientListItem> _patients = [];
+    private string _search = string.Empty;
+    private bool _loading = true;
+    private string? _loadError;
+
+    private IEnumerable<PatientListItem> FilteredPatients =>
+        _patients.Where(x => x.IsActive && (
+            string.IsNullOrWhiteSpace(_search) ||
+            x.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+            (x.NationalId?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            x.Phone.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+            (x.MobilePhone?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)));
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PatientService.GetPatientsAsync(includeInactive: false);
+                return (response.Patients, response.Error);
+            },
+            AuthService.IsTokenError);
+
+        _patients = result.Data;
+        _loadError = result.Error;
+        _loading = false;
+    }
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(parts.Take(2).Select(x => char.ToUpperInvariant(x[0])));
+    }
+}

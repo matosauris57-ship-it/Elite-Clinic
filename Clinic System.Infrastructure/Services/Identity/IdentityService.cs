@@ -103,6 +103,22 @@ namespace Clinic_System.Infrastructure.Services
             return result.Succeeded;
         }
 
+        public async Task<bool> RestoreUserAsync(string userId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return false;
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null || !user.IsDeleted)
+                return false;
+
+            user.IsDeleted = false;
+            user.DeletedAt = null;
+
+            var result = await _userManager.UpdateAsync(user);
+            return result.Succeeded;
+        }
+
         public async Task<bool> HardDeleteUserAsync(string userId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(userId))
@@ -138,6 +154,28 @@ namespace Clinic_System.Infrastructure.Services
 
             var user = await _userManager.FindByIdAsync(userId);
             return user?.UserName;
+        }
+
+        public async Task<IReadOnlyDictionary<string, string>> GetUserDisplayNamesAsync(
+            IEnumerable<string> userIds,
+            CancellationToken cancellationToken = default)
+        {
+            var names = new Dictionary<string, string>(StringComparer.Ordinal);
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var userId in userIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct())
+            {
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    continue;
+
+                var display = !string.IsNullOrWhiteSpace(user.UserName)
+                    ? user.UserName
+                    : user.Email;
+                if (!string.IsNullOrWhiteSpace(display))
+                    names[userId] = display;
+            }
+
+            return names;
         }
 
         public async Task<(bool IsAuthenticated, bool IsEmailConfirmed, string Id, string UserName, string Email, List<string> Roles)> LoginAsync(string userNameOrEmail, string password)
@@ -219,8 +257,8 @@ namespace Clinic_System.Infrastructure.Services
                 return (true, null); 
             }
 
-            // áæ ÝÔá¡ ÌãÚ ßá ÇáÃÎØÇÁ Ýí ÑÓÇáÉ æÇÍÏÉ
-            // ãËáÇð: "Password requires non-alphanumeric, Password requires digit"
+            // ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
+            // ï¿½ï¿½ï¿½ï¿½ï¿½: "Password requires non-alphanumeric, Password requires digit"
             var errors = string.Join(", ", result.Errors.Select(e => e.Description));
 
             return (false, errors);
@@ -236,7 +274,7 @@ namespace Clinic_System.Infrastructure.Services
             if (user.EmailConfirmed)
                 return (null, null, null, null, "Email is already confirmed.");
 
-            // ÊæáíÏ Êæßä ÌÏíÏ
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
             var roles = await _userManager.GetRolesAsync(user);
@@ -341,11 +379,11 @@ namespace Clinic_System.Infrastructure.Services
         {
             var user = await _userManager.FindByEmailAsync(email);
 
-            // áæ ÇáíæÒÑ ãÔ ãæÌæÏ
+            // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
             if (user == null)
                 return (false, string.Empty, string.Empty, new List<string>());
 
-            // áæ ãæÌæÏ¡ äÌíÈ ÇáÕáÇÍíÇÊ ÈÊÇÚÊå
+            // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ï¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             var roles = await _userManager.GetRolesAsync(user);
 
             return (true, user.Id, user.UserName ?? string.Empty, roles.ToList());

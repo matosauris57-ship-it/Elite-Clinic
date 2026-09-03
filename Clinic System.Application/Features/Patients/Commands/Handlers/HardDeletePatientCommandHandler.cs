@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Patients.Commands.Handlers
+namespace Clinic_System.Application.Features.Patients.Commands.Handlers
 {
     public class HardDeletePatientCommandHandler : ResponseHandler, IRequestHandler<HardDeletePatientCommand, Response<string>>
     {
@@ -40,12 +40,15 @@
                         return BadRequest<string>("Failed to Deleted Patient");
                     }
 
-                    var IsDeletedUser = await identityService.HardDeleteUserAsync(doctor.ApplicationUserId, cancellationToken);
-
-                    if (!IsDeletedUser)
+                    if (!string.IsNullOrEmpty(doctor.ApplicationUserId))
                     {
-                        logger.LogError("Failed to hard delete associated user for Patient with Id {PatientId}", request.Id);
-                        return BadRequest<string>("Failed to Deleted associated user");
+                        var IsDeletedUser = await identityService.HardDeleteUserAsync(doctor.ApplicationUserId, cancellationToken);
+
+                        if (!IsDeletedUser)
+                        {
+                            logger.LogError("Failed to hard delete associated user for Patient with Id {PatientId}", request.Id);
+                            return BadRequest<string>("Failed to Deleted associated user");
+                        }
                     }
 
                     transaction.Complete();

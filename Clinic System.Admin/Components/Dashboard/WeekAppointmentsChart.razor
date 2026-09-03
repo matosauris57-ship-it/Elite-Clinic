@@ -1,0 +1,39 @@
+<div class="widget finance-widget">
+    <div class="widget-head">
+        <div>
+            <h3>Citas de la semana</h3>
+            <p class="dash-panel-sub">Distribución real de la semana en curso</p>
+        </div>
+    </div>
+    @if (Counts.Count == 0 || Counts.All(c => c == 0))
+    {
+        <div class="dash-empty">
+            <Icon Name="bar-chart-2" Class="dash-empty-icon" />
+            <p>No hay citas registradas esta semana.</p>
+        </div>
+    }
+    else
+    {
+        <div class="week-bars">
+            @{
+                var max = Math.Max(1, Counts.DefaultIfEmpty(0).Max());
+            }
+            @for (var i = 0; i < Counts.Count; i++)
+            {
+                var height = Counts[i] * 100.0 / max;
+                <div class="week-bar-col">
+                    <div class="week-bar-track">
+                        <div class="week-bar-fill" style="height: @height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                    </div>
+                    <span class="week-bar-value">@Counts[i]</span>
+                    <span class="week-bar-label">@(i < Labels.Count ? Labels[i] : "")</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<int> Counts { get; set; } = [];
+    [Parameter] public List<string> Labels { get; set; } = [];
+}

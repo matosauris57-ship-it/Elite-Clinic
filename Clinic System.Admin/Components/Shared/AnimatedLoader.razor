@@ -1,0 +1,62 @@
+@inject LoadingMediaCatalog Catalog
+@inject IJSRuntime JS
+
+<div class="animated-loader @(Compact ? "is-compact" : null) @(Overlay ? "is-overlay" : null)"
+     role="status"
+     aria-live="polite"
+     aria-label="@(string.IsNullOrWhiteSpace(Message) ? "Cargando" : Message)">
+    @if (_item is not null)
+    {
+        @if (_item.IsVideo)
+        {
+            <video @ref="_video"
+                   class="animated-loader-media"
+                   autoplay="autoplay"
+                   muted="muted"
+                   loop="loop"
+                   playsinline="playsinline"
+                   preload="auto">
+                <source src="@_item.Url" type="@_item.MimeType" />
+            </video>
+        }
+        else
+        {
+            <img class="animated-loader-media" src="@_item.Url" alt="" />
+        }
+    }
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <p class="animated-loader-message">@Message</p>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public bool Overlay { get; set; }
+
+    private LoadingMediaItem? _item;
+    private ElementReference _video;
+
+    protected override void OnInitialized()
+    {
+        _item = Catalog.PickRandom();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _item is not { IsVideo: true })
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareLoader.play", _video);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+}

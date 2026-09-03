@@ -1,0 +1,45 @@
+<section class="periodontal-history" aria-labelledby="perio-history-heading">
+    <h3 id="perio-history-heading">Historial de evaluaciones</h3>
+    @if (Exams.Count == 0)
+    {
+        <p>No hay evaluaciones periodontales registradas.</p>
+    }
+    else
+    {
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Odontólogo</th>
+                        <th>BOP</th>
+                        <th>≥5 mm</th>
+                        <th>Estado</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var exam in Exams)
+                    {
+                        <tr class="@(exam.Id == SelectedExamId ? "is-selected-row" : null)">
+                            <td>@exam.ExaminedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@(exam.DoctorName ?? "—")</td>
+                            <td>@(exam.BleedingPercent?.ToString("0.0") is { } bop ? $"{bop}%" : "—")</td>
+                            <td>@exam.SitesDeepGe5</td>
+                            <td>@(exam.IsLatest ? "Actual (editable)" : "Consulta")</td>
+                            <td>
+                                <button type="button" class="btn-table" @onclick="() => OpenExam.InvokeAsync(exam.Id)">Abrir</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<PeriodontalExamSummary> Exams { get; set; } = [];
+    [Parameter] public int? SelectedExamId { get; set; }
+    [Parameter] public EventCallback<int> OpenExam { get; set; }
+}

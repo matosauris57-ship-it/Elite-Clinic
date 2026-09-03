@@ -1,0 +1,58 @@
+@using System.Globalization
+<div class="widget dash-panel">
+    <div class="widget-head">
+        <div>
+            <h3>Cobros del día</h3>
+            <p class="dash-panel-sub">Total @FormatMoney(Total)</p>
+        </div>
+        <a class="widget-pill dash-link-pill" href="/facturacion">Facturación</a>
+    </div>
+
+    @if (Restricted)
+    {
+        <div class="dash-empty">
+            <Icon Name="dollar-sign" Class="dash-empty-icon" />
+            <p>No tienes permiso para ver cobros.</p>
+        </div>
+    }
+    else if (Items.Count == 0)
+    {
+        <div class="dash-empty">
+            <Icon Name="dollar-sign" Class="dash-empty-icon" />
+            <p>Aún no hay cobros registrados hoy.</p>
+        </div>
+    }
+    else
+    {
+        <div class="dash-list">
+            @foreach (var item in Items)
+            {
+                <a class="dash-row" href="/facturacion">
+                    <span class="dash-row-main">
+                        <strong>@item.PatientName</strong>
+                        <span>@FormatMethod(item.PaymentMethod)</span>
+                    </span>
+                    <span class="dash-amount">@FormatMoney(item.AmountCollected > 0 ? item.AmountCollected : item.Amount)</span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo EsDo = CultureInfo.GetCultureInfo("es-DO");
+
+    [Parameter] public List<PaymentListItem> Items { get; set; } = [];
+    [Parameter] public decimal Total { get; set; }
+    [Parameter] public bool Restricted { get; set; }
+
+    private static string FormatMoney(decimal amount) => amount.ToString("C0", EsDo);
+
+    private static string FormatMethod(string method) => method switch
+    {
+        "Cash" => "Efectivo",
+        "Card" => "Tarjeta",
+        "InstaPay" => "InstaPay",
+        _ => string.IsNullOrWhiteSpace(method) ? "—" : method
+    };
+}

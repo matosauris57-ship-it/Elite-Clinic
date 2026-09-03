@@ -16,6 +16,66 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 .ToListAsync(cancellationToken);
         }
 
+        public async Task<(List<Appointment> Items, int TotalCount)> GetAgendaForAdminAsync(
+            DateTime? date,
+            int? doctorId,
+            AppointmentStatus? status,
+            DateTime? endDate = null,
+            int pageNumber = 1,
+            int pageSize = 0,
+            string? search = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = context.Appointments.AsNoTracking();
+
+            if (date.HasValue)
+            {
+                var start = date.Value.Date;
+                var endExclusive = (endDate ?? date.Value).Date.AddDays(1);
+                query = query.Where(a => a.AppointmentDate >= start && a.AppointmentDate < endExclusive);
+            }
+            else if (endDate.HasValue)
+            {
+                var endExclusive = endDate.Value.Date.AddDays(1);
+                query = query.Where(a => a.AppointmentDate < endExclusive);
+            }
+
+            if (doctorId.HasValue)
+                query = query.Where(a => a.DoctorId == doctorId.Value);
+
+            if (status.HasValue)
+                query = query.Where(a => a.Status == status.Value);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                query = query.Where(a =>
+                    a.Patient.FullName.Contains(term) ||
+                    a.Doctor.FullName.Contains(term) ||
+                    a.Patient.Phone.Contains(term));
+            }
+
+            var totalCount = await query.CountAsync(cancellationToken);
+
+            query = query
+                .OrderBy(a => a.AppointmentDate)
+                .Include(a => a.Doctor)
+                .Include(a => a.Patient);
+
+            if (pageSize > 0)
+            {
+                if (pageNumber < 1)
+                    pageNumber = 1;
+
+                query = query
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize);
+            }
+
+            var items = await query.ToListAsync(cancellationToken);
+            return (items, totalCount);
+        }
+
         public async Task<IEnumerable<Appointment>> GetBookedAppointmentsAsync(int doctorId, DateTime date, CancellationToken cancellationToken = default)
         {
             return await context.Appointments
@@ -200,10 +260,15 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<Dictionary<AppointmentStatus, int>> GetAppointmentsCountByStatusAsync(DateTime start, DateTime end, CancellationToken cancellationToken = default)
+        public async Task<Dictionary<AppointmentStatus, int>> GetAppointmentsCountByStatusAsync(DateTime? start, DateTime? end, CancellationToken cancellationToken = default)
         {
-            var query = context.Appointments
-                .Where(a => a.AppointmentDate >= start && a.AppointmentDate <= end);
+            var query = context.Appointments.AsQueryable();
+
+            if (start.HasValue)
+                query = query.Where(a => a.AppointmentDate >= start.Value);
+
+            if (end.HasValue)
+                query = query.Where(a => a.AppointmentDate <= end.Value);
 
             // نرجع Count لكل حالة على شكل Dictionary
             var result = await query
@@ -212,6 +277,19 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 .ToDictionaryAsync(x => x.Status, x => x.Count, cancellationToken);
 
             return result;
+        }
+
+        public async Task<List<Appointment>> GetForAutomaticRemindersAsync(DateTime fromInclusive, DateTime toExclusive, CancellationToken cancellationToken = default)
+        {
+            return await context.Appointments
+                .Include(a => a.Patient)
+                .Include(a => a.Doctor)
+                .Where(a => a.AppointmentDate >= fromInclusive
+                    && a.AppointmentDate < toExclusive
+                    && (a.Status == AppointmentStatus.Pending
+                        || a.Status == AppointmentStatus.Confirmed
+                        || a.Status == AppointmentStatus.Rescheduled))
+                .ToListAsync(cancellationToken);
         }
     }
 }

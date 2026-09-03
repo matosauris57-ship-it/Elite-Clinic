@@ -14,77 +14,79 @@
 
         protected int? CurrentDoctorId => _currentUserService.DoctorId;
         protected int? CurrentPatientId => _currentUserService.PatientId;
+        protected bool IsAdmin => _currentUserService.IsAdmin;
 
-        protected async Task<Response<TResponse>> ValidateDoctorAccess(int targetDoctorId)
+        protected Task<Response<TResponse>?> ValidateDoctorAccess(int targetDoctorId)
         {
-            var roles = await _currentUserService.GetCurrentUserRolesAsync();
-            if (roles.Contains("Admin")) return null;
+            if (IsAdmin)
+                return Task.FromResult<Response<TResponse>?>(null);
 
-            // لو أنا مش دكتور أصلاً، أو لو أنا دكتور بس مش هو ده رقمي
-            if (CurrentDoctorId != targetDoctorId)
-            {
-                return Unauthorized<TResponse>("Access denied. You can only view your own data.");
-            }
-            return null;
+            if (CurrentDoctorId == targetDoctorId)
+                return Task.FromResult<Response<TResponse>?>(null);
+
+            return Task.FromResult<Response<TResponse>?>(
+                Unauthorized<TResponse>("Acceso denegado. Solo puede consultar sus propios datos."));
         }
 
-        protected async Task<Response<TResponse>> ValidatePatientAccess(int targetPatientId)
+        protected Task<Response<TResponse>?> ValidatePatientAccess(int targetPatientId)
         {
-            var roles = await _currentUserService.GetCurrentUserRolesAsync();
-            if (roles.Contains("Admin")) return null;
+            if (IsAdmin)
+                return Task.FromResult<Response<TResponse>?>(null);
 
-            // لو أنا مش دكتور أصلاً، أو لو أنا دكتور بس مش هو ده رقمي
-            if (CurrentPatientId != targetPatientId)
-            {
-                return Unauthorized<TResponse>("Access denied. You can only view your own data.");
-            }
-            return null;
+            if (CurrentPatientId == targetPatientId)
+                return Task.FromResult<Response<TResponse>?>(null);
+
+            return Task.FromResult<Response<TResponse>?>(
+                Unauthorized<TResponse>("Acceso denegado. Solo puede consultar sus propios datos."));
         }
 
-        protected async Task<(int TargetId, Response<TResponse>? Error)> GetAuthorizedDoctorId(int? requestDoctorId)
+        protected Task<(int TargetId, Response<TResponse>? Error)> GetAuthorizedDoctorId(int? requestDoctorId)
         {
-            var roles = await _currentUserService.GetCurrentUserRolesAsync();
-            if (roles.Contains("Admin"))
+            if (IsAdmin)
             {
-                if (requestDoctorId == null || requestDoctorId == 0)
-                {
-                    return (0, BadRequest<TResponse>("DoctorId is required for Admin users."));
-                }
+                if (requestDoctorId is null or 0)
+                    return Task.FromResult<(int, Response<TResponse>?)>(
+                        (0, BadRequest<TResponse>("Debe indicar el médico.")));
 
-                return (requestDoctorId.Value, null); // error
+                return Task.FromResult<(int, Response<TResponse>?)>((requestDoctorId.Value, null));
             }
 
             if (CurrentDoctorId.HasValue)
-            {
-                return (CurrentDoctorId.Value, null);
-            }
+                return Task.FromResult<(int, Response<TResponse>?)>((CurrentDoctorId.Value, null));
 
-            // 3. لو ولا ده ولا ده: رجع Error
-            return (0, Unauthorized<TResponse>("Access denied. Only Doctors or Admins can view this data."));
+            return Task.FromResult<(int, Response<TResponse>?)>(
+                (0, Unauthorized<TResponse>("Acceso denegado. No tiene permiso para consultar datos de médicos.")));
         }
 
-        protected async Task<(int TargetId, Response<TResponse>? Error)> GetAuthorizedPatientId(int? requestPatientId)
+        protected Task<(int TargetId, Response<TResponse>? Error)> GetAuthorizedPatientId(
+            int? requestPatientId,
+            string? staffPermission = null)
         {
-            // 1. لو دكتور: تجاهل الريكويست وخد الـ ID من التوكن
+            var canActForAnotherPatient =
+                IsAdmin ||
+                (!string.IsNullOrWhiteSpace(staffPermission) &&
+                 _currentUserService.HasPermission(staffPermission));
+
+            if (canActForAnotherPatient)
+            {
+                if (requestPatientId is null or 0)
+                    return Task.FromResult<(int, Response<TResponse>?)>(
+                        (0, BadRequest<TResponse>("Debe indicar el paciente.")));
+
+                return Task.FromResult<(int, Response<TResponse>?)>((requestPatientId.Value, null));
+            }
+
             if (CurrentPatientId.HasValue)
             {
-                return (CurrentPatientId.Value, null);
+                if (requestPatientId is > 0 && requestPatientId != CurrentPatientId)
+                    return Task.FromResult<(int, Response<TResponse>?)>(
+                        (0, Unauthorized<TResponse>("Acceso denegado. Solo puede acceder a sus propios datos.")));
+
+                return Task.FromResult<(int, Response<TResponse>?)>((CurrentPatientId.Value, null));
             }
 
-            // 2. لو مش دكتور: اتأكد إنه أدمن
-            var roles = await _currentUserService.GetCurrentUserRolesAsync();
-            if (roles.Contains("Admin"))
-            {
-                if (requestPatientId == null || requestPatientId == 0)
-                {
-                    return (0, BadRequest<TResponse>("PatientId is required for Admin users."));
-                }
-
-                return (requestPatientId.Value, null);
-            }
-
-            // 3. لو ولا ده ولا ده: رجع Error
-            return (0, Unauthorized<TResponse>("Access denied. Only Patients or Admins can view this data."));
+            return Task.FromResult<(int, Response<TResponse>?)>(
+                (0, Unauthorized<TResponse>("Acceso denegado. No tiene permiso para agendar o consultar este paciente.")));
         }
 
         public abstract Task<Response<TResponse>> Handle(TRequest request, CancellationToken cancellationToken);

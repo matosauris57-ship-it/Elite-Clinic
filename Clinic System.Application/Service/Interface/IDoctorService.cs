@@ -3,6 +3,7 @@
     public interface IDoctorService
     {
         Task<List<Doctor?>> GetDoctorsListAsync(CancellationToken cancellationToken = default);
+        Task<List<Doctor?>> GetDoctorsListForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default);
         Task<PagedResult<Doctor?>> GetDoctorsListPagingAsync(int pageNumber, int pageSize, CancellationToken cancellationToken = default);
         Task<List<Doctor?>> GetDoctorsListBySpecializationAsync(string Specialization, CancellationToken cancellationToken = default);
         Task<Doctor?> GetDoctorWithAppointmentsByIdAsync(int id, CancellationToken cancellationToken = default);
@@ -11,7 +12,9 @@
         Task CreateDoctorAsync(Doctor doctor, CancellationToken cancellationToken = default);
         Task UpdateDoctor(Doctor doctor, CancellationToken cancellationToken = default);
         Task SoftDeleteDoctor(Doctor doctor,  CancellationToken cancellationToken = default);
+        Task RestoreDoctor(Doctor doctor, CancellationToken cancellationToken = default);
         Task HardDeleteDoctor(Doctor doctor, CancellationToken cancellationToken = default);
+        Task<Doctor?> GetDoctorByIdIncludingDeletedAsync(int id, CancellationToken cancellationToken = default);
 
         Task<string?> GetDoctorUserIdAsync(int doctorId, CancellationToken cancellationToken = default);
         Task<Doctor?> GetDoctorByUserIdAsync(string userId, CancellationToken cancellationToken = default);

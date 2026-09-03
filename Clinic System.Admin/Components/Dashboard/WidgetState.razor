@@ -1,0 +1,21 @@
+<div class="widget dash-panel">
+    @if (string.IsNullOrWhiteSpace(Message))
+    {
+        <AnimatedLoader Compact="true" Message="Cargando datos..." />
+    }
+    else
+    {
+        <div class="dash-empty">
+            <p>@Message</p>
+            @if (Retry.HasDelegate)
+            {
+                <button type="button" class="btn-outline btn-retry" @onclick="Retry">Reintentar</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public EventCallback Retry { get; set; }
+}

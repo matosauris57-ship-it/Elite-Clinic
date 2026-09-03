@@ -67,7 +67,36 @@ namespace Clinic_System.Data.Configurations
                 .IsRequired()
                 .HasMaxLength(20)
                 .HasColumnName("PhoneNumber");
-            // HasColumnName: اسم العمود في Database يكون "PhoneNumber" (أكثر وضوحاً)
+
+            builder.Property(p => p.NationalId)
+                .HasMaxLength(20)
+                .HasColumnName("NationalId");
+
+            builder.HasIndex(p => p.NationalId)
+                .IsUnique()
+                .HasDatabaseName("IX_Patients_NationalId_Unique")
+                .HasFilter("[IsDeleted] = 0 AND [NationalId] IS NOT NULL");
+
+            builder.Property(p => p.MobilePhone)
+                .HasMaxLength(20)
+                .HasColumnName("MobilePhone");
+
+            builder.Property(p => p.Email)
+                .HasMaxLength(120)
+                .HasColumnName("Email");
+
+            builder.Property(p => p.BirthdayEmailLastSentYear)
+                .HasColumnName("BirthdayEmailLastSentYear");
+
+            builder.Property(p => p.OptOutEmailCampaigns)
+                .IsRequired()
+                .HasDefaultValue(false)
+                .HasColumnName("OptOutEmailCampaigns");
+
+            builder.Property(p => p.EmailInvalid)
+                .IsRequired()
+                .HasDefaultValue(false)
+                .HasColumnName("EmailInvalid");
 
             // ============================================
             // ApplicationUser Relationship (One-to-One)
@@ -80,7 +109,8 @@ namespace Clinic_System.Data.Configurations
             builder.HasOne<ApplicationUser>()
                 .WithOne(u => u.Patient)
                 .HasForeignKey<Patient>(p => p.ApplicationUserId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
             // HasOne<ApplicationUser>(): Patient له ApplicationUser واحد
             // WithOne(u => u.Patient): ApplicationUser له Patient واحد
             // HasForeignKey: يحدد Foreign Key في Patients table
@@ -88,14 +118,13 @@ namespace Clinic_System.Data.Configurations
 
             // تسمية Foreign Key Column
             builder.Property(p => p.ApplicationUserId)
-                .IsRequired()
+                .IsRequired(false)
                 .HasColumnName("ApplicationUserId");
 
-            // Index على ApplicationUserId للأداء والـ Unique constraint
             builder.HasIndex(p => p.ApplicationUserId)
                 .IsUnique()
                 .HasDatabaseName("IX_Patients_ApplicationUserId_Unique")
-                .HasFilter("[IsDeleted] = 0");
+                .HasFilter("[IsDeleted] = 0 AND [ApplicationUserId] IS NOT NULL");
             // IsUnique: يضمن أن كل ApplicationUser مرتبط بـ Patient واحد فقط
 
             // ============================================

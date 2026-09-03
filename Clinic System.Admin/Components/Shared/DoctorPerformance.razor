@@ -1,0 +1,35 @@
+<div class="widget doctors-widget">
+    <div class="widget-head">
+        <h3>Rendimiento por Médico</h3>
+    </div>
+
+    <div class="doctor-list">
+        @foreach (var doc in _doctors)
+        {
+            var pct = doc.Current * 100 / doc.Goal;
+            <div class="doctor-row">
+                <div class="doctor-info">
+                    <span class="doctor-avatar">@doc.Initials</span>
+                    <span class="doctor-name">@doc.Name</span>
+                    <span class="doctor-score">@doc.Current/@doc.Goal</span>
+                </div>
+                <div class="doctor-bar">
+                    <div class="doctor-bar-fill @doc.BarClass" style="width: @(pct)%"></div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly List<DoctorPerf> _doctors =
+    [
+        new("DL", "Dra. López", 84, 90, "bar-teal"),
+        new("DF", "Dr. Flores", 78, 90, "bar-purple"),
+        new("DR", "Dr. Rodríguez", 92, 90, "bar-green"),
+        new("DM", "Dra. Martínez", 71, 90, "bar-yellow"),
+        new("DG", "Dr. García", 65, 90, "bar-blue")
+    ];
+
+    private record DoctorPerf(string Initials, string Name, int Current, int Goal, string BarClass);
+}

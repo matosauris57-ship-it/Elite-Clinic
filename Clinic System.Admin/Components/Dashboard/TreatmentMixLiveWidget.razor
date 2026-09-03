@@ -1,0 +1,28 @@
+<div class="widget mix-widget">
+    <div class="widget-head">
+        <h3>Distribución de tratamientos</h3>
+    </div>
+    @if (Slices.Count == 0)
+    {
+        <div class="dash-empty">
+            <Icon Name="bar-chart-2" Class="dash-empty-icon" />
+            <p>No hay tratamientos registrados para mostrar.</p>
+        </div>
+    }
+    else
+    {
+        <div class="donut-legend" style="margin:0">
+            @foreach (var slice in Slices)
+            {
+                <div class="legend-row">
+                    <span class="legend-name">@slice.Name</span>
+                    <span class="legend-pct">@slice.Count · @slice.Percent%</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<TreatmentMixSlice> Slices { get; set; } = [];
+}

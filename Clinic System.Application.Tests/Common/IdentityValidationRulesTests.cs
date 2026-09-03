@@ -13,11 +13,8 @@
     public class IdentityValidationRulesTests
     {
         [Theory]
-        [InlineData("Short1!")]
-        [InlineData("nouppercase1!")]
-        [InlineData("NOLOWERCASE1!")]
-        [InlineData("NoNumber!")]
-        [InlineData("NoSpecialChar1")]
+        [InlineData("")]
+        [InlineData("12345")]
         public void PasswordRule_WhenValidate_ThenValidationErrors(string Password)
         {
             // Arrange
@@ -33,13 +30,14 @@
             result.Errors.Should().NotBeEmpty();
         }
 
-        [Fact]
-        public void PasswordRule_WhenValidate_WithValidPassword_ThenNoError()
+        [Theory]
+        [InlineData("doctor1")]
+        [InlineData("123456")]
+        [InlineData("abcdef")]
+        public void PasswordRule_WhenValidate_WithValidPassword_ThenNoError(string validPassword)
         {
             // Arrange
             var validator = new PasswordValidator();
-
-            var validPassword = "Password123!";
             var command = new PasswordCommand(validPassword);
 
             // Act

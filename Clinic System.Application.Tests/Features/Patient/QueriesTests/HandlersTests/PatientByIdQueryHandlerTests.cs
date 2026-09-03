@@ -13,6 +13,7 @@
             _mockMapper = new Mock<IMapper>();
             _mockLogger = new Mock<ILogger<PatientByIdQueryHandler>>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
+            _mockCurrentUserService.Setup(s => s.IsAdmin).Returns(true);
             _handler = new PatientByIdQueryHandler(
                 _mockCurrentUserService.Object, 
                 _mockPatientService.Object,

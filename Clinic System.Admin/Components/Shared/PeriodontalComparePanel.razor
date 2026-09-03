@@ -1,0 +1,59 @@
+@if (Compare != null)
+{
+    <section class="periodontal-compare" aria-labelledby="perio-compare-heading">
+        <h3 id="perio-compare-heading">Comparar evaluaciones</h3>
+        <p>
+            @Compare.Previous.ExaminedAt.ToLocalTime().ToString("dd/MM/yyyy")
+            →
+            @Compare.Current.ExaminedAt.ToLocalTime().ToString("dd/MM/yyyy")
+            (cambio = actual − anterior; negativo indica mejora)
+        </p>
+        <div class="perio-index-strip" aria-label="Cambio de índices">
+            <span><b>Δ BOP</b> @FormatPercent(Compare.BleedingPercentChange)</span>
+            <span><b>Δ sitios ≥5 mm</b> @FormatDelta(Compare.SitesDeepGe5Change)</span>
+        </div>
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>FDI</th>
+                        <th>PD ant.</th>
+                        <th>PD act.</th>
+                        <th>Δ PD</th>
+                        <th>CAL ant.</th>
+                        <th>CAL act.</th>
+                        <th>Δ CAL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Compare.Teeth.Where(HasChange))
+                    {
+                        <tr>
+                            <td>@row.ToothNumber</td>
+                            <td>@(row.PreviousMaxProbingDepth?.ToString() ?? "—")</td>
+                            <td>@(row.CurrentMaxProbingDepth?.ToString() ?? "—")</td>
+                            <td>@FormatDelta(row.ProbingDepthChange)</td>
+                            <td>@(row.PreviousMaxCal?.ToString() ?? "—")</td>
+                            <td>@(row.CurrentMaxCal?.ToString() ?? "—")</td>
+                            <td>@FormatDelta(row.CalChange)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public PeriodontalCompareResult? Compare { get; set; }
+
+    private static bool HasChange(PeriodontalToothCompare row) =>
+        row.PreviousMaxProbingDepth.HasValue || row.CurrentMaxProbingDepth.HasValue
+        || row.PreviousMaxCal.HasValue || row.CurrentMaxCal.HasValue;
+
+    private static string FormatDelta(int? value) =>
+        value.HasValue ? value.Value.ToString("+0;-0;0") : "—";
+
+    private static string FormatPercent(decimal? value) =>
+        value.HasValue ? value.Value.ToString("+0.0;-0.0;0") + "%" : "—";
+}

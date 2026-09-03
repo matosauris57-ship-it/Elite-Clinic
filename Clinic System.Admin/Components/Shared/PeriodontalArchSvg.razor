@@ -1,0 +1,148 @@
+@using System.Globalization
+@using System.Net
+@using Clinic_System.Core.Validation
+<div class="perio-arch-svg-wrap">
+    <p class="perio-arch-caption">@Label</p>
+    <svg viewBox="0 0 @Width @ChartHeight" class="perio-full-svg" role="img" aria-label="@Label">
+        <line x1="@Padding" x2="@(Width - Padding)" y1="@CejY" y2="@CejY" class="perio-cej" />
+        @for (var i = 0; i < Teeth.Length; i++)
+        {
+            var number = Teeth[i];
+            var x = Padding + i * ToothWidth;
+            var tooth = ResolveTooth(number);
+            var selected = SelectedTooth == number;
+            var missing = tooth.Status == PeriodontalToothStatus.Missing;
+            var furcaLabel = FurcaLabel(tooth);
+            <g class="perio-svg-tooth @(selected ? "is-selected" : "")"
+               role="button"
+               tabindex="0"
+               aria-label="@Aria(tooth)"
+               @onclick="() => Select(number)"
+               @onkeydown="e => OnKey(e, number)">
+                <rect x="@(x + 1)" y="4" width="@(ToothWidth - 2)" height="@(ChartHeight - 8)"
+                      class="perio-svg-hit @(missing ? "is-missing" : "")" />
+                @SvgText(x + ToothWidth / 2.0, 20, "perio-svg-num", number.ToString())
+                @if (missing)
+                {
+                    <line x1="@(x + 10)" y1="@(CejY - 28)" x2="@(x + ToothWidth - 10)" y2="@(CejY + 28)" class="perio-svg-x" />
+                    <line x1="@(x + ToothWidth - 10)" y1="@(CejY - 28)" x2="@(x + 10)" y2="@(CejY + 28)" class="perio-svg-x" />
+                }
+                else
+                {
+                    @if (tooth.Status == PeriodontalToothStatus.Implant)
+                    {
+                        @SvgText(x + ToothWidth / 2.0, 34, "perio-svg-imp", "Imp")
+                    }
+                    @foreach (var siteBar in SiteBars(tooth, x, PeriodontalSurface.Facial, growUp: Upper)
+                              .Concat(SiteBars(tooth, x, PeriodontalSurface.Lingual, growUp: !Upper)))
+                    {
+                        <rect x="@siteBar.X" y="@siteBar.Y" width="@BarW" height="@siteBar.Height" fill="@siteBar.Fill" rx="1" />
+                        @if (siteBar.Bleeding)
+                        {
+                            <circle cx="@siteBar.Cx" cy="@siteBar.BleedY" r="2.4" class="perio-svg-bop" />
+                        }
+                        @if (siteBar.Plaque)
+                        {
+                            <rect x="@(siteBar.X + 1)" y="@siteBar.PlaqueY" width="@(BarW - 2)" height="4" class="perio-svg-plaque" />
+                        }
+                        @if (siteBar.Suppuration)
+                        {
+                            @SvgText(siteBar.Cx, siteBar.SuppY, "perio-svg-s", "S")
+                        }
+                    }
+                    @if (tooth.Mobility != PeriodontalMobility.Grade0)
+                    {
+                        @SvgText(x + ToothWidth / 2.0, ChartHeight - 18, "perio-svg-flag", $"M{(int)tooth.Mobility}")
+                    }
+                    @if (!string.IsNullOrWhiteSpace(furcaLabel))
+                    {
+                        @SvgText(x + ToothWidth / 2.0, ChartHeight - 6, "perio-svg-flag", furcaLabel)
+                    }
+                }
+            </g>
+        }
+    </svg>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public int[] Teeth { get; set; } = [];
+    [Parameter] public bool Upper { get; set; }
+    [Parameter] public PeriodontalExamDetail? Exam { get; set; }
+    [Parameter] public int? SelectedTooth { get; set; }
+    [Parameter] public EventCallback<int> SelectedToothChanged { get; set; }
+
+    private const int ToothWidth = 46;
+    private const int ChartHeight = 210;
+    private const int Padding = 8;
+    private const int CejY = 96;
+    private const int BarW = 8;
+    private static readonly PeriodontalSitePosition[] Positions =
+        [PeriodontalSitePosition.Mesial, PeriodontalSitePosition.Center, PeriodontalSitePosition.Distal];
+
+    private int Width => Padding * 2 + Teeth.Length * ToothWidth;
+
+    private static MarkupString SvgText(double x, double y, string css, string content)
+    {
+        var ix = x.ToString("0.##", CultureInfo.InvariantCulture);
+        var iy = y.ToString("0.##", CultureInfo.InvariantCulture);
+        return new MarkupString(
+            $"<text x=\"{ix}\" y=\"{iy}\" class=\"{css}\">{WebUtility.HtmlEncode(content)}</text>");
+    }
+
+    private PeriodontalToothModel ResolveTooth(int number) =>
+        Exam == null
+            ? new PeriodontalToothModel { ToothNumber = number }
+            : PeriodontalChartFactory.EnsureTooth(Exam, number);
+
+    private static string FurcaLabel(PeriodontalToothModel tooth)
+    {
+        if (!FdiToothNumber.HasFurcation(tooth.ToothNumber))
+            return "";
+        return $"{PeriodontalChartFactory.FurcationShort(tooth.FacialFurcation)} {PeriodontalChartFactory.FurcationShort(tooth.LingualFurcation)}".Trim();
+    }
+
+    private Task Select(int number) => SelectedToothChanged.InvokeAsync(number);
+
+    private Task OnKey(KeyboardEventArgs e, int number) =>
+        e.Key is "Enter" or " " ? Select(number) : Task.CompletedTask;
+
+    private static IEnumerable<SiteBar> SiteBars(PeriodontalToothModel tooth, int x, PeriodontalSurface surface, bool growUp)
+    {
+        for (var p = 0; p < Positions.Length; p++)
+        {
+            var site = PeriodontalChartFactory.TrySite(tooth, surface, Positions[p]);
+            var bx = x + 10 + p * (BarW + 3);
+            var pd = site?.ProbingDepthMm;
+            var h = pd.HasValue ? Math.Clamp(pd.Value * 5, 3, 48) : 2;
+            var y = growUp ? CejY - h : CejY;
+            yield return new SiteBar(
+                bx, y, h, PeriodontalChartFactory.PocketColor(pd),
+                bx + BarW / 2.0,
+                growUp ? y - 4 : y + h + 4,
+                growUp ? CejY + 3 : CejY - 7,
+                growUp ? y - 10 : y + h + 14,
+                site?.Bleeding == true,
+                site?.Plaque == true,
+                site?.Suppuration == true);
+        }
+    }
+
+    private static string Aria(PeriodontalToothModel tooth)
+    {
+        if (tooth.Status == PeriodontalToothStatus.Missing)
+            return $"Pieza {tooth.ToothNumber} ausente";
+        var pd = PeriodontalChartFactory.MaxProbing(tooth);
+        var parts = new List<string> { $"Pieza {tooth.ToothNumber}", FdiToothNumber.Describe(tooth.ToothNumber) };
+        if (tooth.Status == PeriodontalToothStatus.Implant) parts.Add("implante");
+        parts.Add(pd.HasValue ? $"sondaje máximo {pd} mm" : "sin sondaje");
+        if (PeriodontalChartFactory.AnyBleeding(tooth)) parts.Add("sangrado");
+        if (PeriodontalChartFactory.AnyPlaque(tooth)) parts.Add("placa");
+        if (PeriodontalChartFactory.AnySuppuration(tooth)) parts.Add("supuración");
+        return string.Join(", ", parts);
+    }
+
+    private readonly record struct SiteBar(
+        double X, double Y, double Height, string Fill, double Cx, double BleedY, double PlaqueY, double SuppY,
+        bool Bleeding, bool Plaque, bool Suppuration);
+}

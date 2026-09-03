@@ -25,7 +25,8 @@
                  request.Status,
                  request.Method,
                  request.PageNumber,
-                 request.PageSize);
+                 request.PageSize,
+                 request.Search);
 
 
             var dtos = mapper.Map<List<PaymentDetailsDTO>>(items);

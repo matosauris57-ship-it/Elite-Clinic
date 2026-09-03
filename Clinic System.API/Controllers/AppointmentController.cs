@@ -1,16 +1,14 @@
 ﻿namespace Clinic_System.API.Controllers
 {
-    [Authorize]
-    [Route("api/appointments")]
+[Route("api/appointments")]
     [ApiController]
+    [Authorize]
     public class AppointmentController : AppControllerBase
     {
         public AppointmentController(IMediator mediator) : base(mediator)
         {
         }
-
-        [Authorize(Roles = "Admin")]
-        [HttpGet("stats")]
+[HttpGet("stats")]
         public async Task<IActionResult> GetAppointmentsStats([FromQuery] GetAdminAppointmentsStatsQuery query)
         {
             var response = await mediator.Send(query);
@@ -23,105 +21,86 @@
             var response = await mediator.Send(query);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpGet("doctor")]
+[HttpGet("doctor")]
         public async Task<IActionResult> GetDoctorAppointments([FromQuery] GetDoctorAppointmentsQuery query)
         {
             var response = await mediator.Send(query);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Patient")]
-        [HttpGet("patient")]
+[HttpGet("patient")]
         public async Task<IActionResult> GetPatientAppointments([FromQuery] GetPatientAppointmentsQuery query)
         {
             var response = await mediator.Send(query);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin")]
-        [HttpGet("statusforadmin")]
+[HttpGet("agenda")]
+        public async Task<IActionResult> GetAgenda([FromQuery] GetAdminAgendaQuery query)
+        {
+            var response = await mediator.Send(query);
+            return NewResult(response);
+        }
+[HttpGet("statusforadmin")]
         public async Task<IActionResult> GetAppointmentsByStatusForAdmin([FromQuery] GetAppointmentsByStatusForAdminQuery query)
         {
             var response = await mediator.Send(query);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpGet("statusfordoctor")]
+[HttpGet("statusfordoctor")]
         public async Task<IActionResult> GetAppointmentsByStatusForDoctor([FromQuery] GetAppointmentsByStatusForDoctorQuery query)
         {
             var response = await mediator.Send(query);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Patient")]
-        [HttpGet("pastforpatient")]
+[HttpGet("pastforpatient")]
         public async Task<IActionResult> GetPastAppointmentsForPatient([FromQuery] GetPastAppointmentsForPatientQuery query)
         {
             var response = await mediator.Send(query);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpGet("pastfordoctor")]
+[HttpGet("pastfordoctor")]
         public async Task<IActionResult> GetPastAppointmentsForDoctor([FromQuery] GetPastAppointmentsForDoctorQuery query)
         {
             var response = await mediator.Send(query);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Patient")]
-        [HttpPost("book")]
+[HttpPost("book")]
+        [Authorize(Policy = "agendar-cita.create+patient")]
         public async Task<IActionResult> BookAppointment([FromBody] BookAppointmentCommand command)
         {
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Patient")]
-        [HttpPut("confirm")]
+[HttpPut("confirm")]
         public async Task<IActionResult> ConfirmAppointment([FromBody] ConfirmAppointmentCommand command)
         {
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpPut("complete")]
+[HttpPut("complete")]
         public async Task<IActionResult> CompleteAppointment([FromBody] CompleteAppointmentCommand command)
         {
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Patient")]
-        [HttpPut("reschedule")]
+[HttpPut("reschedule")]
         public async Task<IActionResult> RescheduleAppointment([FromBody] RescheduleAppointmentCommand command)
         {
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpPut("noshow")]
+[HttpPut("noshow")]
         public async Task<IActionResult> NoShowAppointment([FromBody] NoShowAppointmentCommand command)
         {
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Patient")]
-        [HttpPut("cancel")]
+[HttpPut("cancel")]
         public async Task<IActionResult> CancelledAppointment([FromBody] CancelAppointmentCommand command)
         {
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-
-        [Authorize(Roles = "Admin,Doctor")]
-        [HttpPost("call/{appointmentId}")]
+[HttpPost("call/{appointmentId}")]
         public async Task<IActionResult> CallPatient([FromRoute] int appointmentId)
         {
             var command = new CallPatientCommand { AppointmentId = appointmentId };

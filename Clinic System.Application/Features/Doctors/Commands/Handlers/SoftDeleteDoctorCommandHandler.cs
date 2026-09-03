@@ -20,57 +20,60 @@
 
         public async Task<Response<Doctor>> Handle(SoftDeleteDoctorCommand request, CancellationToken cancellationToken)
         {
-
-            var doctor = await doctorService.GetDoctorByIdAsync(request.Id);
+            var doctor = await doctorService.GetDoctorByIdIncludingDeletedAsync(request.Id, cancellationToken);
 
             if (doctor == null)
             {
                 logger.LogWarning("Doctor with Id {DoctorId} not found", request.Id);
-                return NotFound<Doctor>($"Doctor with Id {request.Id} not found");
+                return NotFound<Doctor>($"No se encontró el médico con Id {request.Id}");
             }
 
-            var Specialization = doctor.Specialization.Trim().ToLower();
+            if (doctor.IsDeleted)
+            {
+                return BadRequest<Doctor>("El médico ya está deshabilitado");
+            }
+
+            var specialization = doctor.Specialization.Trim().ToLower();
 
             using (var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
             {
                 try
                 {
-                    logger.LogInformation("Soft deleting Doctor with Id {DoctorId}", request.Id);
+                    logger.LogInformation("Disabling Doctor with Id {DoctorId}", request.Id);
                     await doctorService.SoftDeleteDoctor(doctor, cancellationToken);
 
                     var result = await unitOfWork.SaveAsync();
                     if (result == 0)
                     {
-                        logger.LogError("Failed to delete Doctor with Id {DoctorId}", request.Id);
-                        return BadRequest<Doctor>("Failed to Deleted doctor");
+                        logger.LogError("Failed to disable Doctor with Id {DoctorId}", request.Id);
+                        return BadRequest<Doctor>("No se pudo deshabilitar el médico");
                     }
 
-                    var IsDeletedUser = await identityService.SoftDeleteUserAsync(doctor.ApplicationUserId, cancellationToken);
+                    var isDeletedUser = await identityService.SoftDeleteUserAsync(doctor.ApplicationUserId, cancellationToken);
 
-                    if (!IsDeletedUser)
+                    if (!isDeletedUser)
                     {
-                        logger.LogError("Failed to delete associated user for Doctor with Id {DoctorId}", request.Id);
-                        return BadRequest<Doctor>("Failed to Deleted associated user");
+                        logger.LogError("Failed to disable associated user for Doctor with Id {DoctorId}", request.Id);
+                        return BadRequest<Doctor>("No se pudo deshabilitar la cuenta de acceso del médico");
                     }
 
                     transaction.Complete();
 
                     await cacheService.RemoveByPrefixAsync(
-                        "DoctorsList",                                  // 1. بيمسح كل صفحات ليستة الدكاترة
-                        $"DoctorListBySpecialization:{Specialization}", // 2. بيمسح كل صفحات التخصصات
-                        $"DoctorProfile_{request.Id}",                  // 3. بيمسح البروفايل القديم بتاع الدكتور ده
-                        $"DoctorWithAppointmentsById:{request.Id}"      // 4. بيمسح مواعيد الدكتور ده
-                    );
+                        "DoctorsList",
+                        $"DoctorListBySpecialization:{specialization}",
+                        $"DoctorProfile_{request.Id}",
+                        $"DoctorWithAppointmentsById:{request.Id}");
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "An error occurred while deleting Doctor with Id {DoctorId}", request.Id);
-                    return BadRequest<Doctor>($"Doctor deletion failed: {ex.Message}");
+                    logger.LogError(ex, "An error occurred while disabling Doctor with Id {DoctorId}", request.Id);
+                    return BadRequest<Doctor>($"No se pudo deshabilitar el médico: {ex.Message}");
                 }
             }
 
-            logger.LogInformation("Doctor with Id {DoctorId} deleted successfully", request.Id);
-            return Deleted<Doctor>("Doctor Deleted successfully");
+            logger.LogInformation("Doctor with Id {DoctorId} disabled successfully", request.Id);
+            return Deleted<Doctor>("Médico deshabilitado correctamente");
         }
     }
 }

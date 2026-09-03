@@ -13,7 +13,10 @@
                 , option => option.MapFrom(src => src.DateOfBirth.ToString("dd/MM/yyyy")))
 
                 .ForMember(dest => dest.CreatedAt
-                , option => option.MapFrom(src => src.CreatedAt.ToString("dd/MM/yyyy-hh:mm")));
+                , option => option.MapFrom(src => src.CreatedAt.ToString("dd/MM/yyyy-hh:mm")))
+
+                .ForMember(dest => dest.IsActive
+                , option => option.MapFrom(src => !src.IsDeleted));
         }
     }
 }

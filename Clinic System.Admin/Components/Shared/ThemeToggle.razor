@@ -1,0 +1,16 @@
+<button type="button"
+        class="@ButtonClass"
+        title="Alternar tema"
+        aria-label="Alternar tema claro u oscuro"
+        onclick="window.dentalCareTheme.toggle()">
+    <Icon Name="sun" Class="icon-svg theme-icon-light" />
+    <Icon Name="moon" Class="icon-svg theme-icon-dark" />
+</button>
+
+@code {
+    [Parameter] public string Variant { get; set; } = "topbar";
+
+    private string ButtonClass => Variant == "login"
+        ? "theme-toggle-login-btn"
+        : "icon-btn theme-toggle-btn";
+}

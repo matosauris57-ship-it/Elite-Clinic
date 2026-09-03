@@ -41,6 +41,10 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("CreatedAt");
 
+                    b.Property<DateTime?>("DayBeforeReminderSentAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("DayBeforeReminderSentAt");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("DeletedAt");
@@ -58,6 +62,10 @@ namespace Clinic_System.Data.Migrations
                     b.Property<int>("PatientId")
                         .HasColumnType("int")
                         .HasColumnName("PatientId");
+
+                    b.Property<DateTime?>("SameDayReminderSentAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("SameDayReminderSentAt");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -100,6 +108,260 @@ namespace Clinic_System.Data.Migrations
                         .HasFilter("[AppointmentStatus] != 'Cancelled' AND [IsDeleted] = 0");
 
                     b.ToTable("Appointments", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.DentalClinicalEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Phase")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RecordedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ReferenceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int?>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId", "RecordedAt");
+
+                    b.HasIndex("PatientId", "ToothNumber", "RecordedAt");
+
+                    b.ToTable("DentalClinicalEvents", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.DashboardLayout", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LayoutJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Scope")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DashboardLayouts_ClinicScope")
+                        .HasFilter("[Scope] = 'Clinic'");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DashboardLayouts_UserId")
+                        .HasFilter("[UserId] IS NOT NULL");
+
+                    b.ToTable("DashboardLayouts", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.DentalHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdditionalNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Allergies")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("BloodPressure")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ClinicalObservations")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CurrentMedication")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Diagnosis")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("HasBleedingGums")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("HasBruxism")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("HasSensitiveTeeth")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSmoker")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("OtherDiseases")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PreviousDentalTreatments")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ReasonForConsultation")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("SystemicDiseases")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId")
+                        .IsUnique();
+
+                    b.ToTable("DentalHistories", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.DentalTreatment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AppointmentId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Cost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PerformedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ProcedureDetails")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ProcedureName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ToothRecordId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ToothSurface")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TreatmentProcedureId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("ToothRecordId");
+
+                    b.HasIndex("TreatmentProcedureId");
+
+                    b.ToTable("DentalTreatments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DentalTreatments_Cost", "[Cost] >= 0");
+                        });
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.Doctor", b =>
@@ -183,6 +445,141 @@ namespace Clinic_System.Data.Migrations
                     b.ToTable("Doctors", (string)null);
                 });
 
+            modelBuilder.Entity("Clinic_System.Core.Entities.DoctorProcedurePrice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DoctorId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("TreatmentProcedureId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TreatmentProcedureId");
+
+                    b.HasIndex("DoctorId", "TreatmentProcedureId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DoctorProcedurePrices_Doctor_Procedure");
+
+                    b.ToTable("DoctorProcedurePrices", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DoctorProcedurePrices_Price", "[Price] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.InvoiceLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DentalTreatmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("PaymentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DentalTreatmentId");
+
+                    b.HasIndex("PaymentId");
+
+                    b.ToTable("InvoiceLines", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InvoiceLines_Quantity", "[Quantity] > 0");
+
+                            t.HasCheckConstraint("CK_InvoiceLines_UnitPrice", "[UnitPrice] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.MedicalCondition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("MedicalConditions", (string)null);
+                });
+
             modelBuilder.Entity("Clinic_System.Core.Entities.MedicalRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -257,7 +654,6 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnName("Address");
 
                     b.Property<string>("ApplicationUserId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)")
                         .HasColumnName("ApplicationUserId");
 
@@ -272,6 +668,15 @@ namespace Clinic_System.Data.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("DeletedAt");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("Email");
+
+                    b.Property<int?>("BirthdayEmailLastSentYear")
+                        .HasColumnType("int")
+                        .HasColumnName("BirthdayEmailLastSentYear");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -291,6 +696,16 @@ namespace Clinic_System.Data.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("IsDeleted");
 
+                    b.Property<string>("MobilePhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("MobilePhone");
+
+                    b.Property<string>("NationalId")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("NationalId");
+
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -306,12 +721,133 @@ namespace Clinic_System.Data.Migrations
                     b.HasIndex("ApplicationUserId")
                         .IsUnique()
                         .HasDatabaseName("IX_Patients_ApplicationUserId_Unique")
-                        .HasFilter("[IsDeleted] = 0");
+                        .HasFilter("[IsDeleted] = 0 AND [ApplicationUserId] IS NOT NULL");
 
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_Patients_CreatedAt");
 
+                    b.HasIndex("NationalId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Patients_NationalId_Unique")
+                        .HasFilter("[IsDeleted] = 0 AND [NationalId] IS NOT NULL");
+
                     b.ToTable("Patients", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientMedicalCondition", b =>
+                {
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MedicalConditionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("PatientId", "MedicalConditionId");
+
+                    b.HasIndex("MedicalConditionId");
+
+                    b.ToTable("PatientMedicalConditions", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientPrescription", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Diagnosis")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("DoctorId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RecordedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DoctorId");
+
+                    b.HasIndex("PatientId", "IssuedAt");
+
+                    b.ToTable("PatientPrescriptions", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientPrescriptionItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Dosage")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Frequency")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("MedicationName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("PatientPrescriptionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SpecialInstructions")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("TemplateKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientPrescriptionId", "SortOrder");
+
+                    b.ToTable("PatientPrescriptionItems", (string)null);
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.Payment", b =>
@@ -392,6 +928,280 @@ namespace Clinic_System.Data.Migrations
                     b.ToTable("Payments", null, t =>
                         {
                             t.HasCheckConstraint("CK_Payments_AmountPaid_Positive", "[AmountPaid] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PaymentReceipt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("PaidAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("PaymentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaidAt");
+
+                    b.HasIndex("PaymentId");
+
+                    b.ToTable("PaymentReceipts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PaymentReceipts_Amount", "[Amount] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PeriodontalExam", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("BleedingPercent")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DoctorId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ExaminedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("MeanProbingDepthMm")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("decimal(4,1)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("PlaquePercent")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<string>("RecordedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("RecordedSiteCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SitesDeepGe5")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SitesDeepGe6")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DoctorId");
+
+                    b.HasIndex("PatientId", "ExaminedAt");
+
+                    b.ToTable("PeriodontalExams", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PeriodontalSite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Bleeding")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("ClinicalAttachmentLevelMm")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PeriodontalToothId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("Plaque")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProbingDepthMm")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RecessionMm")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("Suppuration")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Surface")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PeriodontalToothId", "Surface", "Position")
+                        .IsUnique();
+
+                    b.ToTable("PeriodontalSites", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PeriodontalSites_Cal", "[ClinicalAttachmentLevelMm] IS NULL OR ([ClinicalAttachmentLevelMm] >= 0 AND [ClinicalAttachmentLevelMm] <= 30)");
+
+                            t.HasCheckConstraint("CK_PeriodontalSites_ProbingDepth", "[ProbingDepthMm] IS NULL OR ([ProbingDepthMm] >= 0 AND [ProbingDepthMm] <= 15)");
+
+                            t.HasCheckConstraint("CK_PeriodontalSites_Recession", "[RecessionMm] IS NULL OR ([RecessionMm] >= 0 AND [RecessionMm] <= 15)");
+                        });
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PeriodontalTooth", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("FacialFurcation")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("KeratinizedGingivaMm")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LingualFurcation")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Mobility")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("PeriodontalExamId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PeriodontalExamId", "ToothNumber")
+                        .IsUnique();
+
+                    b.ToTable("PeriodontalTeeth", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PeriodontalTeeth_FDI", "(([ToothNumber] BETWEEN 11 AND 18) OR ([ToothNumber] BETWEEN 21 AND 28) OR ([ToothNumber] BETWEEN 31 AND 38) OR ([ToothNumber] BETWEEN 41 AND 48))");
+
+                            t.HasCheckConstraint("CK_PeriodontalTeeth_KG", "[KeratinizedGingivaMm] IS NULL OR ([KeratinizedGingivaMm] >= 0 AND [KeratinizedGingivaMm] <= 15)");
+                        });
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PlanItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ProcedureName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ToothSurface")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TreatmentPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TreatmentProcedureId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TreatmentPlanId");
+
+                    b.HasIndex("TreatmentProcedureId");
+
+                    b.ToTable("PlanItems", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlanItems_Quantity", "[Quantity] > 0");
+
+                            t.HasCheckConstraint("CK_PlanItems_UnitPrice", "[UnitPrice] >= 0");
                         });
                 });
 
@@ -511,6 +1321,232 @@ namespace Clinic_System.Data.Migrations
                         .HasDatabaseName("IX_RefreshTokens_Token");
 
                     b.ToTable("RefreshTokens", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.ToothChartEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("AppointmentId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BridgeRole")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("BridgeSpanId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("CariesType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ClinicalDiagnosis")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("Condition")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Icdas")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Phase")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProposedTreatment")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RecordedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("RestorationMaterial")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Severity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Surface")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("BridgeSpanId");
+
+                    b.HasIndex("PatientId", "ToothNumber", "Surface", "Phase", "RecordedAt");
+
+                    b.ToTable("ToothChartEntries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ToothChartEntries_FDI", "(([ToothNumber] BETWEEN 11 AND 18) OR ([ToothNumber] BETWEEN 21 AND 28) OR ([ToothNumber] BETWEEN 31 AND 38) OR ([ToothNumber] BETWEEN 41 AND 48) OR ([ToothNumber] BETWEEN 51 AND 55) OR ([ToothNumber] BETWEEN 61 AND 65) OR ([ToothNumber] BETWEEN 71 AND 75) OR ([ToothNumber] BETWEEN 81 AND 85))");
+                        });
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.ToothRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DiagnosisCondition")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TreatmentCondition")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId", "ToothNumber")
+                        .IsUnique();
+
+                    b.ToTable("ToothRecords", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.TreatmentPlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ValidUntil")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId");
+
+                    b.ToTable("TreatmentPlans", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.TreatmentProcedure", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("TreatmentProcedures", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TreatmentProcedures_Duration", "[DurationMinutes] > 0");
+
+                            t.HasCheckConstraint("CK_TreatmentProcedures_Price", "[Price] >= 0");
+                        });
                 });
 
             modelBuilder.Entity("Clinic_System.Infrastructure.Identity.ApplicationUser", b =>
@@ -736,6 +1772,60 @@ namespace Clinic_System.Data.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("Clinic_System.Core.Entities.DentalClinicalEvent", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("DentalClinicalEvents")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.DentalHistory", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithOne("DentalHistory")
+                        .HasForeignKey("Clinic_System.Core.Entities.DentalHistory", "PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.DentalTreatment", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Appointment", "Appointment")
+                        .WithMany("DentalTreatments")
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("DentalTreatments")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Clinic_System.Core.Entities.ToothRecord", "ToothRecord")
+                        .WithMany()
+                        .HasForeignKey("ToothRecordId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.TreatmentProcedure", "TreatmentProcedure")
+                        .WithMany()
+                        .HasForeignKey("TreatmentProcedureId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Appointment");
+
+                    b.Navigation("Patient");
+
+                    b.Navigation("ToothRecord");
+
+                    b.Navigation("TreatmentProcedure");
+                });
+
             modelBuilder.Entity("Clinic_System.Core.Entities.Doctor", b =>
                 {
                     b.HasOne("Clinic_System.Infrastructure.Identity.ApplicationUser", null)
@@ -743,6 +1833,43 @@ namespace Clinic_System.Data.Migrations
                         .HasForeignKey("Clinic_System.Core.Entities.Doctor", "ApplicationUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.DoctorProcedurePrice", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Doctor", "Doctor")
+                        .WithMany("ProcedurePrices")
+                        .HasForeignKey("DoctorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Clinic_System.Core.Entities.TreatmentProcedure", "TreatmentProcedure")
+                        .WithMany("DoctorPrices")
+                        .HasForeignKey("TreatmentProcedureId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Doctor");
+
+                    b.Navigation("TreatmentProcedure");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.InvoiceLine", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.DentalTreatment", "DentalTreatment")
+                        .WithMany()
+                        .HasForeignKey("DentalTreatmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.Payment", "Payment")
+                        .WithMany("InvoiceLines")
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DentalTreatment");
+
+                    b.Navigation("Payment");
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.MedicalRecord", b =>
@@ -761,8 +1888,55 @@ namespace Clinic_System.Data.Migrations
                     b.HasOne("Clinic_System.Infrastructure.Identity.ApplicationUser", null)
                         .WithOne("Patient")
                         .HasForeignKey("Clinic_System.Core.Entities.Patient", "ApplicationUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientMedicalCondition", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.MedicalCondition", "MedicalCondition")
+                        .WithMany("PatientConditions")
+                        .HasForeignKey("MedicalConditionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("MedicalConditions")
+                        .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("MedicalCondition");
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientPrescription", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Doctor", "Doctor")
+                        .WithMany()
+                        .HasForeignKey("DoctorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("PatientPrescriptions")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Doctor");
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientPrescriptionItem", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.PatientPrescription", "Prescription")
+                        .WithMany("Items")
+                        .HasForeignKey("PatientPrescriptionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Prescription");
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.Payment", b =>
@@ -774,6 +1948,75 @@ namespace Clinic_System.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Appointment");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PaymentReceipt", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Payment", "Payment")
+                        .WithMany("Receipts")
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Payment");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PeriodontalExam", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Doctor", "Doctor")
+                        .WithMany()
+                        .HasForeignKey("DoctorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("PeriodontalExams")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Doctor");
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PeriodontalSite", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.PeriodontalTooth", "Tooth")
+                        .WithMany("Sites")
+                        .HasForeignKey("PeriodontalToothId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tooth");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PeriodontalTooth", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.PeriodontalExam", "Exam")
+                        .WithMany("Teeth")
+                        .HasForeignKey("PeriodontalExamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Exam");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PlanItem", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.TreatmentPlan", "TreatmentPlan")
+                        .WithMany("Items")
+                        .HasForeignKey("TreatmentPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Clinic_System.Core.Entities.TreatmentProcedure", "TreatmentProcedure")
+                        .WithMany()
+                        .HasForeignKey("TreatmentProcedureId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("TreatmentPlan");
+
+                    b.Navigation("TreatmentProcedure");
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.Prescription", b =>
@@ -794,6 +2037,46 @@ namespace Clinic_System.Data.Migrations
                         .HasForeignKey("ApplicationUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.ToothChartEntry", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Appointment", "Appointment")
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("ToothChartEntries")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Appointment");
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.ToothRecord", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("ToothRecords")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.TreatmentPlan", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("TreatmentPlans")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -849,6 +2132,8 @@ namespace Clinic_System.Data.Migrations
 
             modelBuilder.Entity("Clinic_System.Core.Entities.Appointment", b =>
                 {
+                    b.Navigation("DentalTreatments");
+
                     b.Navigation("MedicalRecord");
 
                     b.Navigation("Payment");
@@ -857,6 +2142,13 @@ namespace Clinic_System.Data.Migrations
             modelBuilder.Entity("Clinic_System.Core.Entities.Doctor", b =>
                 {
                     b.Navigation("Appointments");
+
+                    b.Navigation("ProcedurePrices");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.MedicalCondition", b =>
+                {
+                    b.Navigation("PatientConditions");
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.MedicalRecord", b =>
@@ -867,6 +2159,56 @@ namespace Clinic_System.Data.Migrations
             modelBuilder.Entity("Clinic_System.Core.Entities.Patient", b =>
                 {
                     b.Navigation("Appointments");
+
+                    b.Navigation("DentalClinicalEvents");
+
+                    b.Navigation("DentalHistory");
+
+                    b.Navigation("DentalTreatments");
+
+                    b.Navigation("MedicalConditions");
+
+                    b.Navigation("PatientPrescriptions");
+
+                    b.Navigation("PeriodontalExams");
+
+                    b.Navigation("ToothChartEntries");
+
+                    b.Navigation("ToothRecords");
+
+                    b.Navigation("TreatmentPlans");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientPrescription", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.Payment", b =>
+                {
+                    b.Navigation("InvoiceLines");
+
+                    b.Navigation("Receipts");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PeriodontalExam", b =>
+                {
+                    b.Navigation("Teeth");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PeriodontalTooth", b =>
+                {
+                    b.Navigation("Sites");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.TreatmentPlan", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.TreatmentProcedure", b =>
+                {
+                    b.Navigation("DoctorPrices");
                 });
 
             modelBuilder.Entity("Clinic_System.Infrastructure.Identity.ApplicationUser", b =>

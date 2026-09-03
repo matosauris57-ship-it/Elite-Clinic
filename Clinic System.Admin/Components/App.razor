@@ -1,0 +1,55 @@
+@inject IHttpContextAccessor HttpContextAccessor
+
+<!DOCTYPE html>
+<html lang="es" data-theme="@InitialTheme">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <script>
+        (function () {
+            var key = 'dc-theme';
+            var saved = localStorage.getItem(key);
+            var theme = saved === 'light' || saved === 'dark'
+                ? saved
+                : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+            document.cookie = key + '=' + theme + ';path=/;max-age=31536000;SameSite=Lax';
+        })();
+    </script>
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["css/admin.css"]" />
+    <link rel="stylesheet" href="@Assets["DentalCare.Admin.styles.css"]" />
+    <ImportMap />
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes />
+    <ReconnectModal />
+    <script src="@Assets["js/theme.js"]"></script>
+    <script src="@Assets["js/loader-media.js"]"></script>
+    <script src="@Assets["js/dashboard-grid.js"]"></script>
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.dentalCareTheme) {
+                window.dentalCareTheme.initPersistence();
+            }
+        });
+    </script>
+</body>
+
+</html>
+
+@code {
+    private string InitialTheme
+    {
+        get
+        {
+            var cookie = HttpContextAccessor.HttpContext?.Request.Cookies["dc-theme"];
+            return cookie is "light" or "dark" ? cookie : "dark";
+        }
+    }
+}

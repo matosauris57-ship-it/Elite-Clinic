@@ -6,6 +6,7 @@
 
         // خليناها Nullable عشان لو عايز يعدل حاجة ويسيب التانية
         public decimal? Amount { get; set; }
+        public string? AmountInput { get; set; }
         public PaymentMethod? PaymentMethod { get; set; }
         public string? Notes { get; set; }
     }

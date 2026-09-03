@@ -1,0 +1,61 @@
+@using Clinic_System.Core.Validation
+<section class="odontogram-arch-card periodontal-arch" aria-label="@Label">
+    <div class="odontogram-quadrant-labels">
+        <span>Cuadrante @LeftQuadrant</span>
+        <strong>@Label</strong>
+        <span>Cuadrante @RightQuadrant</span>
+    </div>
+    <div class="odontogram-teeth-row periodontal-teeth-row">
+        @foreach (var toothNumber in Teeth)
+        {
+            var tooth = Exam == null ? null : PeriodontalChartFactory.EnsureTooth(Exam, toothNumber);
+            var missing = tooth?.Status == PeriodontalToothStatus.Missing;
+            var maxPd = tooth == null || missing ? null : PeriodontalChartFactory.MaxProbing(tooth);
+            var mark = missing ? "X" : PeriodontalChartFactory.PocketMark(maxPd);
+            var bleeding = tooth != null && PeriodontalChartFactory.AnyBleeding(tooth);
+            var plaque = tooth != null && PeriodontalChartFactory.AnyPlaque(tooth);
+            var suppuration = tooth != null && PeriodontalChartFactory.AnySuppuration(tooth);
+            var mobility = tooth is { Status: PeriodontalToothStatus.Present, Mobility: not PeriodontalMobility.Grade0 };
+            var furca = tooth != null && FdiToothNumber.HasFurcation(toothNumber)
+                && (tooth.FacialFurcation != PeriodontalFurcation.Grade0 || tooth.LingualFurcation != PeriodontalFurcation.Grade0);
+            <button type="button"
+                    class="clinical-tooth perio-tooth @(SelectedTooth == toothNumber ? "selected" : "") @(missing ? "is-missing" : "") pocket-@PeriodontalCalculations.GetPocketSeverity(maxPd).ToString().ToLowerInvariant()"
+                    aria-label="@AriaLabel(toothNumber, tooth)"
+                    aria-pressed="@(SelectedTooth == toothNumber)"
+                    @onclick="() => SelectedToothChanged.InvokeAsync(toothNumber)">
+                <span class="perio-tooth-number">@toothNumber</span>
+                <span class="perio-tooth-mark" aria-hidden="true">@mark</span>
+                <span class="perio-tooth-flags" aria-hidden="true">
+                    @(bleeding ? "B" : "")@(plaque ? "P" : "")@(suppuration ? "S" : "")@(mobility ? "M" : "")@(furca ? "F" : "")
+                </span>
+            </button>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public int LeftQuadrant { get; set; }
+    [Parameter] public int RightQuadrant { get; set; }
+    [Parameter] public int[] Teeth { get; set; } = [];
+    [Parameter] public PeriodontalExamDetail? Exam { get; set; }
+    [Parameter] public int? SelectedTooth { get; set; }
+    [Parameter] public EventCallback<int> SelectedToothChanged { get; set; }
+
+    private static string AriaLabel(int toothNumber, PeriodontalToothModel? tooth)
+    {
+        var parts = new List<string> { $"Pieza {toothNumber}", FdiToothNumber.Describe(toothNumber) };
+        if (tooth?.Status == PeriodontalToothStatus.Missing)
+        {
+            parts.Add("ausente");
+            return string.Join(", ", parts);
+        }
+        if (tooth?.Status == PeriodontalToothStatus.Implant)
+            parts.Add("implante");
+        var pd = tooth == null ? null : PeriodontalChartFactory.MaxProbing(tooth);
+        parts.Add(pd.HasValue ? $"sondaje máximo {pd} mm ({PeriodontalChartFactory.PocketMark(pd)})" : "sin sondaje");
+        if (tooth != null && PeriodontalChartFactory.AnyBleeding(tooth)) parts.Add("sangrado");
+        if (tooth != null && PeriodontalChartFactory.AnySuppuration(tooth)) parts.Add("supuración");
+        return string.Join(", ", parts);
+    }
+}

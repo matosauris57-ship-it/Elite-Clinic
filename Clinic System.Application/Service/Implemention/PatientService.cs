@@ -15,6 +15,12 @@
                 .GetAllAsync(cancellationToken: cancellationToken)).ToList();
         }
 
+        public async Task<List<Patient?>> GetPatientsListForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default)
+        {
+            return (await unitOfWork.PatientsRepository
+                .GetAllForAdminAsync(includeInactive, cancellationToken)).ToList();
+        }
+
         public async Task<PagedResult<Patient?>> GetPatientsListPagingAsync(int pageNumber, int pageSize, CancellationToken cancellationToken = default)
         {
             var (items, totalCount) = await unitOfWork.PatientsRepository.GetPaginatedAsync(pageNumber, pageSize, cancellationToken: cancellationToken);
@@ -41,9 +47,21 @@
             return await unitOfWork.PatientsRepository.GetByIdAsync(id, cancellationToken);
         }
 
+        public async Task<Patient?> GetPatientByIdIncludingDeletedAsync(int id, CancellationToken cancellationToken = default)
+        {
+            return await unitOfWork.PatientsRepository.GetByIdIncludingDeletedAsync(id, cancellationToken);
+        }
+
         public async Task SoftDeletePatient(Patient patient, CancellationToken cancellationToken = default)
         {
             unitOfWork.PatientsRepository.SoftDelete(patient, cancellationToken);
+        }
+
+        public async Task RestorePatient(Patient patient, CancellationToken cancellationToken = default)
+        {
+            patient.IsDeleted = false;
+            patient.DeletedAt = null;
+            unitOfWork.PatientsRepository.Update(patient, cancellationToken);
         }
 
         public async Task HardDeletePatient(Patient patient, CancellationToken cancellationToken = default)

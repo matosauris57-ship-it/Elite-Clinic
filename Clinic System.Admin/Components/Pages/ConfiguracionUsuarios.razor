@@ -1,0 +1,581 @@
+@page "/configuracion/usuarios"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "usuarios.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AccessControlMaintenanceService AccessService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Usuarios y roles — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Usuarios y roles</h1>
+            <p>Gestión de accesos al panel por módulo y acción</p>
+        </div>
+        <div class="command-actions">
+            @if (_activeTab == "users" && _canCreateUser)
+            {
+                <button class="btn-primary" @onclick="OpenCreateUserModal">
+                    <Icon Name="plus" Class="btn-svg" />
+                    Nuevo usuario staff
+                </button>
+            }
+            @if (_activeTab == "roles" && _canCreateRole)
+            {
+                <button class="btn-primary" @onclick="OpenCreateRoleModal">
+                    <Icon Name="plus" Class="btn-svg" />
+                    Nuevo rol
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="maintenance-tabs">
+        <button class="toggle-btn @(_activeTab == "roles" ? "active" : "")" @onclick='() => SwitchTab("roles")'>Roles</button>
+        <button class="toggle-btn @(_activeTab == "users" ? "active" : "")" @onclick='() => SwitchTab("users")'>Usuarios</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_loadError))
+    {
+        <ErrorBanner Message="@_loadError" OnRetry="ReloadAsync" />
+    }
+
+    @if (_activeTab == "roles")
+    {
+        @if (_rolesLoading)
+        {
+            <AnimatedLoader Message="Cargando roles..." />
+        }
+        else
+        {
+            <div class="access-layout">
+                <div class="access-role-list">
+                    @foreach (var role in _roles)
+                    {
+                        <button class="access-role-item @(role.Id == _selectedRoleId ? "active" : "")"
+                                @onclick="() => SelectRoleAsync(role)">
+                            <span class="access-role-name">@role.Name</span>
+                            @if (role.IsSystem)
+                            {
+                                <span class="widget-pill">Sistema</span>
+                            }
+                            <span class="access-role-meta">@role.PermissionCount permiso(s)</span>
+                        </button>
+                    }
+                </div>
+
+                <div class="access-permissions-panel">
+                    @if (_selectedRole == null)
+                    {
+                        <div class="maintenance-empty"><p>Selecciona un rol para ver o editar sus permisos.</p></div>
+                    }
+                    else if (_permissionsLoading)
+                    {
+                        <AnimatedLoader Compact="true" Message="Cargando permisos..." />
+                    }
+                    else
+                    {
+                        <div class="access-permissions-header">
+                            <h2>@_selectedRole.Name</h2>
+                            @if (_selectedRole.IsSystem && string.Equals(_selectedRole.Name, "Admin", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <p class="access-hint">El rol Admin tiene acceso total y no es editable.</p>
+                            }
+                            else if (_canEditRole && !_selectedRole.IsSystem)
+                            {
+                                <button class="btn-primary" disabled="@_savingPermissions" @onclick="SaveRolePermissionsAsync">
+                                    @(_savingPermissions ? "Guardando..." : "Guardar permisos")
+                                </button>
+                            }
+                        </div>
+
+                        @if (_catalog != null)
+                        {
+                            <div class="access-matrix">
+                                @foreach (var module in _catalog.Modules)
+                                {
+                                    <div class="access-module-card">
+                                        <h3>@module.DisplayName</h3>
+                                        <div class="access-action-grid">
+                                            @foreach (var action in module.Actions)
+                                            {
+                                                var perm = $"{module.Key}.{action}";
+                                                var isChecked = _selectedPermissions.Contains(perm);
+                                                var disabled = !_canEditRole || _selectedRole.IsSystem ||
+                                                               string.Equals(_selectedRole.Name, "Admin", StringComparison.OrdinalIgnoreCase);
+                                                <label class="access-action-item">
+                                                    <input type="checkbox"
+                                                           checked="@isChecked"
+                                                           disabled="@disabled"
+                                                           @onchange="e => TogglePermission(perm, e)" />
+                                                    <span>@action</span>
+                                                </label>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @if (_canDeleteRole && _selectedRole is { IsSystem: false })
+                        {
+                            <div class="access-danger-zone">
+                                <button class="btn-table btn-table-danger" @onclick="DeleteSelectedRoleAsync">Eliminar rol</button>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="maintenance-toolbar">
+            <div class="search-field maintenance-search">
+                <Icon Name="search" Class="field-icon" />
+                <input type="text" placeholder="Buscar por nombre o email..."
+                       @bind="_userSearch" @bind:event="oninput" @onkeyup="OnUserSearchKeyUp" />
+            </div>
+            <select class="form-input access-filter" @bind="_userTypeFilter" @bind:after="ReloadUsersAsync">
+                <option value="">Todos los tipos</option>
+                <option value="Staff">Staff</option>
+                <option value="Doctor">Médico</option>
+                <option value="Patient">Paciente</option>
+            </select>
+            <span class="maintenance-count">@_userTotal usuario(s)</span>
+        </div>
+
+        @if (_usersLoading)
+        {
+            <AnimatedLoader Message="Cargando usuarios..." />
+        }
+        else if (!_users.Any())
+        {
+            <div class="maintenance-empty"><p>No hay usuarios que coincidan con el filtro.</p></div>
+        }
+        else
+        {
+            <div class="data-table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Email</th>
+                            <th>Tipo</th>
+                            <th>Vínculo</th>
+                            <th>Roles</th>
+                            <th>Estado</th>
+                            <th class="col-actions">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in _users)
+                        {
+                            <tr>
+                                <td>@user.UserName</td>
+                                <td>@user.Email</td>
+                                <td><span class="widget-pill">@user.UserType</span></td>
+                                <td>@(user.LinkedName ?? "—")</td>
+                                <td>@string.Join(", ", user.Roles)</td>
+                                <td>@(user.IsLockedOut ? "Inactivo" : "Activo")</td>
+                                <td class="col-actions">
+                                    @if (_canEditUser)
+                                    {
+                                        <button class="btn-table" @onclick="() => OpenAssignRolesModal(user)">Roles</button>
+                                        <button class="btn-table" @onclick="() => ToggleLockoutAsync(user)">
+                                            @(user.IsLockedOut ? "Activar" : "Desactivar")
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+@if (_showCreateRoleModal)
+{
+    <div class="modal-overlay" @onclick="CloseCreateRoleModal">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Nuevo rol</h2>
+                <button class="modal-close" @onclick="CloseCreateRoleModal">×</button>
+            </div>
+            <p class="modal-confirm-text access-modal-hint">Define un nombre para el rol personalizado. Los permisos se configuran después de crearlo.</p>
+            <div class="form-group">
+                <label>Nombre</label>
+                <input class="form-input" @bind="_newRoleName" placeholder="Recepcionista" />
+            </div>
+            @if (!string.IsNullOrEmpty(_modalError))
+            {
+                <div class="wizard-error">@_modalError</div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseCreateRoleModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_modalSaving" @onclick="CreateRoleAsync">Crear</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showCreateUserModal)
+{
+    <div class="modal-overlay" @onclick="CloseCreateUserModal">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Nuevo usuario staff</h2>
+                <button class="modal-close" @onclick="CloseCreateUserModal">×</button>
+            </div>
+            <p class="modal-confirm-text access-modal-hint">Crea una cuenta de acceso al panel con un rol inicial.</p>
+            <div class="form-group">
+                <label>Nombre de usuario</label>
+                <input class="form-input" @bind="_newUserName" />
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input class="form-input" @bind="_newUserEmail" />
+            </div>
+            <div class="form-group">
+                <label>Contraseña temporal</label>
+                <input class="form-input" type="password" @bind="_newUserPassword" />
+            </div>
+            <div class="form-group">
+                <label>Rol inicial</label>
+                <select class="form-input" @bind="_newUserRoleId">
+                    <option value="">— Seleccionar —</option>
+                    @foreach (var role in _roles.Where(r => !r.IsSystem || !string.Equals(r.Name, "Admin", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <option value="@role.Name">@role.Name</option>
+                    }
+                </select>
+            </div>
+            @if (!string.IsNullOrEmpty(_modalError))
+            {
+                <div class="wizard-error">@_modalError</div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseCreateUserModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_modalSaving" @onclick="CreateStaffUserAsync">Crear</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showAssignRolesModal && _editingUser != null)
+{
+    <div class="modal-overlay" @onclick="CloseAssignRolesModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Asignar roles</h2>
+                <button class="modal-close" @onclick="CloseAssignRolesModal">×</button>
+            </div>
+            <p class="modal-confirm-text access-modal-hint">
+                @_editingUser.Email — Tipo: @_editingUser.UserType @(string.IsNullOrWhiteSpace(_editingUser.LinkedName) ? "" : $"({_editingUser.LinkedName})")
+            </p>
+            <div class="access-role-checkboxes">
+                @foreach (var role in _roles)
+                {
+                    if (string.Equals(role.Name, "Admin", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var checkedRole = _editingRoleNames.Contains(role.Name);
+                    <label class="access-action-item">
+                        <input type="checkbox"
+                               checked="@checkedRole"
+                               @onchange="e => ToggleEditingRole(role.Name, e)" />
+                        <span>@role.Name @(role.IsSystem ? "(sistema)" : "")</span>
+                    </label>
+                }
+            </div>
+            @if (!string.IsNullOrEmpty(_modalError))
+            {
+                <div class="wizard-error">@_modalError</div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseAssignRolesModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_modalSaving" @onclick="SaveUserRolesAsync">Guardar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string _activeTab = "roles";
+    private string? _loadError;
+    private bool _rolesLoading = true;
+    private bool _usersLoading;
+    private bool _permissionsLoading;
+    private bool _savingPermissions;
+    private bool _canCreateRole;
+    private bool _canCreateUser;
+    private bool _canEditRole;
+    private bool _canDeleteRole;
+    private bool _canEditUser;
+
+    private List<RoleListItem> _roles = [];
+    private List<ManagedUserItem> _users = [];
+    private PermissionCatalogResponse? _catalog;
+    private RoleListItem? _selectedRole;
+    private string? _selectedRoleId;
+    private HashSet<string> _selectedPermissions = new(StringComparer.OrdinalIgnoreCase);
+    private int _userTotal;
+
+    private string _userSearch = string.Empty;
+    private string _userTypeFilter = string.Empty;
+
+    private bool _showCreateRoleModal;
+    private bool _showCreateUserModal;
+    private bool _showAssignRolesModal;
+    private string _newRoleName = string.Empty;
+    private string _newUserName = string.Empty;
+    private string _newUserEmail = string.Empty;
+    private string _newUserPassword = string.Empty;
+    private string _newUserRoleId = string.Empty;
+    private string? _modalError;
+    private bool _modalSaving;
+    private ManagedUserItem? _editingUser;
+    private HashSet<string> _editingRoleNames = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        _canCreateRole = PermissionService.HasPermission(user, "usuarios.create");
+        _canCreateUser = _canCreateRole;
+        _canEditRole = PermissionService.HasPermission(user, "usuarios.edit");
+        _canDeleteRole = PermissionService.HasPermission(user, "usuarios.delete");
+        _canEditUser = _canEditRole;
+
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loadError = null;
+        if (_activeTab == "roles")
+            await ReloadRolesAsync();
+        else
+            await ReloadUsersAsync();
+    }
+
+    private async Task SwitchTab(string tab)
+    {
+        _activeTab = tab;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadRolesAsync()
+    {
+        _rolesLoading = true;
+        StateHasChanged();
+
+        var (catalog, catalogError) = await AccessService.GetCatalogAsync();
+        var (roles, rolesError) = await AccessService.GetRolesAsync();
+
+        _catalog = catalog;
+        _roles = roles;
+        _loadError = catalogError ?? rolesError;
+
+        if (_roles.Count > 0 && string.IsNullOrWhiteSpace(_selectedRoleId))
+            await SelectRoleAsync(_roles[0]);
+
+        _rolesLoading = false;
+    }
+
+    private async Task ReloadUsersAsync()
+    {
+        _usersLoading = true;
+        StateHasChanged();
+
+        var (list, error) = await AccessService.GetUsersAsync(
+            search: string.IsNullOrWhiteSpace(_userSearch) ? null : _userSearch,
+            userType: string.IsNullOrWhiteSpace(_userTypeFilter) ? null : _userTypeFilter);
+
+        _users = list?.Items ?? [];
+        _userTotal = list?.TotalCount ?? 0;
+        _loadError = error;
+        _usersLoading = false;
+    }
+
+    private async Task SelectRoleAsync(RoleListItem role)
+    {
+        _selectedRole = role;
+        _selectedRoleId = role.Id;
+        _permissionsLoading = true;
+        StateHasChanged();
+
+        var (detail, error) = await AccessService.GetRolePermissionsAsync(role.Id);
+        _selectedPermissions = detail?.Permissions.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        _loadError = error;
+        _permissionsLoading = false;
+    }
+
+    private void TogglePermission(string permission, ChangeEventArgs e)
+    {
+        var isChecked = e.Value is bool b && b;
+        if (isChecked)
+            _selectedPermissions.Add(permission);
+        else
+            _selectedPermissions.Remove(permission);
+    }
+
+    private async Task SaveRolePermissionsAsync()
+    {
+        if (_selectedRole == null || string.IsNullOrWhiteSpace(_selectedRoleId))
+            return;
+
+        _savingPermissions = true;
+        var (success, error) = await AccessService.UpdateRolePermissionsAsync(
+            _selectedRoleId,
+            _selectedPermissions.ToList());
+        _savingPermissions = false;
+
+        if (!success)
+            _loadError = error;
+        else
+            await ReloadRolesAsync();
+    }
+
+    private async Task DeleteSelectedRoleAsync()
+    {
+        if (_selectedRole == null || string.IsNullOrWhiteSpace(_selectedRoleId))
+            return;
+
+        var (success, error) = await AccessService.DeleteRoleAsync(_selectedRoleId);
+        if (!success)
+        {
+            _loadError = error;
+            return;
+        }
+
+        _selectedRole = null;
+        _selectedRoleId = null;
+        await ReloadRolesAsync();
+    }
+
+    private void OpenCreateRoleModal()
+    {
+        _newRoleName = string.Empty;
+        _modalError = null;
+        _showCreateRoleModal = true;
+    }
+
+    private void CloseCreateRoleModal() => _showCreateRoleModal = false;
+
+    private async Task CreateRoleAsync()
+    {
+        _modalSaving = true;
+        _modalError = null;
+        var (success, error, role) = await AccessService.CreateRoleAsync(_newRoleName);
+        _modalSaving = false;
+
+        if (!success)
+        {
+            _modalError = error;
+            return;
+        }
+
+        _showCreateRoleModal = false;
+        await ReloadRolesAsync();
+        if (role != null)
+            await SelectRoleAsync(role);
+    }
+
+    private void OpenCreateUserModal()
+    {
+        _newUserName = string.Empty;
+        _newUserEmail = string.Empty;
+        _newUserPassword = string.Empty;
+        _newUserRoleId = string.Empty;
+        _modalError = null;
+        _showCreateUserModal = true;
+    }
+
+    private void CloseCreateUserModal() => _showCreateUserModal = false;
+
+    private async Task CreateStaffUserAsync()
+    {
+        _modalSaving = true;
+        _modalError = null;
+
+        var roles = string.IsNullOrWhiteSpace(_newUserRoleId) ? [] : new List<string> { _newUserRoleId };
+        var (success, error) = await AccessService.CreateStaffUserAsync(new CreateStaffUserRequest
+        {
+            UserName = _newUserName,
+            Email = _newUserEmail,
+            Password = _newUserPassword,
+            RoleNames = roles
+        });
+
+        _modalSaving = false;
+        if (!success)
+        {
+            _modalError = error;
+            return;
+        }
+
+        _showCreateUserModal = false;
+        _activeTab = "users";
+        await ReloadUsersAsync();
+    }
+
+    private void OpenAssignRolesModal(ManagedUserItem user)
+    {
+        _editingUser = user;
+        _editingRoleNames = user.Roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _modalError = null;
+        _showAssignRolesModal = true;
+    }
+
+    private void CloseAssignRolesModal() => _showAssignRolesModal = false;
+
+    private void ToggleEditingRole(string roleName, ChangeEventArgs e)
+    {
+        var isChecked = e.Value is bool b && b;
+        if (isChecked)
+            _editingRoleNames.Add(roleName);
+        else
+            _editingRoleNames.Remove(roleName);
+    }
+
+    private async Task SaveUserRolesAsync()
+    {
+        if (_editingUser == null)
+            return;
+
+        _modalSaving = true;
+        _modalError = null;
+        var (success, error) = await AccessService.AssignUserRolesAsync(
+            _editingUser.Id,
+            _editingRoleNames.ToList());
+        _modalSaving = false;
+
+        if (!success)
+        {
+            _modalError = error;
+            return;
+        }
+
+        _showAssignRolesModal = false;
+        await ReloadUsersAsync();
+    }
+
+    private async Task ToggleLockoutAsync(ManagedUserItem user)
+    {
+        var (success, error) = await AccessService.SetUserLockoutAsync(user.Id, !user.IsLockedOut);
+        if (!success)
+            _loadError = error;
+        else
+            await ReloadUsersAsync();
+    }
+
+    private async Task OnUserSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await ReloadUsersAsync();
+    }
+}

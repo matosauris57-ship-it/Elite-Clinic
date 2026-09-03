@@ -14,12 +14,21 @@
             _mockDoctorRepo = new Mock<IDoctorRepository>();
             _mockPatientRepo = new Mock<IPatientRepository>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
+            var mockHours = new Mock<IClinicOperatingHoursService>();
+            mockHours.Setup(h => h.GetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ClinicOperatingHours
+                {
+                    OpenTime = new TimeSpan(12, 0, 0),
+                    CloseTime = new TimeSpan(22, 0, 0),
+                    SlotDurationMinutes = 15,
+                    WorkingDays = [0, 1, 2, 3, 4, 5, 6]
+                });
             // ربط الـ Repositories بالـ UnitOfWork
             _mockUnitOfWork.SetupGet(u => u.DoctorsRepository).Returns(_mockDoctorRepo.Object);
             _mockUnitOfWork.SetupGet(u => u.PatientsRepository).Returns(_mockPatientRepo.Object);
 
             // إنشاء الـ Validator الفعلي
-            _validator = new BookAppointmentCommandValidator(_mockUnitOfWork.Object, _mockCurrentUserService.Object);
+            _validator = new BookAppointmentCommandValidator(_mockUnitOfWork.Object, _mockCurrentUserService.Object, mockHours.Object);
         }
 
         [Fact]
@@ -186,14 +195,14 @@
         }
 
         [Fact]
-        public async Task AppointmentDate_WhenTodayOrFuture_ShouldNotHaveValidationError()
+        public async Task AppointmentDate_WhenFuture_ShouldNotHaveValidationError()
         {
             // Arrange
             var command = new BookAppointmentCommand
             {
                 DoctorId = 1,
                 PatientId = 1,
-                AppointmentDate = DateTime.Today, // Today
+                AppointmentDate = DateTime.Today.AddDays(1),
                 AppointmentTime = new TimeSpan(13, 0, 0) // 1:00 PM
             };
             _mockDoctorRepo.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
@@ -204,6 +213,26 @@
             var result = await _validator.TestValidateAsync(command);
             // Assert
             result.ShouldNotHaveValidationErrorFor(c => c.AppointmentDate);
+        }
+
+        [Fact]
+        public async Task AppointmentDate_WhenTodayAndTimeAlreadyPassed_ShouldHaveValidationError()
+        {
+            var command = new BookAppointmentCommand
+            {
+                DoctorId = 1,
+                PatientId = 1,
+                AppointmentDate = DateTime.Today,
+                AppointmentTime = DateTime.Now.TimeOfDay.Subtract(TimeSpan.FromMinutes(1))
+            };
+            _mockDoctorRepo.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Doctor { Id = 1 });
+            _mockPatientRepo.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Patient { Id = 1 });
+
+            var result = await _validator.TestValidateAsync(command);
+
+            result.ShouldHaveValidationErrorFor(c => c.AppointmentDate);
         }
     }
 }

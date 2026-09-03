@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Data.Context
+namespace Clinic_System.Data.Context
 {
     public class AppDbContext : IdentityDbContext<ApplicationUser>
     {
@@ -9,6 +9,27 @@
         public DbSet<Prescription> Prescriptions { get; set; }
         public DbSet<Payment> Payments { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<DentalHistory> DentalHistories { get; set; }
+        public DbSet<ToothRecord> ToothRecords { get; set; }
+        public DbSet<ToothChartEntry> ToothChartEntries { get; set; }
+        public DbSet<DentalClinicalEvent> DentalClinicalEvents { get; set; }
+        public DbSet<DentalTreatment> DentalTreatments { get; set; }
+        public DbSet<TreatmentPlan> TreatmentPlans { get; set; }
+        public DbSet<PlanItem> PlanItems { get; set; }
+        public DbSet<InvoiceLine> InvoiceLines { get; set; }
+        public DbSet<PaymentReceipt> PaymentReceipts { get; set; }
+        public DbSet<TreatmentProcedure> TreatmentProcedures { get; set; }
+        public DbSet<DoctorProcedurePrice> DoctorProcedurePrices { get; set; }
+        public DbSet<MedicalCondition> MedicalConditions { get; set; }
+        public DbSet<PatientMedicalCondition> PatientMedicalConditions { get; set; }
+        public DbSet<PeriodontalExam> PeriodontalExams { get; set; }
+        public DbSet<PeriodontalTooth> PeriodontalTeeth { get; set; }
+        public DbSet<PeriodontalSite> PeriodontalSites { get; set; }
+        public DbSet<PatientPrescription> PatientPrescriptions { get; set; }
+        public DbSet<PatientPrescriptionItem> PatientPrescriptionItems { get; set; }
+        public DbSet<DashboardLayout> DashboardLayouts { get; set; }
+        public DbSet<EmailCampaign> EmailCampaigns { get; set; }
+        public DbSet<EmailCampaignRecipient> EmailCampaignRecipients { get; set; }
 
         public AppDbContext()
         {

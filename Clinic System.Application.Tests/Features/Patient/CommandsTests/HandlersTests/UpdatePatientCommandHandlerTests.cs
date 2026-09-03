@@ -15,6 +15,7 @@
             _mockPatientService = new Mock<IPatientService>();
             _mockMapper = new Mock<IMapper>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
+            _mockCurrentUserService.Setup(s => s.IsAdmin).Returns(true);
             _mockLogger = new Mock<ILogger<UpdatePatientCommandHandler>>();
 
             _handler = new UpdatePatientCommandHandler(

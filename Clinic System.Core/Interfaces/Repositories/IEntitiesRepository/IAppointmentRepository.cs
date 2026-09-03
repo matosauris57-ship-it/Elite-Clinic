@@ -41,9 +41,19 @@
             CancellationToken cancellationToken = default);
 
         Task<IEnumerable<Appointment>> GetAppointmentsInDateAsync(DateTime date, CancellationToken cancellationToken = default);
+        Task<(List<Appointment> Items, int TotalCount)> GetAgendaForAdminAsync(
+            DateTime? date,
+            int? doctorId,
+            AppointmentStatus? status,
+            DateTime? endDate = null,
+            int pageNumber = 1,
+            int pageSize = 0,
+            string? search = null,
+            CancellationToken cancellationToken = default);
         Task<IEnumerable<Appointment>> GetBookedAppointmentsAsync(int doctorId, DateTime date, CancellationToken cancellationToken = default);
         Task<Appointment?> GetNextUpcomingAppointmentAsync(int? doctorId, int? patientId, CancellationToken cancellationToken = default);
         Task<IEnumerable<Appointment>> GetPendingOverdueAppointmentsAsync(DateTime date, CancellationToken cancellationToken = default);
-        Task<Dictionary<AppointmentStatus, int>> GetAppointmentsCountByStatusAsync(DateTime start, DateTime end, CancellationToken cancellationToken = default);
+        Task<Dictionary<AppointmentStatus, int>> GetAppointmentsCountByStatusAsync(DateTime? start, DateTime? end, CancellationToken cancellationToken = default);
+        Task<List<Appointment>> GetForAutomaticRemindersAsync(DateTime fromInclusive, DateTime toExclusive, CancellationToken cancellationToken = default);
     }
 }

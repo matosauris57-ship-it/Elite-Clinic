@@ -1,0 +1,362 @@
+@page "/pacientes"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "pacientes.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject PatientMaintenanceService PatientService
+@inject AuthService AuthService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Pacientes — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Pacientes</h1>
+            <p>Gestión de pacientes y fichas clínicas</p>
+        </div>
+        @if (_canCreate)
+        {
+            <div class="command-actions">
+                <button class="btn-primary" @onclick="OpenCreateModal">
+                    <Icon Name="plus" Class="btn-svg" /> Nuevo paciente
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_loadError))
+    {
+        <ErrorBanner Message="@_loadError" OnRetry="ReloadAsync" />
+    }
+
+    <div class="maintenance-toolbar">
+        <div class="maintenance-toolbar-left">
+            <div class="search-field maintenance-search">
+                <Icon Name="search" Class="field-icon" />
+                <input type="text" placeholder="Buscar por nombre, cédula, teléfono o correo..." @bind="_search" @bind:event="oninput" />
+            </div>
+            <div class="maintenance-status-toggles">
+                <button class="toggle-btn @(_statusFilter == "all" ? "active" : "")" @onclick='() => _statusFilter = "all"'>Todos</button>
+                <button class="toggle-btn @(_statusFilter == "active" ? "active" : "")" @onclick='() => _statusFilter = "active"'>Activos</button>
+                <button class="toggle-btn @(_statusFilter == "inactive" ? "active" : "")" @onclick='() => _statusFilter = "inactive"'>Inactivos</button>
+            </div>
+        </div>
+        <span class="maintenance-count">@FilteredPatients.Count() paciente(s)</span>
+    </div>
+
+    @if (_loading) { <AnimatedLoader Message="Cargando pacientes..." /> }
+    else if (!FilteredPatients.Any() && string.IsNullOrEmpty(_loadError))
+    {
+        <div class="maintenance-empty"><p>No hay pacientes con los filtros actuales.</p></div>
+    }
+    else
+    {
+        <div class="data-table-wrap">
+            <table class="data-table patients-table">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Cédula</th>
+                        <th>Teléfono</th>
+                        <th>Celular</th>
+                        <th>Correo</th>
+                        <th class="col-age">Edad</th>
+                        <th>Estado</th>
+                        <th class="col-actions">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in FilteredPatients)
+                    {
+                        var email = DisplayEmail(p);
+                        var mobile = DisplayMobile(p);
+                        <tr class="@(p.IsActive ? null : "table-row-inactive")">
+                            <td>
+                                <button type="button" class="table-patient-link" @onclick="() => GoToPatient(p.Id)">
+                                    <span class="avatar avatar-sm avatar-@((p.Id % 4))">@GetInitials(p.FullName)</span>
+                                    <span class="table-patient-copy">
+                                        <strong>@p.FullName</strong>
+                                        <span class="table-patient-sub">Abrir ficha clínica</span>
+                                    </span>
+                                </button>
+                            </td>
+                            <td class="table-id-cell">@(string.IsNullOrWhiteSpace(p.NationalId) ? "—" : p.NationalId)</td>
+                            <td>@Dash(p.Phone)</td>
+                            <td>@mobile</td>
+                            <td class="col-email">
+                                @if (string.IsNullOrWhiteSpace(email))
+                                {
+                                    <span class="table-muted">—</span>
+                                }
+                                else
+                                {
+                                    <a class="table-email" href="mailto:@email" title="@email" @onclick:stopPropagation="true">@email</a>
+                                }
+                            </td>
+                            <td class="col-age">@GetAge(p.DateOfBirth)</td>
+                            <td>
+                                <span class="status-badge @(p.IsActive ? "status-active" : "status-inactive")">
+                                    @(p.IsActive ? "Activo" : "Inactivo")
+                                </span>
+                            </td>
+                            <td class="col-actions">
+                                <div class="table-actions">
+                                    <button class="btn-table btn-table-primary" @onclick="() => GoToPatient(p.Id)">Ver ficha</button>
+                                    @if (_canEdit && p.IsActive)
+                                    {
+                                        <button class="btn-table" @onclick="() => OpenEditModal(p)">Editar</button>
+                                    }
+                                    @if (_canDelete && p.IsActive)
+                                    {
+                                        <button class="btn-table btn-table-danger" @onclick="() => OpenDisableModal(p)">Deshabilitar</button>
+                                    }
+                                    @if (_canEdit && !p.IsActive)
+                                    {
+                                        <button class="btn-table" @onclick="() => OpenEnableModal(p)">Reactivar</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_showFormModal)
+{
+    <div class="modal-overlay" @onclick="CloseFormModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@(_isEdit ? "Editar paciente" : "Nuevo paciente")</h2>
+                <button class="modal-close" @onclick="CloseFormModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_formError)) { <div class="wizard-error">@_formError</div> }
+            @if (_isEdit)
+            {
+                <div class="new-patient-form">
+                    <div class="form-row">
+                        <div class="form-group"><label>Nombre</label><input class="form-input" @bind="_editForm.FullName" /></div>
+                        <div class="form-group"><label>Cédula</label><input class="form-input" @bind="_editForm.NationalId" /></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Teléfono</label><input class="form-input" @bind="_editForm.Phone" /></div>
+                        <div class="form-group"><label>Celular</label><input class="form-input" @bind="_editForm.MobilePhone" /></div>
+                    </div>
+                    <div class="form-group"><label>Correo (opcional)</label><input class="form-input" type="email" @bind="_editForm.Email" placeholder="paciente@correo.com" /></div>
+                    <div class="form-group"><label>Dirección</label><input class="form-input" @bind="_editForm.Address" /></div>
+                </div>
+            }
+            else
+            {
+                <div class="new-patient-form">
+                    <div class="form-row">
+                        <div class="form-group"><label>Nombre completo</label><input class="form-input" @bind="_createForm.FullName" /></div>
+                        <div class="form-group"><label>Cédula</label><input class="form-input" @bind="_createForm.NationalId" /></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Teléfono</label><input class="form-input" @bind="_createForm.Phone" /></div>
+                        <div class="form-group"><label>Celular</label><input class="form-input" @bind="_createForm.MobilePhone" /></div>
+                    </div>
+                    <div class="form-group"><label>Correo (opcional)</label><input class="form-input" type="email" @bind="_createForm.Email" placeholder="paciente@correo.com" /></div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Género</label>
+                            <select class="form-input" @bind="_createForm.Gender">
+                                <option value="Male">Masculino</option>
+                                <option value="Female">Femenino</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Fecha nacimiento</label>
+                            <input class="form-input" type="date" value="@_createForm.DateOfBirth.ToString("yyyy-MM-dd")" @onchange="OnBirthChanged" />
+                        </div>
+                    </div>
+                    <div class="form-group"><label>Dirección</label><input class="form-input" @bind="_createForm.Address" /></div>
+                </div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseFormModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Guardando..." : "Guardar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showDisableModal && _toDisable != null)
+{
+    <div class="modal-overlay" @onclick="() => _showDisableModal = false">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header"><h2>Deshabilitar paciente</h2></div>
+            <p class="modal-confirm-text">¿Deshabilitar a <strong>@_toDisable.FullName</strong>?</p>
+            @if (!string.IsNullOrEmpty(_disableError)) { <div class="wizard-error">@_disableError</div> }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="() => _showDisableModal = false">Cancelar</button>
+                <button class="btn-danger" @onclick="ConfirmDisableAsync">Deshabilitar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showEnableModal && _toEnable != null)
+{
+    <div class="modal-overlay" @onclick="() => _showEnableModal = false">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header"><h2>Reactivar paciente</h2></div>
+            <p class="modal-confirm-text">¿Reactivar a <strong>@_toEnable.FullName</strong>?</p>
+            @if (!string.IsNullOrEmpty(_enableError)) { <div class="wizard-error">@_enableError</div> }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="() => _showEnableModal = false">Cancelar</button>
+                <button class="btn-primary" @onclick="ConfirmEnableAsync">Reactivar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<PatientListItem> _patients = [];
+    private string _search = "", _statusFilter = "all";
+    private bool _loading = true;
+    private string? _loadError, _formError, _disableError, _enableError;
+    private bool _canCreate, _canEdit, _canDelete, _showFormModal, _isEdit, _saving;
+    private bool _showDisableModal, _showEnableModal;
+    private CreatePatientRequest _createForm = new();
+    private UpdatePatientRequest _editForm = new();
+    private int _editingId;
+    private PatientListItem? _toDisable, _toEnable;
+
+    private IEnumerable<PatientListItem> FilteredPatients
+    {
+        get
+        {
+            var q = _patients.AsEnumerable();
+            q = _statusFilter switch { "active" => q.Where(p => p.IsActive), "inactive" => q.Where(p => !p.IsActive), _ => q };
+            if (!string.IsNullOrWhiteSpace(_search))
+                q = q.Where(p => p.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    (p.NationalId?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    p.Phone.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    (p.MobilePhone?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (p.Email?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
+            return q;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canCreate = PermissionService.HasPermission(user, "pacientes.create");
+        _canEdit = PermissionService.HasPermission(user, "pacientes.edit");
+        _canDelete = PermissionService.HasPermission(user, "pacientes.delete");
+        await ReloadAsync();
+    }
+
+    private void GoToPatient(int id) => Navigation.NavigateTo($"/pacientes/{id}");
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        var (patients, error) = await AuthService.WithTokenRetryAsync(() => PatientService.GetPatientsAsync(), AuthService.IsTokenError);
+        _patients = patients; _loadError = error; _loading = false;
+    }
+
+    private void OpenCreateModal() { _isEdit = false; _createForm = new(); _formError = null; _showFormModal = true; }
+    private void OpenEditModal(PatientListItem p)
+    {
+        _isEdit = true; _editingId = p.Id;
+        _editForm = new UpdatePatientRequest { Id = p.Id, FullName = p.FullName, Phone = p.Phone, MobilePhone = p.MobilePhone, NationalId = p.NationalId, Email = p.Email, Address = p.Address };
+        _showFormModal = true;
+    }
+    private void CloseFormModal() => _showFormModal = false;
+    private void OpenDisableModal(PatientListItem p) { _toDisable = p; _disableError = null; _showDisableModal = true; }
+    private void OpenEnableModal(PatientListItem p) { _toEnable = p; _enableError = null; _showEnableModal = true; }
+    private void OnBirthChanged(ChangeEventArgs e) { if (DateTime.TryParse(e.Value?.ToString(), out var d)) _createForm.DateOfBirth = d; }
+
+    private async Task SaveAsync()
+    {
+        _saving = true; _formError = null;
+        var emailToCheck = _isEdit ? _editForm.Email : _createForm.Email;
+        if (!ContactEmail.TryValidate(emailToCheck, out var normalizedEmail, out var emailError))
+        {
+            _formError = emailError;
+            _saving = false;
+            return;
+        }
+
+        if (_isEdit)
+        {
+            _editForm.Email = normalizedEmail;
+            var (ok, err) = await PatientService.UpdatePatientAsync(_editingId, _editForm);
+            if (!ok) { _formError = err; _saving = false; return; }
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(_createForm.FullName) || string.IsNullOrWhiteSpace(_createForm.Phone))
+            { _formError = "Nombre y teléfono son obligatorios."; _saving = false; return; }
+            if (string.IsNullOrWhiteSpace(_createForm.Address))
+                _createForm.Address = "Sin dirección";
+            _createForm.Email = normalizedEmail;
+            var (ok, err, id) = await PatientService.CreatePatientAsync(_createForm);
+            if (!ok) { _formError = err; _saving = false; return; }
+            if (id is int patientId)
+            {
+                Navigation.NavigateTo($"/pacientes/{patientId}?tab=antecedentes");
+                return;
+            }
+        }
+        _saving = false; _showFormModal = false; await ReloadAsync();
+    }
+
+    private async Task ConfirmDisableAsync()
+    {
+        if (_toDisable == null) return;
+        var (ok, err) = await PatientService.DisablePatientAsync(_toDisable.Id);
+        if (!ok) { _disableError = err; return; }
+        _showDisableModal = false; await ReloadAsync();
+    }
+
+    private async Task ConfirmEnableAsync()
+    {
+        if (_toEnable == null) return;
+        var (ok, err) = await PatientService.EnablePatientAsync(_toEnable.Id);
+        if (!ok) { _enableError = err; return; }
+        _showEnableModal = false; await ReloadAsync();
+    }
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 ? $"{char.ToUpper(parts[0][0])}{char.ToUpper(parts[1][0])}" : name.Length > 0 ? char.ToUpper(name[0]).ToString() : "?";
+    }
+
+    private static string GetAge(string? dob)
+    {
+        if (string.IsNullOrWhiteSpace(dob)) return "—";
+        if (DateTime.TryParse(dob, out var date))
+            return $"{(int)((DateTime.Today - date).TotalDays / 365.25)}";
+        return "—";
+    }
+
+    private static string Dash(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim();
+
+    private static bool LooksLikeEmail(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Contains('@');
+
+    private static string DisplayMobile(PatientListItem patient)
+    {
+        if (string.IsNullOrWhiteSpace(patient.MobilePhone))
+            return "—";
+        if (LooksLikeEmail(patient.MobilePhone) && string.IsNullOrWhiteSpace(patient.Email))
+            return "—";
+        return patient.MobilePhone.Trim();
+    }
+
+    private static string? DisplayEmail(PatientListItem patient)
+    {
+        if (!string.IsNullOrWhiteSpace(patient.Email))
+            return patient.Email.Trim();
+        return LooksLikeEmail(patient.MobilePhone) ? patient.MobilePhone!.Trim() : null;
+    }
+}

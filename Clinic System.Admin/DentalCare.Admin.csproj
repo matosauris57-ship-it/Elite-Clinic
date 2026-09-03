@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <LaunchProfile>http</LaunchProfile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Clinic System.Core\Elite Clinic.Core.csproj" />
+  </ItemGroup>
+
+  <Target Name="StopLockedClinicDevProcesses"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(Configuration)' == 'Debug' and '$(DesignTimeBuild)' != 'true' and '$(BuildingInsideVisualStudio)' != 'true' and '$(StopClinicDevProcesses)' != 'false'">
+    <Exec Command='powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\build\StopDevProcesses.ps1&quot; -ProcessNames &quot;DentalCare.Admin&quot;'
+          ContinueOnError="WarnAndContinue" />
+  </Target>
+
+</Project>

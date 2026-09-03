@@ -1,0 +1,219 @@
+@inject ClinicProfileService ClinicProfile
+
+<article class="invoice-document @(ShowLineDetails ? "is-detailed" : "is-summary")">
+    <header class="invoice-letterhead">
+        <div class="invoice-brand">
+            @if (!string.IsNullOrWhiteSpace(Clinic.DisplayLogoUrl))
+            {
+                <img class="invoice-logo" src="@Clinic.DisplayLogoUrl" alt="@Clinic.Name" />
+            }
+            <div class="invoice-brand-copy">
+                <h1>@Clinic.Name</h1>
+                <p class="invoice-contact">
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Address))
+                    {
+                        <span>@Clinic.Address</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Phone))
+                    {
+                        <span>Tel. @Clinic.Phone</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Email))
+                    {
+                        <span>@Clinic.Email</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.TaxId))
+                    {
+                        <span>RNC @Clinic.TaxId</span>
+                    }
+                </p>
+            </div>
+        </div>
+        <aside class="invoice-meta">
+            <p class="invoice-kicker">Factura N.º @Payment.PaymentId</p>
+            <span class="invoice-status @StatusCss">@Payment.PaymentStatusDisplay</span>
+            <p class="invoice-meta-line">@FormatDate(Payment.PaymentDate)</p>
+            @if (!string.IsNullOrWhiteSpace(Payment.AppointmentDate))
+            {
+                <p class="invoice-meta-line">Cita #@Payment.AppointmentId · @FormatDate(Payment.AppointmentDate)</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(Payment.PaymentMethodDisplay))
+            {
+                <p class="invoice-meta-line">@Payment.PaymentMethodDisplay</p>
+            }
+        </aside>
+    </header>
+
+    <section class="invoice-parties">
+        <p><span>Paciente</span> <strong>@Payment.PatientName</strong>
+            @if (!string.IsNullOrWhiteSpace(Payment.PatientPhone))
+            {
+                <span class="invoice-party-extra">@Payment.PatientPhone</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Payment.PatientNationalId))
+            {
+                <span class="invoice-party-extra">Céd. @Payment.PatientNationalId</span>
+            }
+        </p>
+        <p><span>Médico</span> <strong>@Payment.DoctorName</strong>
+            @if (!string.IsNullOrWhiteSpace(Payment.DoctorSpecialization))
+            {
+                <span class="invoice-party-extra">@Payment.DoctorSpecialization</span>
+            }
+        </p>
+    </section>
+
+    @if (ShowLineDetails)
+    {
+        <table class="invoice-lines">
+            <thead>
+                <tr>
+                    <th>Descripción</th>
+                    <th>Pieza</th>
+                    <th>Cant.</th>
+                    <th>P. unitario</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Lines.Count > 0)
+                {
+                    @foreach (var line in Lines)
+                    {
+                        <tr>
+                            <td>@line.Description</td>
+                            <td>@(line.ToothNumber?.ToString() ?? "—")</td>
+                            <td>@line.Quantity</td>
+                            <td>@line.UnitPriceDisplay</td>
+                            <td>@line.LineTotalDisplay</td>
+                        </tr>
+                    }
+                }
+                else if (HasAmount)
+                {
+                    <tr>
+                        <td>Servicios odontológicos</td>
+                        <td>—</td>
+                        <td>1</td>
+                        <td>@Payment.AmountDisplay</td>
+                        <td>@Payment.AmountDisplay</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td>Pendiente de desglose</td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td>—</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <table class="invoice-lines invoice-lines-summary">
+            <thead>
+                <tr>
+                    <th>Concepto</th>
+                    <th>Importe</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Total de servicios odontológicos</td>
+                    <td>@Payment.AmountDisplay</td>
+                </tr>
+            </tbody>
+        </table>
+    }
+
+    <footer class="invoice-totals">
+        <div class="invoice-footnote">
+            @if (!string.IsNullOrWhiteSpace(Payment.Notes) && Payment.Notes != "N/A")
+            {
+                <p class="invoice-notes"><span>Notas</span> @Payment.Notes</p>
+            }
+            <p class="invoice-thanks">Gracias por su visita.</p>
+        </div>
+        <dl>
+            @if (ShowLineDetails)
+            {
+                <div>
+                    <dt>Subtotal</dt>
+                    <dd>@Payment.AmountDisplay</dd>
+                </div>
+            }
+            <div class="invoice-grand">
+                <dt>Total</dt>
+                <dd>@Payment.AmountDisplay</dd>
+            </div>
+            <div>
+                <dt>Abonado</dt>
+                <dd>@Payment.AmountCollectedDisplay</dd>
+            </div>
+            <div>
+                <dt>Saldo</dt>
+                <dd>@Payment.BalanceDisplay</dd>
+            </div>
+        </dl>
+    </footer>
+
+    @if (ShowLineDetails && Payment.Receipts.Count > 0)
+    {
+        <section class="invoice-receipts">
+            <p class="invoice-kicker">Abonos</p>
+            <table class="invoice-lines">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Método</th>
+                        <th>Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var receipt in Payment.Receipts)
+                    {
+                        <tr>
+                            <td>@FormatDate(receipt.PaidAt)</td>
+                            <td>@receipt.PaymentMethodDisplay</td>
+                            <td>@receipt.AmountDisplay</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public PaymentListItem Payment { get; set; } = new();
+
+    [Parameter]
+    public List<InvoiceLineItem> Lines { get; set; } = [];
+
+    [Parameter]
+    public bool ShowLineDetails { get; set; } = true;
+
+    private ClinicProfile Clinic => ClinicProfile.Get();
+    private bool HasAmount => Payment.Amount > 0.01m;
+
+    private string StatusCss => Payment.PaymentStatus switch
+    {
+        "Paid" => "is-paid",
+        "PartiallyPaid" => "is-pending",
+        "Pending" => "is-pending",
+        "Failed" => "is-failed",
+        "Refunded" => "is-refunded",
+        "Cancelled" => "is-failed",
+        _ => string.Empty
+    };
+
+    private static string FormatDate(string? value) =>
+        DateTime.TryParse(value, out var date)
+            ? date.ToString("dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+            : string.IsNullOrWhiteSpace(value) ? "—" : value;
+}

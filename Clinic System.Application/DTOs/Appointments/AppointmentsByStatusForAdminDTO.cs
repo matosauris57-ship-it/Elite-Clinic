@@ -3,6 +3,8 @@
     public class AppointmentsByStatusForAdminDTO
     {
         public int Id { get; set; }
+        public int PatientId { get; set; }
+        public int DoctorId { get; set; }
         public string Status { get; set; }
         public string DoctorName { get; set; }
         public string DoctorPhone { get; set; }

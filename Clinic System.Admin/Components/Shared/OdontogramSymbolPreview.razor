@@ -1,0 +1,33 @@
+@using Clinic_System.Core.Odontogram
+<div class="symbol-preview-tooth" aria-hidden="true">
+    <svg viewBox="0 0 64 88" class="symbol-preview-svg">
+        <path d="M18 10 C12 18 10 28 12 40 L16 78 C17 84 22 86 32 86 C42 86 47 84 48 78 L52 40 C54 28 52 18 46 10 C40 4 24 4 18 10 Z"
+              fill="var(--surface-2, #f3f1ec)"
+              stroke="var(--border, #cfc8bc)"
+              stroke-width="1.4" />
+        @if (ShowSurface)
+        {
+            <path d="M24 42 C32 36 40 36 48 42 L46 58 C38 64 26 64 18 58 Z"
+                  fill="@SurfaceFill"
+                  fill-opacity="@SurfaceFillOpacity"
+                  stroke="@SurfaceStroke"
+                  stroke-width="@Symbol.StrokeWidth" />
+        }
+        <g transform="translate(20 34) scale(1.05)">
+            <OdontogramSymbolGlyph Symbol="Symbol" />
+        </g>
+    </svg>
+    <span class="symbol-preview-caption">@Caption</span>
+</div>
+
+@code {
+    [Parameter] public OdontogramConditionSymbol Symbol { get; set; } = OdontogramSymbolDefaults.Condition(Clinic_System.Core.Enums.ToothCondition.Caries);
+    [Parameter] public string Caption { get; set; } = "Vista previa";
+    [Parameter] public bool ShowSurface { get; set; } = true;
+
+    private bool PaintPath => OdontogramSymbolPaint.PaintsSurfacePath(Symbol);
+    private string Color => OdontogramSymbolColor.Normalize(Symbol.Color);
+    private string SurfaceFill => PaintPath && OdontogramSymbolPaint.MarkIsFilled(Symbol) ? Color : "transparent";
+    private string SurfaceStroke => PaintPath ? Color : "transparent";
+    private string SurfaceFillOpacity => Math.Clamp(Symbol.Opacity, 0.15, 1).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+}

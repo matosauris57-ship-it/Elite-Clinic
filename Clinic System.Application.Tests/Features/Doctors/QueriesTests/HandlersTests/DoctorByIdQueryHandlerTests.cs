@@ -16,6 +16,7 @@
             _mockCacheService = new Mock<ICacheService>();
             _mockLogger = new Mock<ILogger<DoctorByIdQueryHandler>>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
+            _mockCurrentUserService.Setup(s => s.IsAdmin).Returns(true);
             _handler = new DoctorByIdQueryHandler(
                 _mockCurrentUserService.Object, _mockDoctorService.Object,
                 _mockMapper.Object,

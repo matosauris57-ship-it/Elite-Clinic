@@ -12,5 +12,6 @@
         public DateTime? ToDate { get; set; }    // ليوم كذا
         public PaymentMethod? Method { get; set; } // هاتلي الكاش بس
         public PaymentStatus? Status { get; set; } // هاتلي الـ Paid بس
+        public string? Search { get; set; }
     }
 }

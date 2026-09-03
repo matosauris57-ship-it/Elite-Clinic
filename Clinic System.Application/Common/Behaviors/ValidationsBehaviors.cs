@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Common.Behaviors
+namespace Clinic_System.Application.Common.Behaviors
 {
     public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
        where TRequest : IRequest<TResponse>
@@ -25,19 +25,42 @@
                 {
                     var messages = failures.Select(x => x.PropertyName + ": " + x.ErrorMessage).ToList();
 
-                    _logger.LogError("Validation errors - {CommandType} - Command: {@Command} - Errors: {@ValidationErrors}",
-                        typeof(TRequest).Name, request, messages);
+                    _logger.LogWarning("Validation errors - {CommandType} - Errors: {@ValidationErrors}",
+                        typeof(TRequest).Name, messages);
 
-                    throw new ApiException(
-                        "Validation Failed",
-                        400,
-                        messages
-                    );
+                    if (TryCreateValidationResponse(messages, out var validationResponse))
+                        return validationResponse;
+
+                    throw new ApiException("Validation Failed", 400, messages);
                 }
             }
 
             _logger.LogInformation("Validation successful for command {CommandType}", typeof(TRequest).Name);
             return await next();
+        }
+
+        private static bool TryCreateValidationResponse(List<string> messages, out TResponse response)
+        {
+            response = default!;
+
+            var responseType = typeof(TResponse);
+            if (!responseType.IsGenericType || responseType.GetGenericTypeDefinition() != typeof(Response<>))
+                return false;
+
+            var dataType = responseType.GetGenericArguments()[0];
+            var handler = new ResponseHandler();
+            var method = typeof(ResponseHandler).GetMethod(nameof(ResponseHandler.BadRequest))!;
+            var genericMethod = method.MakeGenericMethod(dataType);
+            var result = genericMethod.Invoke(handler, new object?[] { "Validation Failed" });
+
+            if (result == null)
+                return false;
+
+            var errorsProperty = responseType.GetProperty(nameof(Response<object>.Errors));
+            errorsProperty?.SetValue(result, messages);
+
+            response = (TResponse)result;
+            return true;
         }
     }
 }

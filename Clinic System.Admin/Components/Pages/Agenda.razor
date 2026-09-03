@@ -1,0 +1,1396 @@
+@page "/agenda"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "agenda.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AgendaMaintenanceService AgendaService
+@inject AppointmentBookingService BookingService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject WhatsAppMessageSettingsService WhatsAppSettings
+@inject EmailMessageSettingsService EmailMessageSettings
+@inject IJSRuntime JS
+
+<PageTitle>Agenda — DentalCare Admin</PageTitle>
+
+<div class="agenda-page maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Agenda</h1>
+            <p>@HeaderDateText</p>
+        </div>
+        <div class="command-actions">
+            <button class="btn-outline" disabled="@(_loading || IsPeriodNavDisabled)" @onclick="PrevPeriod">
+                <Icon Name="chevron-left" Class="btn-svg" />
+            </button>
+            <button class="btn-outline" disabled="@_loading" @onclick="GoToday">Hoy</button>
+            <button class="btn-outline" disabled="@(_loading || IsPeriodNavDisabled)" @onclick="NextPeriod">
+                <Icon Name="chevron-right" Class="btn-svg" />
+            </button>
+            <a href="/agendar-cita" class="btn-primary">
+                <Icon Name="calendar-plus" Class="btn-svg" />
+                Agendar nueva
+            </a>
+        </div>
+    </div>
+
+    <div class="agenda-kpi-row">
+        <div class="agenda-kpi"><span class="agenda-kpi-value">@TotalAppointments</span><span class="agenda-kpi-label">Total</span></div>
+        <div class="agenda-kpi accent-purple"><span class="agenda-kpi-value">@PendingAppointments</span><span class="agenda-kpi-label">Pendientes</span></div>
+        <div class="agenda-kpi accent-teal"><span class="agenda-kpi-value">@ConfirmedAppointments</span><span class="agenda-kpi-label">Confirmadas</span></div>
+        <div class="agenda-kpi accent-green"><span class="agenda-kpi-value">@CompletedAppointments</span><span class="agenda-kpi-label">Completadas</span></div>
+    </div>
+
+    <div class="agenda-layout">
+        <aside class="agenda-sidebar">
+            <div class="mini-calendar">
+                <div class="cal-header">
+                    <button class="cal-nav" @onclick="PrevMonth">‹</button>
+                    <span>@_calendarMonth.ToString("MMMM yyyy", _culture)</span>
+                    <button class="cal-nav" @onclick="NextMonth">›</button>
+                </div>
+                <div class="cal-weekdays">
+                    <span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span>
+                </div>
+                <div class="cal-days">
+                    @foreach (var day in GetCalendarDays())
+                    {
+                        if (day == null)
+                        {
+                            <span class="cal-day empty"></span>
+                        }
+                        else
+                        {
+                            <button class="cal-day @GetDayClass(day.Value)" disabled="@_loading" @onclick="() => SelectDate(day.Value)">@day.Value.Day</button>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="agenda-filters">
+                <div class="form-group">
+                    <label>Médico</label>
+                    <select class="form-input" disabled="@_loading" @bind="_doctorFilter" @bind:after="OnRemoteFilterChangedAsync">
+                        <option value="0">Todos los médicos</option>
+                        @foreach (var doc in _doctors)
+                        {
+                            <option value="@doc.Id">@doc.FullName</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Estado</label>
+                    <select class="form-input" disabled="@_loading" @bind="_statusFilter" @bind:after="OnRemoteFilterChangedAsync">
+                        <option value="">Todos</option>
+                        <option value="Pending">Pendiente</option>
+                        <option value="Confirmed">Confirmada</option>
+                        <option value="Rescheduled">Reagendada</option>
+                        <option value="Completed">Completada</option>
+                        <option value="Cancelled">Cancelada</option>
+                        <option value="NoShow">No asistió</option>
+                    </select>
+                </div>
+                @if (_viewMode == "list")
+                {
+                    <div class="form-group">
+                        <label>Periodo</label>
+                        <select class="form-input" disabled="@_loading" @bind="_listDateMode" @bind:after="OnListDateModeChangedAsync">
+                            <option value="day">Día</option>
+                            <option value="range">Rango de fechas</option>
+                            <option value="all">Todas las citas</option>
+                        </select>
+                    </div>
+                    @if (_listDateMode == "range")
+                    {
+                        <div class="form-group">
+                            <label>Desde</label>
+                            <input class="form-input" type="date" disabled="@_loading" value="@_rangeFrom.ToString("yyyy-MM-dd")" @onchange="OnRangeFromChanged" />
+                        </div>
+                        <div class="form-group">
+                            <label>Hasta</label>
+                            <input class="form-input" type="date" disabled="@_loading" value="@_rangeTo.ToString("yyyy-MM-dd")" @onchange="OnRangeToChanged" />
+                        </div>
+                    }
+                }
+            </div>
+        </aside>
+
+        <section class="agenda-main">
+            @if (!string.IsNullOrEmpty(_loadError))
+            {
+                <ErrorBanner Message="@_loadError" OnRetry="ReloadAgendaAsync" />
+            }
+
+            <div class="agenda-toolbar">
+                <div class="agenda-view-tabs">
+                    <button class="toggle-btn @(_viewMode == "day" ? "active" : "")" disabled="@_loading" @onclick='() => SetViewModeAsync("day")'>Diaria</button>
+                    <button class="toggle-btn @(_viewMode == "week" ? "active" : "")" disabled="@_loading" @onclick='() => SetViewModeAsync("week")'>Semanal</button>
+                    <button class="toggle-btn @(_viewMode == "list" ? "active" : "")" disabled="@_loading" @onclick='() => SetViewModeAsync("list")'>Lista</button>
+                </div>
+                <div class="search-field maintenance-search">
+                    <Icon Name="search" Class="field-icon" />
+                    <input type="text"
+                           placeholder="Buscar paciente o médico..."
+                           disabled="@_loading"
+                           @bind="_search"
+                           @bind:event="oninput"
+                           @bind:after="OnSearchChangedAsync" />
+                </div>
+                @if (_viewMode != "list" || _listDateMode == "day")
+                {
+                    <label class="agenda-date-jump">
+                        Fecha
+                        <input type="date"
+                               disabled="@_loading"
+                               value="@_selectedDate.ToString("yyyy-MM-dd")"
+                               @onchange="OnDateInputChanged" />
+                    </label>
+                }
+                else if (_listDateMode == "range")
+                {
+                    <label class="agenda-date-jump">
+                        Desde
+                        <input type="date"
+                               disabled="@_loading"
+                               value="@_rangeFrom.ToString("yyyy-MM-dd")"
+                               @onchange="OnRangeFromChanged" />
+                    </label>
+                    <label class="agenda-date-jump">
+                        Hasta
+                        <input type="date"
+                               disabled="@_loading"
+                               value="@_rangeTo.ToString("yyyy-MM-dd")"
+                               @onchange="OnRangeToChanged" />
+                    </label>
+                }
+                <span class="maintenance-count">
+                    @if (_viewMode == "list")
+                    {
+                        @($"{_appointments.Count} cita(s) visibles de {_totalCount}")
+                    }
+                    else
+                    {
+                        @($"{FilteredAppointments.Count()} cita(s)")
+                    }
+                </span>
+                @if (HasActiveFilters)
+                {
+                    <button class="btn-outline" disabled="@_loading" @onclick="ClearFiltersAsync">Limpiar filtros</button>
+                }
+            </div>
+
+            @if (_loading)
+            {
+                <AnimatedLoader Message="Cargando agenda..." />
+            }
+            else if (_viewMode is "day" or "week")
+            {
+                <AgendaCalendarGrid Days="VisibleDays"
+                                    Slots="TimeSlots"
+                                    SlotDurationMinutes="_schedule.SlotDurationMinutes"
+                                    WorkingDays="_schedule.WorkingDays"
+                                    Appointments="FilteredAppointments"
+                                    SelectedDate="_selectedDate"
+                                    HighlightId="_highlightId"
+                                    Disabled="_loading"
+                                    Saving="_saving"
+                                    OnPrev="PrevPeriod"
+                                    OnNext="NextPeriod"
+                                    OnSelectDay="SelectDate"
+                                    OnOpenDetail="OpenDetailModal"
+                                    OnBookSlot="BookSlot" />
+            }
+            else if (!FilteredAppointments.Any() && string.IsNullOrEmpty(_loadError))
+            {
+                <div class="agenda-empty-state">
+                    <h3>No hay citas para mostrar</h3>
+                    <p>@(HasActiveFilters ? "No se encontraron citas con los filtros actuales." : EmptyListMessage)</p>
+                    <div class="agenda-empty-actions">
+                        @if (HasActiveFilters)
+                        {
+                            <button class="btn-outline" @onclick="ClearFiltersAsync">Limpiar filtros</button>
+                        }
+                        <a href="/agendar-cita" class="btn-primary">Agendar nueva cita</a>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>@(_viewMode == "list" && _listDateMode != "day" ? "Fecha y hora" : "Hora")</th>
+                                <th>Paciente</th>
+                                <th>Médico</th>
+                                <th>Teléfono</th>
+                                <th>Estado</th>
+                                <th class="col-actions">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var appt in FilteredAppointments)
+                            {
+                                <tr class="@(IsHighlighted(appt) ? "agenda-row-highlight" : "")">
+                                    <td>@FormatListDate(appt)</td>
+                                    <td><a class="clinical-patient-link" href="/pacientes/@appt.PatientId">@appt.PatientFullName</a></td>
+                                    <td>@appt.DoctorName</td>
+                                    <td>@appt.PatientPhone</td>
+                                    <td><span class="status-badge @GetStatusClass(appt.Status)">@FormatStatus(appt.Status)</span></td>
+                                    <td class="col-actions">
+                                        <button class="btn-table" disabled="@_saving" @onclick="() => OpenDetailModal(appt)">Detalle</button>
+                                        <button class="btn-table" disabled="@_saving" @onclick="() => OpenActionsMenu(appt)">Acciones</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (_viewMode == "list" && _totalCount > 0)
+                {
+                    <div class="billing-pagination agenda-pagination">
+                        <label class="agenda-date-jump">
+                            Por página
+                            <select class="form-input" disabled="@_loading" @bind="_pageSize" @bind:after="OnPageSizeChangedAsync">
+                                <option value="10">10</option>
+                                <option value="15">15</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                            </select>
+                        </label>
+                        <span>Página @_pageNumber de @TotalPages</span>
+                        <button class="btn-outline" disabled="@(_loading || _pageNumber <= 1)" @onclick="PrevPageAsync">Anterior</button>
+                        <button class="btn-outline" disabled="@(_loading || _pageNumber >= TotalPages)" @onclick="NextPageAsync">Siguiente</button>
+                    </div>
+                }
+            }
+        </section>
+    </div>
+</div>
+
+@if (_showDetailModal && _selectedAppointment != null)
+{
+    <div class="modal-overlay" @onclick="CloseDetailModal">
+        <div class="modal-panel modal-panel-wide" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Detalle de cita</h2>
+                <button class="modal-close" @onclick="CloseDetailModal">×</button>
+            </div>
+            <div class="agenda-detail-grid">
+                <div><span>Paciente</span><strong><a class="clinical-patient-link" href="/pacientes/@_selectedAppointment.PatientId">@_selectedAppointment.PatientFullName</a></strong></div>
+                <div><span>Teléfono</span><strong>@_selectedAppointment.PatientPhone</strong></div>
+                <div><span>Correo</span><strong>@(string.IsNullOrWhiteSpace(_selectedAppointment.PatientEmail) ? "—" : _selectedAppointment.PatientEmail)</strong></div>
+                <div><span>Médico</span><strong>@_selectedAppointment.DoctorName</strong></div>
+                <div><span>Especialidad</span><strong>@_selectedAppointment.Specialization</strong></div>
+                <div><span>Fecha y hora</span><strong>@_selectedAppointment.AppointmentDate</strong></div>
+                <div><span>Estado</span><strong><span class="status-badge @GetStatusClass(_selectedAppointment.Status)">@FormatStatus(_selectedAppointment.Status)</span></strong></div>
+            </div>
+            <PatientClinicalHistoryPanel PatientId="_selectedAppointment.PatientId"
+                                         PatientName="@_selectedAppointment.PatientFullName"
+                                         Collapsible="true" />
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseDetailModal">Cerrar</button>
+                @if (_selectedAppointment.Status != "Cancelled")
+                {
+                    <button class="btn-outline" @onclick="() => OpenWhatsAppReminder(_selectedAppointment)">Recordatorio WhatsApp</button>
+                    <button class="btn-outline" @onclick="() => OpenEmailReminder(_selectedAppointment)">Recordatorio correo</button>
+                }
+                <button class="btn-primary" @onclick="() => { CloseDetailModal(); OpenActionsMenu(_selectedAppointment!); }">Acciones</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showActionsModal && _selectedAppointment != null)
+{
+    <div class="modal-overlay" @onclick="CloseActionsModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Acciones — @_selectedAppointment.PatientFullName</h2>
+                <button class="modal-close" @onclick="CloseActionsModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_actionMessage))
+            {
+                <div class="wizard-error agenda-action-message">@_actionMessage</div>
+            }
+            <div class="agenda-actions-grid">
+                @if (_selectedAppointment.Status == "Pending")
+                {
+                    <button class="btn-primary" disabled="@_saving" @onclick="OpenConfirmModal">Confirmar</button>
+                }
+                @if (_selectedAppointment.Status is "Confirmed" or "Rescheduled" or "Pending")
+                {
+                    <button class="btn-outline" disabled="@_saving" @onclick="OpenRescheduleModal">Reagendar</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick="OpenCompleteModal">Completar</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick="OpenNoShowModal">No asistió</button>
+                }
+                @if (_selectedAppointment.Status is not "Completed" and not "Cancelled" and not "NoShow")
+                {
+                    <button class="btn-outline btn-table-danger" disabled="@_saving" @onclick="OpenCancelModal">Cancelar</button>
+                }
+                @if (_selectedAppointment.Status is not "Cancelled" and not "Completed")
+                {
+                    <button class="btn-outline" disabled="@_saving" @onclick="CallPatientAsync">Llamar paciente</button>
+                }
+                @if (_selectedAppointment.Status != "Cancelled")
+                {
+                    <button class="btn-outline" disabled="@_saving" @onclick="() => OpenWhatsAppReminder(_selectedAppointment)">Recordatorio WhatsApp</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick="() => OpenEmailReminder(_selectedAppointment)">Recordatorio correo</button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showConfirmModal && _selectedAppointment != null)
+{
+    <div class="modal-overlay" @onclick="CloseConfirmModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Confirmar cita</h2>
+                <button class="modal-close" @onclick="CloseConfirmModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_modalError)) { <div class="wizard-error">@_modalError</div> }
+            <div class="new-patient-form">
+                <div class="form-group">
+                    <label>Método de pago</label>
+                    <select class="form-input" @bind="_confirmForm.method">
+                        <option value="Cash">Efectivo</option>
+                        <option value="CreditCard">Tarjeta</option>
+                        <option value="InstaPay">InstaPay</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Monto (opcional)</label>
+                    <input class="form-input" type="number" step="0.01" @bind="_confirmForm.amount" />
+                </div>
+                <div class="form-group">
+                    <label>Notas</label>
+                    <textarea class="form-input" rows="2" @bind="_confirmForm.Notes"></textarea>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseConfirmModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="ConfirmAsync">@(_saving ? "Confirmando..." : "Confirmar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showCancelModal && _selectedAppointment != null)
+{
+    <div class="modal-overlay" @onclick="CloseCancelModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Cancelar cita</h2>
+                <button class="modal-close" @onclick="CloseCancelModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_modalError)) { <div class="wizard-error">@_modalError</div> }
+            @if (IsWithinOneHour(_selectedAppointment))
+            {
+                <div class="wizard-error">No se puede cancelar: faltan menos de 1 hora para la cita.</div>
+            }
+            else
+            {
+                <p>¿Cancelar la cita de <strong>@_selectedAppointment.PatientFullName</strong> el @_selectedAppointment.AppointmentDate?</p>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseCancelModal">Volver</button>
+                <button class="btn-primary btn-table-danger" disabled="@(_saving || IsWithinOneHour(_selectedAppointment))" @onclick="CancelAsync">
+                    @(_saving ? "Cancelando..." : "Confirmar cancelación")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showRescheduleModal && _selectedAppointment != null)
+{
+    <div class="modal-overlay" @onclick="CloseRescheduleModal">
+        <div class="modal-panel modal-panel-wide" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Reagendar cita</h2>
+                <button class="modal-close" @onclick="CloseRescheduleModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_modalError)) { <div class="wizard-error">@_modalError</div> }
+            <div class="datetime-layout">
+                <div class="mini-calendar">
+                    <div class="cal-header">
+                        <button class="cal-nav" @onclick="PrevRescheduleMonth">‹</button>
+                        <span>@_rescheduleMonth.ToString("MMMM yyyy", _culture)</span>
+                        <button class="cal-nav" @onclick="NextRescheduleMonth">›</button>
+                    </div>
+                    <div class="cal-weekdays">
+                        <span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span>
+                    </div>
+                    <div class="cal-days">
+                        @foreach (var day in GetRescheduleCalendarDays())
+                        {
+                            if (day == null) { <span class="cal-day empty"></span>; }
+                            else
+                            {
+                                <button class="cal-day @GetRescheduleDayClass(day.Value)"
+                                        disabled="@(day.Value < DateTime.Today || !IsWorkingDay(day.Value))"
+                                        @onclick="() => SelectRescheduleDate(day.Value)">@day.Value.Day</button>
+                            }
+                        }
+                    </div>
+                </div>
+                <div class="slots-panel">
+                    <h4>Horarios disponibles</h4>
+                    @if (_loadingSlots)
+                    {
+                        <AnimatedLoader Compact="true" Message="Cargando horarios..." />
+                    }
+                    else if (!_rescheduleSlots.Any())
+                    {
+                        <p class="agenda-slot-empty">No hay horarios disponibles.</p>
+                    }
+                    else
+                    {
+                        <div class="slots-grid">
+                            @foreach (var slot in _rescheduleSlots)
+                            {
+                                <button class="slot-btn @(_rescheduleTime == slot ? "selected" : "")" @onclick="() => _rescheduleTime = slot">
+                                    @slot.ToString(@"hh\:mm")
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseRescheduleModal">Cancelar</button>
+                <button class="btn-primary" disabled="@(_saving || !_rescheduleDate.HasValue || !_rescheduleTime.HasValue)" @onclick="RescheduleAsync">
+                    @(_saving ? "Reagendando..." : "Reagendar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showCompleteModal && _selectedAppointment != null)
+{
+    <div class="modal-overlay" @onclick="CloseCompleteModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Completar cita</h2>
+                <button class="modal-close" @onclick="CloseCompleteModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_modalError)) { <div class="wizard-error">@_modalError</div> }
+            <div class="new-patient-form">
+                <div class="form-group">
+                    <label>Diagnóstico *</label>
+                    <input class="form-input" @bind="_completeForm.Diagnosis" />
+                </div>
+                <div class="form-group">
+                    <label>Descripción *</label>
+                    <textarea class="form-input" rows="3" @bind="_completeForm.Description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Notas adicionales</label>
+                    <textarea class="form-input" rows="2" @bind="_completeForm.AdditionalNotes"></textarea>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseCompleteModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="CompleteAsync">@(_saving ? "Completando..." : "Completar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showNoShowModal && _selectedAppointment != null)
+{
+    <div class="modal-overlay" @onclick="CloseNoShowModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Marcar no asistió</h2>
+                <button class="modal-close" @onclick="CloseNoShowModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_modalError)) { <div class="wizard-error">@_modalError</div> }
+            <p>¿Marcar que <strong>@_selectedAppointment.PatientFullName</strong> no asistió a la cita?</p>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseNoShowModal">Volver</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="NoShowAsync">@(_saving ? "Guardando..." : "Confirmar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showWhatsAppModal)
+{
+    <div class="modal-overlay" @onclick="CloseWhatsAppModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Recordatorio WhatsApp</h2>
+                <button class="modal-close" @onclick="CloseWhatsAppModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_whatsAppError))
+            {
+                <div class="wizard-error">@_whatsAppError</div>
+            }
+            else
+            {
+                <p class="modal-confirm-text">Revise el mensaje y pulse Enviar en WhatsApp. El sistema no lo envía solo.</p>
+                <div class="whatsapp-message-box">@_whatsAppPreview</div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseWhatsAppModal">Cancelar</button>
+                <button class="btn-primary" disabled="@(string.IsNullOrEmpty(_whatsAppUrl))" @onclick="OpenWhatsAppAsync">Abrir WhatsApp</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showEmailModal)
+{
+    <div class="modal-overlay" @onclick="CloseEmailModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Recordatorio por correo</h2>
+                <button class="modal-close" @onclick="CloseEmailModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_emailError))
+            {
+                <div class="wizard-error">@_emailError</div>
+            }
+            else
+            {
+                <p class="modal-confirm-text">Se enviará a <strong>@_emailTo</strong>. Revise el mensaje antes de enviarlo.</p>
+                <div class="whatsapp-message-box">@_emailPreview</div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseEmailModal">Cancelar</button>
+                <button class="btn-primary" disabled="@(_sendingEmail || string.IsNullOrEmpty(_emailTo) || !string.IsNullOrEmpty(_emailError))" @onclick="SendEmailAsync">
+                    @(_sendingEmail ? "Enviando..." : "Enviar correo")
+                </button>
+            </div>
+            @if (_sendingEmail)
+            {
+                <AnimatedLoader Overlay="true" Message="Enviando correo..." />
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private readonly System.Globalization.CultureInfo _culture = new("es-ES");
+
+    private IReadOnlyList<TimeSpan> TimeSlots => AppointmentBookingService.GenerateAllSlots(
+        _schedule.OpenTime,
+        _schedule.CloseTime,
+        _schedule.SlotDurationMinutes);
+
+    private DateTime _selectedDate = DateTime.Today;
+    private DateTime _calendarMonth;
+    private DateTime _rescheduleMonth;
+    private string _viewMode = "week";
+    private string _search = string.Empty;
+    private int _doctorFilter;
+    private string _statusFilter = string.Empty;
+    private string _listDateMode = "day";
+    private DateTime _rangeFrom = DateTime.Today;
+    private DateTime _rangeTo = DateTime.Today;
+    private int _pageNumber = 1;
+    private int _pageSize = 15;
+    private int _totalCount;
+    private int _totalPages = 1;
+    private CancellationTokenSource? _searchCts;
+
+    private List<AppointmentAgendaItem> _appointments = [];
+    private List<DoctorListItem> _doctors = [];
+    private AppointmentStats? _stats;
+    private bool _loading = true;
+    private string? _loadError;
+
+    private AppointmentAgendaItem? _selectedAppointment;
+    private bool _showDetailModal;
+    private bool _showActionsModal;
+    private bool _showConfirmModal;
+    private bool _showCancelModal;
+    private bool _showRescheduleModal;
+    private bool _showCompleteModal;
+    private bool _showNoShowModal;
+    private bool _showWhatsAppModal;
+    private string? _whatsAppPreview;
+    private string? _whatsAppUrl;
+    private string? _whatsAppError;
+    private bool _showEmailModal;
+    private bool _sendingEmail;
+    private string? _emailPreview;
+    private string? _emailTo;
+    private string? _emailSubject;
+    private string? _emailError;
+    private string? _modalError;
+    private string? _actionMessage;
+    private bool _saving;
+
+    private ConfirmAppointmentRequest _confirmForm = new();
+    private CompleteAppointmentRequest _completeForm = new();
+    private DateTime? _rescheduleDate;
+    private TimeSpan? _rescheduleTime;
+    private List<TimeSpan> _rescheduleSlots = [];
+    private bool _loadingSlots;
+    private ClinicSchedule _schedule = new();
+
+    private int? _highlightId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ParseQueryParams();
+        _calendarMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
+        _rescheduleMonth = _calendarMonth;
+        _doctors = await BookingService.GetDoctorsAsync();
+        var (schedule, _) = await BookingService.GetClinicScheduleAsync();
+        if (schedule != null)
+            _schedule = schedule;
+        await ReloadAgendaAsync();
+    }
+
+    private void ParseQueryParams()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+        if (query.TryGetValue("fecha", out var fechaVal) &&
+            DateTime.TryParseExact(fechaVal.ToString(), "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var fecha))
+        {
+            _selectedDate = fecha.Date;
+        }
+
+        if (query.TryGetValue("id", out var idVal) && int.TryParse(idVal.ToString(), out var id))
+            _highlightId = id;
+
+        if (query.TryGetValue("vista", out var vistaVal))
+        {
+            var vista = vistaVal.ToString();
+            if (vista is "day" or "week" or "list")
+                _viewMode = vista;
+        }
+    }
+
+    private string HeaderDateText
+    {
+        get
+        {
+            if (_viewMode == "list")
+            {
+                return _listDateMode switch
+                {
+                    "all" => "Todas las citas",
+                    "range" => $"{_rangeFrom.ToString("dd 'de' MMMM", _culture)} al {_rangeTo.ToString("dd 'de' MMMM", _culture)}",
+                    _ => FormatSelectedDate(_selectedDate)
+                };
+            }
+
+            if (_viewMode != "week")
+                return FormatSelectedDate(_selectedDate);
+
+            var start = GetWeekStart(_selectedDate);
+            var end = start.AddDays(6);
+            return $"{start.ToString("dd 'de' MMMM", _culture)} al {end.ToString("dd 'de' MMMM", _culture)}";
+        }
+    }
+
+    private int TotalPages => Math.Max(1, _totalPages);
+    private bool IsPeriodNavDisabled => _viewMode == "list" && _listDateMode == "all";
+    private string EmptyListMessage => _viewMode == "list" && _listDateMode == "all"
+        ? "No hay citas agendadas."
+        : "No hay citas agendadas para este día.";
+
+    private IReadOnlyList<DateTime> VisibleDays =>
+        _viewMode == "week"
+            ? Enumerable.Range(0, 7).Select(i => GetWeekStart(_selectedDate).AddDays(i)).ToArray()
+            : [_selectedDate.Date];
+
+    private bool IsHighlighted(AppointmentAgendaItem appt) =>
+        _highlightId.HasValue && appt.Id == _highlightId.Value;
+
+    private int TotalAppointments => _stats?.TotalAppointments ?? 0;
+    private int PendingAppointments => _stats?.Pending ?? 0;
+    private int ConfirmedAppointments => _stats?.Confirmed ?? 0;
+    private int CompletedAppointments => _stats?.Completed ?? 0;
+
+    private bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(_search) ||
+        _doctorFilter > 0 ||
+        !string.IsNullOrWhiteSpace(_statusFilter) ||
+        (_viewMode == "list" && _listDateMode != "day");
+
+    private IEnumerable<AppointmentAgendaItem> FilteredAppointments =>
+        _viewMode == "list" || string.IsNullOrWhiteSpace(_search)
+            ? _appointments
+            : _appointments.Where(a =>
+                a.PatientFullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                a.DoctorName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                a.PatientPhone.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                FormatStatus(a.Status).Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private async Task ReloadAgendaAsync()
+    {
+        _loading = true;
+        _loadError = null;
+
+        int? doctorId = _doctorFilter > 0 ? _doctorFilter : null;
+        string? status = string.IsNullOrWhiteSpace(_statusFilter) ? null : _statusFilter;
+        DateTime? rangeStart;
+        DateTime? rangeEnd;
+        int? pageNumber = null;
+        int? pageSize = null;
+        string? search = null;
+
+        if (_viewMode == "week")
+        {
+            rangeStart = GetWeekStart(_selectedDate);
+            rangeEnd = rangeStart.Value.AddDays(6);
+        }
+        else if (_viewMode == "day")
+        {
+            rangeStart = _selectedDate.Date;
+            rangeEnd = null;
+        }
+        else
+        {
+            pageNumber = _pageNumber;
+            pageSize = _pageSize;
+            search = string.IsNullOrWhiteSpace(_search) ? null : _search.Trim();
+
+            if (_listDateMode == "all")
+            {
+                rangeStart = null;
+                rangeEnd = null;
+            }
+            else if (_listDateMode == "range")
+            {
+                NormalizeRange();
+                rangeStart = _rangeFrom.Date;
+                rangeEnd = _rangeTo.Date;
+            }
+            else
+            {
+                rangeStart = _selectedDate.Date;
+                rangeEnd = null;
+            }
+        }
+
+        var (page, error) = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var result = await AgendaService.GetAgendaPageAsync(
+                    rangeStart, doctorId, status, rangeEnd, pageNumber, pageSize, search);
+                return (result.Page, result.Error);
+            },
+            AuthService.IsTokenError);
+
+        _appointments = page.Items?.ToList() ?? [];
+        _totalCount = page.TotalCount;
+        _pageNumber = page.CurrentPage > 0 ? page.CurrentPage : (pageNumber ?? 1);
+        _totalPages = page.TotalPages > 0 ? page.TotalPages : 1;
+        _loadError = error;
+
+        var (stats, _) = await AgendaService.GetDayStatsAsync(rangeStart, rangeEnd ?? rangeStart);
+        _stats = stats ?? new AppointmentStats();
+
+        _loading = false;
+    }
+
+    private Task OnRemoteFilterChangedAsync()
+    {
+        _pageNumber = 1;
+        return ReloadAgendaAsync();
+    }
+
+    private async Task OnSearchChangedAsync()
+    {
+        if (_viewMode != "list")
+            return;
+
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+
+        try
+        {
+            await Task.Delay(400, token);
+            _pageNumber = 1;
+            await ReloadAgendaAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private Task OnListDateModeChangedAsync()
+    {
+        if (_listDateMode == "range")
+        {
+            _rangeFrom = GetWeekStart(_selectedDate);
+            _rangeTo = _rangeFrom.AddDays(6);
+        }
+
+        _pageNumber = 1;
+        return ReloadAgendaAsync();
+    }
+
+    private Task OnRangeFromChanged(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), out var date))
+            return Task.CompletedTask;
+
+        _rangeFrom = date.Date;
+        _pageNumber = 1;
+        return ReloadAgendaAsync();
+    }
+
+    private Task OnRangeToChanged(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), out var date))
+            return Task.CompletedTask;
+
+        _rangeTo = date.Date;
+        _pageNumber = 1;
+        return ReloadAgendaAsync();
+    }
+
+    private void NormalizeRange()
+    {
+        if (_rangeFrom <= _rangeTo)
+            return;
+
+        (_rangeFrom, _rangeTo) = (_rangeTo, _rangeFrom);
+    }
+
+    private Task OnPageSizeChangedAsync()
+    {
+        _pageNumber = 1;
+        return ReloadAgendaAsync();
+    }
+
+    private Task PrevPageAsync()
+    {
+        if (_pageNumber <= 1)
+            return Task.CompletedTask;
+
+        _pageNumber--;
+        return ReloadAgendaAsync();
+    }
+
+    private Task NextPageAsync()
+    {
+        if (_pageNumber >= TotalPages)
+            return Task.CompletedTask;
+
+        _pageNumber++;
+        return ReloadAgendaAsync();
+    }
+
+    private string FormatListDate(AppointmentAgendaItem appt)
+    {
+        if (_viewMode == "list" && _listDateMode != "day")
+            return appt.ParsedDate?.ToString("dd/MM/yyyy HH:mm") ?? appt.AppointmentDate;
+
+        return appt.ParsedDate?.ToString("HH:mm") ?? appt.AppointmentDate;
+    }
+
+    private async Task SetViewModeAsync(string mode)
+    {
+        if (_viewMode == mode)
+            return;
+
+        _viewMode = mode;
+        _pageNumber = 1;
+        await ReloadAgendaAsync();
+    }
+
+    private async Task SelectDate(DateTime date)
+    {
+        var sameRange = _viewMode == "week"
+            ? GetWeekStart(_selectedDate) == GetWeekStart(date)
+            : _selectedDate.Date == date.Date;
+
+        _selectedDate = date.Date;
+        _calendarMonth = new DateTime(date.Year, date.Month, 1);
+        _highlightId = null;
+
+        if (_viewMode == "list" && _listDateMode == "all")
+        {
+            _listDateMode = "day";
+            _pageNumber = 1;
+            await ReloadAgendaAsync();
+            return;
+        }
+
+        if (_viewMode == "list" && _listDateMode == "range")
+        {
+            _rangeFrom = date.Date;
+            if (_rangeTo < _rangeFrom)
+                _rangeTo = _rangeFrom;
+            _pageNumber = 1;
+            await ReloadAgendaAsync();
+            return;
+        }
+
+        if (!sameRange)
+        {
+            _pageNumber = 1;
+            await ReloadAgendaAsync();
+        }
+    }
+
+    private Task OnDateInputChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+            return SelectDate(date.Date);
+
+        return Task.CompletedTask;
+    }
+
+    private Task PrevPeriod()
+    {
+        if (_viewMode == "list" && _listDateMode == "range")
+        {
+            var span = Math.Max(1, (_rangeTo.Date - _rangeFrom.Date).Days + 1);
+            _rangeFrom = _rangeFrom.AddDays(-span);
+            _rangeTo = _rangeTo.AddDays(-span);
+            _selectedDate = _rangeFrom;
+            _pageNumber = 1;
+            return ReloadAgendaAsync();
+        }
+
+        return SelectDate(_selectedDate.AddDays(_viewMode == "week" ? -7 : -1));
+    }
+
+    private Task NextPeriod()
+    {
+        if (_viewMode == "list" && _listDateMode == "range")
+        {
+            var span = Math.Max(1, (_rangeTo.Date - _rangeFrom.Date).Days + 1);
+            _rangeFrom = _rangeFrom.AddDays(span);
+            _rangeTo = _rangeTo.AddDays(span);
+            _selectedDate = _rangeFrom;
+            _pageNumber = 1;
+            return ReloadAgendaAsync();
+        }
+
+        return SelectDate(_selectedDate.AddDays(_viewMode == "week" ? 7 : 1));
+    }
+
+    private Task GoToday()
+    {
+        if (_viewMode == "list" && _listDateMode == "all")
+            _listDateMode = "day";
+        else if (_viewMode == "list" && _listDateMode == "range")
+        {
+            _rangeFrom = DateTime.Today;
+            _rangeTo = DateTime.Today;
+        }
+
+        _selectedDate = DateTime.Today.Date;
+        _calendarMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
+        _highlightId = null;
+        _pageNumber = 1;
+        return ReloadAgendaAsync();
+    }
+    private void PrevMonth() { _calendarMonth = _calendarMonth.AddMonths(-1); }
+    private void NextMonth() { _calendarMonth = _calendarMonth.AddMonths(1); }
+
+    private void BookSlot((DateTime Date, TimeSpan Time) slot)
+    {
+        if (!IsWorkingDay(slot.Date) || !TimeSlots.Contains(slot.Time))
+            return;
+
+        var url = $"/agendar-cita?fecha={slot.Date:yyyy-MM-dd}&hora={slot.Time:hh\\:mm}";
+        if (_doctorFilter > 0)
+            url += $"&medico={_doctorFilter}";
+        Navigation.NavigateTo(url);
+    }
+
+    private static DateTime GetWeekStart(DateTime date)
+    {
+        var offset = ((int)date.DayOfWeek + 6) % 7;
+        return date.Date.AddDays(-offset);
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        var needsReload = _viewMode == "list"
+            || _doctorFilter > 0
+            || !string.IsNullOrWhiteSpace(_statusFilter)
+            || !string.IsNullOrWhiteSpace(_search);
+        _search = string.Empty;
+        _doctorFilter = 0;
+        _statusFilter = string.Empty;
+        _listDateMode = "day";
+        _rangeFrom = DateTime.Today;
+        _rangeTo = DateTime.Today;
+        _pageNumber = 1;
+
+        if (needsReload)
+            await ReloadAgendaAsync();
+    }
+
+    private IEnumerable<DateTime?> GetCalendarDays()
+    {
+        var first = new DateTime(_calendarMonth.Year, _calendarMonth.Month, 1);
+        var offset = ((int)first.DayOfWeek + 6) % 7;
+        for (var i = 0; i < offset; i++) yield return null;
+        for (var d = 1; d <= DateTime.DaysInMonth(_calendarMonth.Year, _calendarMonth.Month); d++)
+            yield return new DateTime(_calendarMonth.Year, _calendarMonth.Month, d);
+    }
+
+    private string GetDayClass(DateTime day)
+    {
+        var classes = new List<string>();
+        if (day.Date == DateTime.Today) classes.Add("today");
+        if (day.Date == _selectedDate.Date) classes.Add("selected");
+        else if (_viewMode == "week")
+        {
+            var start = GetWeekStart(_selectedDate);
+            if (day.Date >= start && day.Date < start.AddDays(7))
+                classes.Add("in-week");
+        }
+        else if (_viewMode == "list" && _listDateMode == "range" && day.Date >= _rangeFrom.Date && day.Date <= _rangeTo.Date)
+        {
+            classes.Add("in-week");
+        }
+
+        return string.Join(" ", classes);
+    }
+
+    private void OpenDetailModal(AppointmentAgendaItem appt)
+    {
+        _selectedAppointment = appt;
+        _showDetailModal = true;
+    }
+
+    private void CloseDetailModal() { _showDetailModal = false; }
+
+    private void OpenActionsMenu(AppointmentAgendaItem appt)
+    {
+        _selectedAppointment = appt;
+        _actionMessage = null;
+        _showActionsModal = true;
+    }
+
+    private void CloseActionsModal() { _showActionsModal = false; _actionMessage = null; }
+
+    private void OpenConfirmModal()
+    {
+        if (_selectedAppointment == null) return;
+        _confirmForm = new ConfirmAppointmentRequest
+        {
+            AppointmentId = _selectedAppointment.Id,
+            PatientId = _selectedAppointment.PatientId
+        };
+        _modalError = null;
+        _showConfirmModal = true;
+        _showActionsModal = false;
+    }
+
+    private void CloseConfirmModal() { _showConfirmModal = false; }
+
+    private async Task ConfirmAsync()
+    {
+        _saving = true;
+        _modalError = null;
+        var (success, error) = await AgendaService.ConfirmAsync(_confirmForm);
+        _saving = false;
+        if (!success) { _modalError = error; return; }
+        CloseWorkflowModals();
+        await ReloadAgendaAsync();
+    }
+
+    private void OpenCancelModal()
+    {
+        _modalError = null;
+        _showCancelModal = true;
+        _showActionsModal = false;
+    }
+
+    private void CloseCancelModal() { _showCancelModal = false; }
+
+    private async Task CancelAsync()
+    {
+        if (_selectedAppointment == null) return;
+        _saving = true;
+        _modalError = null;
+        var (success, error) = await AgendaService.CancelAsync(new CancelAppointmentRequest
+        {
+            AppointmentId = _selectedAppointment.Id,
+            PatientId = _selectedAppointment.PatientId
+        });
+        _saving = false;
+        if (!success) { _modalError = error; return; }
+        CloseWorkflowModals();
+        await ReloadAgendaAsync();
+    }
+
+    private async Task OpenRescheduleModal()
+    {
+        if (_selectedAppointment == null) return;
+        _rescheduleDate = _selectedAppointment.ParsedDate?.Date ?? _selectedDate;
+        _rescheduleMonth = new DateTime(_rescheduleDate.Value.Year, _rescheduleDate.Value.Month, 1);
+        _rescheduleTime = _selectedAppointment.ParsedDate?.TimeOfDay;
+        _modalError = null;
+        _showRescheduleModal = true;
+        _showActionsModal = false;
+        await LoadRescheduleSlotsAsync();
+    }
+
+    private void CloseRescheduleModal() { _showRescheduleModal = false; }
+
+    private async Task SelectRescheduleDate(DateTime date)
+    {
+        _rescheduleDate = date;
+        _rescheduleTime = null;
+        await LoadRescheduleSlotsAsync();
+    }
+
+    private async Task LoadRescheduleSlotsAsync()
+    {
+        if (_selectedAppointment == null || !_rescheduleDate.HasValue) return;
+        _loadingSlots = true;
+        _rescheduleSlots = await BookingService.GetAvailableSlotsAsync(_selectedAppointment.DoctorId, _rescheduleDate.Value);
+        _loadingSlots = false;
+    }
+
+    private void PrevRescheduleMonth() { _rescheduleMonth = _rescheduleMonth.AddMonths(-1); }
+    private void NextRescheduleMonth() { _rescheduleMonth = _rescheduleMonth.AddMonths(1); }
+
+    private IEnumerable<DateTime?> GetRescheduleCalendarDays()
+    {
+        var first = new DateTime(_rescheduleMonth.Year, _rescheduleMonth.Month, 1);
+        var offset = ((int)first.DayOfWeek + 6) % 7;
+        for (var i = 0; i < offset; i++) yield return null;
+        for (var d = 1; d <= DateTime.DaysInMonth(_rescheduleMonth.Year, _rescheduleMonth.Month); d++)
+            yield return new DateTime(_rescheduleMonth.Year, _rescheduleMonth.Month, d);
+    }
+
+    private bool IsWorkingDay(DateTime day) => _schedule.IsOpenOn(day);
+
+    private string GetRescheduleDayClass(DateTime day)
+    {
+        if (_rescheduleDate?.Date == day.Date)
+            return "selected";
+        if (!IsWorkingDay(day))
+            return "closed";
+        return "";
+    }
+
+    private async Task RescheduleAsync()
+    {
+        if (_selectedAppointment == null || !_rescheduleDate.HasValue || !_rescheduleTime.HasValue) return;
+        _saving = true;
+        _modalError = null;
+        var (success, error) = await AgendaService.RescheduleAsync(new RescheduleAppointmentRequest
+        {
+            AppointmentId = _selectedAppointment.Id,
+            PatientId = _selectedAppointment.PatientId,
+            AppointmentDate = _rescheduleDate.Value.Date,
+            AppointmentTime = _rescheduleTime.Value
+        });
+        _saving = false;
+        if (!success) { _modalError = error; return; }
+        CloseWorkflowModals();
+        await ReloadAgendaAsync();
+    }
+
+    private void OpenCompleteModal()
+    {
+        if (_selectedAppointment == null) return;
+        _completeForm = new CompleteAppointmentRequest { AppointmentId = _selectedAppointment.Id };
+        _modalError = null;
+        _showCompleteModal = true;
+        _showActionsModal = false;
+    }
+
+    private void CloseCompleteModal() { _showCompleteModal = false; }
+
+    private async Task CompleteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_completeForm.Diagnosis) || string.IsNullOrWhiteSpace(_completeForm.Description))
+        {
+            _modalError = "Diagnóstico y descripción son obligatorios.";
+            return;
+        }
+        _saving = true;
+        _modalError = null;
+        var (success, error) = await AgendaService.CompleteAsync(_completeForm);
+        _saving = false;
+        if (!success) { _modalError = error; return; }
+        CloseWorkflowModals();
+        await ReloadAgendaAsync();
+    }
+
+    private void OpenNoShowModal()
+    {
+        _modalError = null;
+        _showNoShowModal = true;
+        _showActionsModal = false;
+    }
+
+    private void CloseNoShowModal() { _showNoShowModal = false; }
+
+    private async Task NoShowAsync()
+    {
+        if (_selectedAppointment == null) return;
+        _saving = true;
+        _modalError = null;
+        var (success, error) = await AgendaService.NoShowAsync(new NoShowAppointmentRequest
+        {
+            AppointmentId = _selectedAppointment.Id,
+            DoctorId = _selectedAppointment.DoctorId
+        });
+        _saving = false;
+        if (!success) { _modalError = error; return; }
+        CloseWorkflowModals();
+        await ReloadAgendaAsync();
+    }
+
+    private async Task CallPatientAsync()
+    {
+        if (_selectedAppointment == null) return;
+        _saving = true;
+        var (success, error) = await AgendaService.CallPatientAsync(_selectedAppointment.Id);
+        _saving = false;
+        _actionMessage = success ? "Paciente llamado a sala de espera." : error;
+    }
+
+    private void CloseWorkflowModals()
+    {
+        _showActionsModal = false;
+        _showConfirmModal = false;
+        _showCancelModal = false;
+        _showRescheduleModal = false;
+        _showCompleteModal = false;
+        _showNoShowModal = false;
+        _showWhatsAppModal = false;
+        _showEmailModal = false;
+        _modalError = null;
+        _actionMessage = null;
+    }
+
+    private void OpenWhatsAppReminder(AppointmentAgendaItem appt)
+    {
+        _selectedAppointment = appt;
+        _showDetailModal = false;
+        _showActionsModal = false;
+        _whatsAppError = null;
+        _whatsAppUrl = null;
+        _whatsAppPreview = null;
+
+        var result = WhatsAppSettings.TryBuildLink(WhatsAppMessageKind.Reminder, new WhatsAppAppointmentContext
+        {
+            PatientName = appt.PatientFullName,
+            PatientPhone = appt.PatientPhone,
+            DoctorName = appt.DoctorName,
+            AppointmentDateTime = appt.ParsedDate
+        });
+
+        if (result.Success)
+        {
+            _whatsAppUrl = result.Url;
+            _whatsAppPreview = result.RenderedMessage;
+        }
+        else
+        {
+            _whatsAppError = result.Error;
+        }
+
+        _showWhatsAppModal = true;
+    }
+
+    private void CloseWhatsAppModal()
+    {
+        _showWhatsAppModal = false;
+        _whatsAppError = null;
+        _whatsAppUrl = null;
+        _whatsAppPreview = null;
+    }
+
+    private async Task OpenWhatsAppAsync()
+    {
+        if (string.IsNullOrEmpty(_whatsAppUrl))
+            return;
+
+        await JS.InvokeVoidAsync("open", _whatsAppUrl, "_blank");
+        CloseWhatsAppModal();
+    }
+
+    private void OpenEmailReminder(AppointmentAgendaItem appt)
+    {
+        _selectedAppointment = appt;
+        _showDetailModal = false;
+        _showActionsModal = false;
+        var result = EmailMessageSettings.TryCompose(EmailMessageKind.Reminder, new WhatsAppAppointmentContext
+        {
+            PatientName = appt.PatientFullName,
+            PatientEmail = appt.PatientEmail,
+            DoctorName = appt.DoctorName,
+            AppointmentDateTime = appt.ParsedDate
+        });
+
+        _emailError = result.Success ? null : result.Error;
+        _emailTo = result.To;
+        _emailSubject = result.Subject;
+        _emailPreview = result.Body;
+        _showEmailModal = true;
+    }
+
+    private void CloseEmailModal()
+    {
+        _showEmailModal = false;
+        _sendingEmail = false;
+        _emailError = null;
+        _emailTo = null;
+        _emailSubject = null;
+        _emailPreview = null;
+    }
+
+    private async Task SendEmailAsync()
+    {
+        if (string.IsNullOrEmpty(_emailTo) || string.IsNullOrEmpty(_emailSubject) || string.IsNullOrEmpty(_emailPreview))
+            return;
+
+        _sendingEmail = true;
+        var (ok, error) = await BookingService.SendPatientEmailAsync(_emailTo, _emailSubject, _emailPreview);
+        _sendingEmail = false;
+        if (!ok)
+        {
+            _emailError = error ?? "No se pudo enviar el correo.";
+            return;
+        }
+
+        CloseEmailModal();
+    }
+
+    private static bool IsWithinOneHour(AppointmentAgendaItem appt)
+    {
+        var dt = appt.ParsedDate;
+        return dt.HasValue && (dt.Value - DateTime.Now).TotalHours < 1 && dt.Value > DateTime.Now;
+    }
+
+    private static string FormatSelectedDate(DateTime date) =>
+        date.ToString("dddd, d 'de' MMMM yyyy", new System.Globalization.CultureInfo("es-ES"));
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "Pending" => "Pendiente",
+        "Confirmed" => "Confirmada",
+        "Rescheduled" => "Reagendada",
+        "Completed" => "Completada",
+        "Cancelled" => "Cancelada",
+        "NoShow" => "No asistió",
+        _ => status
+    };
+
+    private static string GetStatusClass(string status) => status switch
+    {
+        "Pending" => "status-planned",
+        "Confirmed" => "status-progress",
+        "Rescheduled" => "status-progress",
+        "Completed" => "status-completed",
+        "Cancelled" => "status-cancelled",
+        "NoShow" => "status-cancelled",
+        _ => ""
+    };
+}

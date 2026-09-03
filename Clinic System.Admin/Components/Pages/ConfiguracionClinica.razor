@@ -1,0 +1,446 @@
+@page "/configuracion/clinica"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Clinic_System.Core.Validation
+@inject ClinicProfileService ClinicProfile
+@inject AppointmentBookingService BookingService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Datos de la clínica — @(_form.Name)</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/configuracion" class="back-link-inline">← Configuración</a>
+            <h1>Datos de la clínica</h1>
+            <p>Nombre, logo, horario y el SMTP usado para escribir al paciente.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_saveMessage))
+    {
+        <div class="wizard-success">@_saveMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(_saveError))
+    {
+        <div class="wizard-error">@_saveError</div>
+    }
+
+    <form class="new-patient-form clinic-profile-form" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <div class="clinic-logo-card">
+            <div class="clinic-logo-preview">
+                @if (!string.IsNullOrWhiteSpace(_form.DisplayLogoUrl))
+                {
+                    <img src="@_form.DisplayLogoUrl" alt="Logo de @_form.Name" />
+                }
+                else
+                {
+                    <Icon Name="tooth" Class="clinic-logo-placeholder" StrokeWidth="1.6" />
+                }
+            </div>
+            <div class="clinic-logo-actions">
+                <label class="btn-outline clinic-logo-upload">
+                    Subir logo
+                    <InputFile OnChange="OnLogoSelected" accept=".png,.jpg,.jpeg,.webp,.gif,.svg,image/*" disabled="@(!_canEdit || _saving)" />
+                </label>
+                @if (!string.IsNullOrWhiteSpace(_form.LogoUrl) && _canEdit)
+                {
+                    <button type="button" class="btn-outline" disabled="@_saving" @onclick="RemoveLogo">Quitar logo</button>
+                }
+                <p class="billing-muted">PNG, JPG, WEBP, GIF o SVG. Máximo 2 MB. Se usa en la factura y el menú.</p>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Nombre comercial</label>
+                <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.Name" @bind:event="oninput" maxlength="80" />
+            </div>
+            <div class="form-group">
+                <label>Razón social</label>
+                <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.LegalName" @bind:event="oninput" maxlength="120" />
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Eslogan</label>
+            <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.Slogan" @bind:event="oninput" maxlength="160" />
+        </div>
+
+        <div class="form-group">
+            <label>Dirección</label>
+            <textarea class="form-input" rows="2" disabled="@(!_canEdit || _saving)" @bind="_form.Address" @bind:event="oninput" maxlength="240"></textarea>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.Phone" @bind:event="oninput" maxlength="30" />
+            </div>
+            <div class="form-group">
+                <label>Correo</label>
+                <input class="form-input" type="email" disabled="@(!_canEdit || _saving)" @bind="_form.Email" @bind:event="oninput" maxlength="120" />
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Sitio web</label>
+                <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.Website" @bind:event="oninput" maxlength="120" />
+            </div>
+            <div class="form-group">
+                <label>RNC / NIT</label>
+                <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.TaxId" @bind:event="oninput" maxlength="40" />
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Código de país (WhatsApp)</label>
+            <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.DefaultCountryCode" @bind:event="oninput" maxlength="5" placeholder="1" />
+        </div>
+
+        <div class="clinic-hours-card">
+            <h2>Correo saliente (SMTP)</h2>
+            <p class="billing-muted">
+                Datos para enviar recordatorios y confirmaciones al paciente.
+                En Gmail use una contraseña de aplicación. El usuario SMTP, si lo deja vacío, será el correo remitente.
+                Plantillas en <a href="/configuracion/mensajes-correo">Mensajes de correo</a>.
+            </p>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Servidor SMTP</label>
+                    <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.SmtpHost" @bind:event="oninput" maxlength="120" placeholder="smtp.gmail.com" />
+                </div>
+                <div class="form-group">
+                    <label>Puerto</label>
+                    <input class="form-input" type="number" min="1" max="65535" disabled="@(!_canEdit || _saving)" @bind="_form.SmtpPort" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Correo remitente</label>
+                    <input class="form-input" type="email" disabled="@(!_canEdit || _saving)" @bind="_form.SmtpFromEmail" @bind:event="oninput" maxlength="120" placeholder="clinica@dominio.com" />
+                </div>
+                <div class="form-group">
+                    <label>Nombre del remitente</label>
+                    <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.SmtpSenderName" @bind:event="oninput" maxlength="80" placeholder="Elite Clinic" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Usuario SMTP (opcional)</label>
+                    <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.SmtpUser" @bind:event="oninput" maxlength="120" placeholder="Igual al remitente si lo deja vacío" />
+                </div>
+                <div class="form-group">
+                    <label>Contraseña SMTP</label>
+                    <input class="form-input" type="password" autocomplete="new-password" disabled="@(!_canEdit || _saving)" @bind="_smtpPasswordInput" @bind:event="oninput" maxlength="120" placeholder="@(_hasStoredSmtpPassword ? "•••••••• (dejar vacío para no cambiar)" : "Contraseña o app password")" />
+                </div>
+            </div>
+        </div>
+
+        <div class="clinic-hours-card">
+            <h2>Horario de trabajo</h2>
+            <p class="billing-muted">Estos turnos son los únicos que aparecen al agendar o reagendar citas.</p>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Apertura</label>
+                    <input class="form-input" type="time" disabled="@(!_canEdit || _saving)" @bind="_openTime" />
+                </div>
+                <div class="form-group">
+                    <label>Cierre</label>
+                    <input class="form-input" type="time" disabled="@(!_canEdit || _saving)" @bind="_closeTime" />
+                </div>
+                <div class="form-group">
+                    <label>Duración de cada cita</label>
+                    <select class="form-input" disabled="@(!_canEdit || _saving)" @bind="_form.SlotDurationMinutes">
+                        <option value="10">10 minutos</option>
+                        <option value="15">15 minutos</option>
+                        <option value="20">20 minutos</option>
+                        <option value="30">30 minutos</option>
+                        <option value="45">45 minutos</option>
+                        <option value="60">60 minutos</option>
+                    </select>
+                </div>
+            </div>
+
+            <label>Días que abre la clínica</label>
+            <div class="hours-days">
+                @foreach (var day in _weekDays)
+                {
+                    var selected = _form.WorkingDays.Contains(day.Value);
+                    <button type="button"
+                            class="hours-day @(selected ? "active" : "")"
+                            disabled="@(!_canEdit || _saving)"
+                            @onclick="() => ToggleWorkingDay(day.Value)">
+                        @day.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        @if (_canEdit)
+        {
+            <button class="btn-primary" type="submit" disabled="@_saving">
+                @(_saving ? "Guardando..." : "Guardar datos de la clínica")
+            </button>
+        }
+    </form>
+</div>
+
+@code {
+    private ClinicProfile _form = new();
+    private bool _saving;
+    private bool _canEdit;
+    private string? _saveMessage;
+    private string? _saveError;
+    private TimeOnly _openTime = new(12, 0);
+    private TimeOnly _closeTime = new(22, 0);
+    private string _smtpPasswordInput = string.Empty;
+    private bool _hasStoredSmtpPassword;
+    private readonly (int Value, string Label)[] _weekDays =
+    [
+        (1, "Lun"),
+        (2, "Mar"),
+        (3, "Mié"),
+        (4, "Jue"),
+        (5, "Vie"),
+        (6, "Sáb"),
+        (0, "Dom")
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canEdit = PermissionService.HasPermission(authState.User, "configuracion.view");
+        _form = ClinicProfile.Get();
+        _hasStoredSmtpPassword = !string.IsNullOrWhiteSpace(_form.SmtpPassword);
+        _smtpPasswordInput = string.Empty;
+        ApplyTimeTexts();
+
+        var (schedule, _) = await BookingService.GetClinicScheduleAsync();
+        if (schedule != null)
+        {
+            _form.OpenTime = schedule.OpenTime;
+            _form.CloseTime = schedule.CloseTime;
+            _form.SlotDurationMinutes = schedule.SlotDurationMinutes;
+            _form.WorkingDays = [.. schedule.WorkingDays];
+            ApplyTimeTexts();
+        }
+    }
+
+    private void ApplyTimeTexts()
+    {
+        _openTime = TimeOnly.FromTimeSpan(_form.OpenTime);
+        _closeTime = TimeOnly.FromTimeSpan(_form.CloseTime);
+    }
+
+    private void ToggleWorkingDay(int day)
+    {
+        if (!_canEdit || _saving)
+            return;
+
+        if (_form.WorkingDays.Contains(day))
+        {
+            if (_form.WorkingDays.Count == 1)
+                return;
+            _form.WorkingDays.Remove(day);
+        }
+        else
+        {
+            _form.WorkingDays.Add(day);
+        }
+    }
+
+    private async Task OnLogoSelected(InputFileChangeEventArgs args)
+    {
+        if (!_canEdit)
+            return;
+
+        _saving = true;
+        _saveMessage = null;
+        _saveError = null;
+        try
+        {
+            await ClinicProfile.SaveLogoAsync(args.File);
+            _form = ClinicProfile.Get();
+            _saveMessage = "Logo actualizado.";
+        }
+        catch (Exception ex)
+        {
+            _saveError = ex is InvalidOperationException
+                ? ex.Message
+                : "No se pudo guardar el logo. Revise el formato y el tamaño.";
+        }
+        _saving = false;
+    }
+
+    private void RemoveLogo()
+    {
+        if (!_canEdit)
+            return;
+
+        _saving = true;
+        _saveError = null;
+        try
+        {
+            ClinicProfile.RemoveLogo();
+            _form = ClinicProfile.Get();
+            _saveMessage = "Logo eliminado.";
+        }
+        catch (Exception)
+        {
+            _saveError = "No se pudo quitar el logo.";
+        }
+        _saving = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_canEdit)
+            return;
+
+        _saving = true;
+        _saveMessage = null;
+        _saveError = null;
+
+        if (string.IsNullOrWhiteSpace(_form.Name))
+        {
+            _saveError = "El nombre de la clínica es obligatorio.";
+            _saving = false;
+            return;
+        }
+
+        var open = _openTime.ToTimeSpan();
+        var close = _closeTime.ToTimeSpan();
+
+        if (close <= open)
+        {
+            _saveError = "La hora de cierre debe ser posterior a la de apertura.";
+            _saving = false;
+            return;
+        }
+
+        if (_form.WorkingDays.Count == 0)
+        {
+            _saveError = "Seleccione al menos un día de trabajo.";
+            _saving = false;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_form.Email)
+            && !ContactEmail.TryValidate(_form.Email, out var clinicEmail, out var clinicEmailError))
+        {
+            _saveError = clinicEmailError ?? "El correo de contacto de la clínica no es válido.";
+            _saving = false;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_form.SmtpHost)
+            || !string.IsNullOrWhiteSpace(_form.SmtpFromEmail)
+            || !string.IsNullOrWhiteSpace(_smtpPasswordInput)
+            || !string.IsNullOrWhiteSpace(_form.SmtpUser))
+        {
+            if (string.IsNullOrWhiteSpace(_form.SmtpHost))
+            {
+                _saveError = "El servidor SMTP es obligatorio.";
+                _saving = false;
+                return;
+            }
+
+            if (_form.SmtpPort is < 1 or > 65535)
+            {
+                _saveError = "El puerto SMTP no es válido.";
+                _saving = false;
+                return;
+            }
+
+            if (!ContactEmail.TryValidate(_form.SmtpFromEmail, out var fromEmail, out var fromError) || string.IsNullOrWhiteSpace(fromEmail))
+            {
+                _saveError = fromError ?? "El correo remitente no es válido.";
+                _saving = false;
+                return;
+            }
+
+            _form.SmtpFromEmail = fromEmail;
+            if (string.IsNullOrWhiteSpace(_form.SmtpSenderName))
+                _form.SmtpSenderName = _form.Name;
+            if (string.IsNullOrWhiteSpace(_smtpPasswordInput) && !_hasStoredSmtpPassword)
+            {
+                _saveError = "La contraseña SMTP es obligatoria.";
+                _saving = false;
+                return;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(_form.Email) && ContactEmail.TryValidate(_form.Email, out var normalizedContact, out _))
+            _form.Email = normalizedContact ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(_smtpPasswordInput))
+            _form.SmtpPassword = _smtpPasswordInput;
+
+        _form.OpenTime = open;
+        _form.CloseTime = close;
+
+        try
+        {
+            ClinicProfile.Save(_form);
+            _form = ClinicProfile.Get();
+            _hasStoredSmtpPassword = !string.IsNullOrWhiteSpace(_form.SmtpPassword);
+            _smtpPasswordInput = string.Empty;
+            ApplyTimeTexts();
+
+            var (emailSaved, emailError) = await BookingService.SaveClinicEmailSettingsAsync(new ClinicEmailSettingsRequest
+            {
+                Host = _form.SmtpHost,
+                Port = _form.SmtpPort,
+                FromEmail = _form.SmtpFromEmail,
+                SmtpUser = _form.SmtpUser,
+                SenderName = string.IsNullOrWhiteSpace(_form.SmtpSenderName) ? _form.Name : _form.SmtpSenderName,
+                Password = _form.SmtpPassword
+            });
+
+            if (!emailSaved)
+            {
+                _saveError = emailError ?? "Se guardaron los datos locales, pero no el SMTP en la API.";
+                _saving = false;
+                return;
+            }
+
+            var (saved, error, schedule) = await BookingService.SaveClinicScheduleAsync(new ClinicSchedule
+            {
+                OpenTime = _form.OpenTime,
+                CloseTime = _form.CloseTime,
+                SlotDurationMinutes = _form.SlotDurationMinutes,
+                WorkingDays = [.. _form.WorkingDays]
+            });
+
+            if (!saved)
+            {
+                _saveError = error ?? "Se guardaron los datos locales, pero no el horario de citas en la API.";
+                _saving = false;
+                return;
+            }
+
+            if (schedule != null)
+            {
+                _form.OpenTime = schedule.OpenTime;
+                _form.CloseTime = schedule.CloseTime;
+                _form.SlotDurationMinutes = schedule.SlotDurationMinutes;
+                _form.WorkingDays = [.. schedule.WorkingDays];
+                ClinicProfile.Save(_form);
+                _form = ClinicProfile.Get();
+                ApplyTimeTexts();
+            }
+
+            _saveMessage = "Datos y horario de la clínica guardados. Al agendar solo se mostrarán estos turnos.";
+        }
+        catch (Exception)
+        {
+            _saveError = "No se pudieron guardar los datos. Revise los permisos de App_Data.";
+        }
+
+        _saving = false;
+    }
+}

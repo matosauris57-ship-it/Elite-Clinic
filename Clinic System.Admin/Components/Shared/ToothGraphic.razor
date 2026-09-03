@@ -1,0 +1,123 @@
+@using Clinic_System.Core.Odontogram
+@inject OdontogramSymbolConfigService SymbolConfig
+<div class="tooth-graphic @(Flip ? "flip-x" : "") @(WholeClass) @(Selected ? "is-selected" : "")"
+     style="@WholeStyle">
+    <img src="@ToothSvgCatalog.FacialPath(ToothNumber)"
+         alt=""
+         draggable="false"
+         class="tooth-svg-img" />
+    @if (!HasGlobalAbsence)
+    {
+        <svg class="tooth-surface-overlays" viewBox="0 0 40 42" aria-hidden="true" preserveAspectRatio="xMidYMax meet">
+            @foreach (var zone in SurfaceZones)
+            {
+                var entry = LatestFor(zone.Surface);
+                var symbol = ConditionSymbol(entry);
+                <g class="overlay-zone @(entry == null ? "is-empty" : "")" style="@OdontogramSymbolPaint.SurfacePathStyle(symbol)">
+                    <path d="@zone.Path" />
+                    @if (entry != null && symbol.Enabled && OdontogramSymbolPaint.DrawsMark(symbol))
+                    {
+                        <g transform="translate(@zone.Cx.ToString(System.Globalization.CultureInfo.InvariantCulture) @zone.Cy.ToString(System.Globalization.CultureInfo.InvariantCulture)) scale(0.42) translate(-12 -12)">
+                            <OdontogramSymbolGlyph Symbol="symbol" />
+                        </g>
+                    }
+                </g>
+            }
+        </svg>
+        @if (ShowWholeMark)
+        {
+            <span class="tooth-whole-mark" aria-hidden="true">
+                <OdontogramSymbolGlyph Symbol="ConditionSymbol(WholeTooth)" />
+            </span>
+        }
+    }
+    @if (HasGlobalAbsence)
+    {
+        <span class="tooth-absent-mark" style="color: @AbsenceColor" aria-hidden="true">
+            <OdontogramSymbolGlyph Symbol="AbsenceSymbol" Class="tooth-absent-glyph" />
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter] public int ToothNumber { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public IReadOnlyList<ToothChartEntry> Entries { get; set; } = [];
+
+    private static readonly SurfaceZone[] SurfaceZones =
+    [
+        new(ToothSurface.BuccalFacial, "M4 1 Q20 -2 36 1 L30 15 Q20 10 10 15 Z", 20, 8),
+        new(ToothSurface.Mesial, "M4 1 L10 15 L10 29 L4 41 Q-2 21 4 1 Z", 6.5, 21),
+        new(ToothSurface.Distal, "M36 1 Q42 21 36 41 L30 29 L30 15 Z", 33.5, 21),
+        new(ToothSurface.LingualPalatal, "M4 41 L10 29 Q20 34 30 29 L36 41 Q20 45 4 41 Z", 20, 35),
+        new(ToothSurface.OcclusalIncisal, "M10 15 Q20 10 30 15 L30 29 Q20 34 10 29 Z", 20, 22)
+    ];
+
+    private bool Flip => ToothSvgCatalog.FlipHorizontal(ToothNumber);
+
+    private ToothChartEntry? WholeTooth =>
+        LatestFor(ToothSurface.WholeTooth);
+
+    private bool HasGlobalAbsence =>
+        WholeTooth is { Condition: ToothCondition.Missing or ToothCondition.Extracted }
+        || WholeTooth is { Condition: ToothCondition.Bridge, BridgeRole: BridgeRole.Pontic };
+
+    private OdontogramConditionSymbol AbsenceSymbol => ConditionSymbol(WholeTooth);
+
+    private string AbsenceColor => OdontogramSymbolColor.Normalize(AbsenceSymbol.Color);
+
+    private bool ShowWholeMark =>
+        WholeTooth != null
+        && !HasGlobalAbsence
+        && ConditionSymbol(WholeTooth).Enabled
+        && OdontogramSymbolPaint.DrawsMark(ConditionSymbol(WholeTooth));
+
+    private string WholeClass
+    {
+        get
+        {
+            if (WholeTooth == null)
+                return "";
+            if (HasGlobalAbsence)
+                return "tooth-absent";
+            var symbol = ConditionSymbol(WholeTooth);
+            if (ToothClinicalLabels.IsWholeToothCondition(WholeTooth.Condition)
+                && OdontogramSymbolPaint.UsesWholeToothOutline(symbol))
+                return "tooth-whole";
+            return "";
+        }
+    }
+
+    private string WholeStyle
+    {
+        get
+        {
+            if (WholeTooth == null)
+                return "";
+            var symbol = ConditionSymbol(WholeTooth);
+            var phase = PhaseSymbol(WholeTooth);
+            return $"{OdontogramSymbolPaint.PhaseCssVariables(phase)} --whole-symbol-color: {OdontogramSymbolColor.Normalize(symbol.Color)};";
+        }
+    }
+
+    private ToothChartEntry? LatestFor(ToothSurface surface) =>
+        Entries.Where(x => x.ToothNumber == ToothNumber && x.Surface == surface)
+            .OrderByDescending(x => x.RecordedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+
+    private OdontogramConditionSymbol ConditionSymbol(ToothChartEntry? entry)
+    {
+        if (entry == null)
+            return OdontogramSymbolDefaults.Condition(Clinic_System.Core.Enums.ToothCondition.Healthy);
+        return SymbolConfig.Current.ForCondition(CoreCondition(entry.Condition));
+    }
+
+    private OdontogramPhaseSymbol PhaseSymbol(ToothChartEntry entry) =>
+        SymbolConfig.Current.ForPhase((Clinic_System.Core.Enums.ToothChartPhase)(int)entry.Phase);
+
+    private static Clinic_System.Core.Enums.ToothCondition CoreCondition(ToothCondition condition) =>
+        (Clinic_System.Core.Enums.ToothCondition)(int)condition;
+
+    private sealed record SurfaceZone(ToothSurface Surface, string Path, double Cx, double Cy);
+}

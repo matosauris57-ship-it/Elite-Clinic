@@ -34,10 +34,6 @@
                 return NotFound<CompleteAppointmentDTO>("Appointment not found.");
             }
 
-            var authResult = await ValidateDoctorAccess(appointment.DoctorId);
-            if (authResult != null)
-                return authResult;
-
             request.DoctorId = appointment.DoctorId;
 
             Appointment CompleteAppointment = null;

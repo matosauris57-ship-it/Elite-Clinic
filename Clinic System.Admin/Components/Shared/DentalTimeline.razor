@@ -1,0 +1,121 @@
+@using Clinic_System.Core.Validation
+<section class="dental-timeline @(Compact ? "compact-timeline" : "")" aria-labelledby="@_headingId">
+    <div class="clinical-section-heading">
+        <div>
+            <h3 id="@_headingId">@Title</h3>
+            @if (!string.IsNullOrWhiteSpace(Subtitle))
+            {
+                <p>@Subtitle</p>
+            }
+        </div>
+        @if (HeaderActions != null)
+        {
+            <div class="timeline-heading-actions">@HeaderActions</div>
+        }
+    </div>
+
+    @if (Loading)
+    {
+        <AnimatedLoader Compact="true" Message="Cargando historial clínico..." />
+    }
+    else if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="wizard-error">@Error</div>
+    }
+    else if (Events.Count == 0)
+    {
+        <div class="maintenance-empty">
+            <p>No hay eventos clínicos para mostrar.</p>
+        </div>
+    }
+    else
+    {
+        <ol class="clinical-timeline-list">
+            @foreach (var item in VisibleEvents)
+            {
+                <li>
+                    <div class="timeline-marker @PhaseClass(item.Phase)" title="@PhaseLabel(item.Phase)"></div>
+                    <article>
+                        <div class="timeline-event-head">
+                            <strong>@ToothChartEventText.LocalizeTitle(item.Title)</strong>
+                        </div>
+                        <div class="timeline-event-meta">
+                            <span>@TypeLabel(item.Type)</span>
+                            @if (item.ToothNumber.HasValue)
+                            {
+                                <span>Pieza @item.ToothNumber</span>
+                            }
+                            @if (item.Phase.HasValue)
+                            {
+                                <span>@PhaseLabel(item.Phase.Value)</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(item.Description))
+                        {
+                            <p>@item.Description</p>
+                        }
+                        <div class="timeline-event-foot">
+                            <span class="timeline-event-actor">
+                                <Icon Name="user" Class="timeline-actor-icon" />
+                                <span>@ActorLabel(item)</span>
+                            </span>
+                            <time datetime="@item.RecordedAt.ToString("O")">@item.RecordedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</time>
+                        </div>
+                    </article>
+                </li>
+            }
+        </ol>
+    }
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Historial clínico";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public IReadOnlyList<DentalClinicalEvent> Events { get; set; } = [];
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public int MaxItems { get; set; } = 0;
+
+    private IEnumerable<DentalClinicalEvent> VisibleEvents
+    {
+        get
+        {
+            var ordered = Events.OrderByDescending(x => x.RecordedAt);
+            return MaxItems > 0 ? ordered.Take(MaxItems) : ordered;
+        }
+    }
+
+    private readonly string _headingId = $"timeline-{Guid.NewGuid():N}";
+
+    private static string PhaseClass(ToothChartPhase? phase) => phase switch
+    {
+        ToothChartPhase.Diagnosis => "phase-diagnosis",
+        ToothChartPhase.Planned => "phase-planned",
+        ToothChartPhase.InTreatment => "phase-treatment",
+        ToothChartPhase.Completed => "phase-completed",
+        _ => "phase-empty"
+    };
+
+    private static string PhaseLabel(ToothChartPhase? phase) =>
+        phase.HasValue ? ToothClinicalLabels.Phase(phase.Value) : "Registro";
+
+    private static string TypeLabel(DentalClinicalEventType type) => type switch
+    {
+        DentalClinicalEventType.OdontogramEntry => "Odontograma",
+        DentalClinicalEventType.TreatmentPlan => "Plan de tratamiento",
+        DentalClinicalEventType.Treatment => "Tratamiento",
+        DentalClinicalEventType.ClinicalNote => "Nota clínica",
+        DentalClinicalEventType.PeriodontalExam => "Periodontograma",
+        DentalClinicalEventType.Prescription => "Receta",
+        _ => type.ToString()
+    };
+
+    private static string ActorLabel(DentalClinicalEvent item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.RecordedByUserName))
+            return item.RecordedByUserName;
+        return "Usuario no registrado";
+    }
+}

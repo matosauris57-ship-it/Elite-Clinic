@@ -1,0 +1,330 @@
+@inject PatientPrescriptionService Prescriptions
+@inject DoctorMaintenanceService DoctorService
+@inject AuthService AuthService
+
+<section class="rx-panel">
+    <div class="clinical-section-heading">
+        <div>
+            <h3>Recetas</h3>
+            <p>Use una plantilla odontológica, ajuste las indicaciones y guarde la receta en el expediente para imprimirla.</p>
+        </div>
+        @if (CanEdit)
+        {
+            <button class="btn-primary" type="button" @onclick="StartNewAsync">Nueva receta</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="wizard-success">@_message</div>
+    }
+
+    @if (_editing)
+    {
+        <div class="rx-editor new-patient-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="rx-date">Fecha</label>
+                    <input id="rx-date" class="form-input" type="date" @bind="_issuedDate" disabled="@(!CanEdit)" />
+                </div>
+                <div class="form-group">
+                    <label for="rx-doctor">Médico</label>
+                    <select id="rx-doctor" class="form-input" @bind="_doctorId" disabled="@(!CanEdit)">
+                        <option value="0">Sin especificar</option>
+                        @foreach (var doctor in _doctors)
+                        {
+                            <option value="@doctor.Id">@doctor.FullName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="rx-dx">Diagnóstico / motivo</label>
+                <input id="rx-dx" class="form-input" @bind="_diagnosis" disabled="@(!CanEdit)" placeholder="Ej. absceso pieza 26, post-exodoncia" />
+            </div>
+            <div class="form-group">
+                <label for="rx-notes">Indicaciones generales</label>
+                <textarea id="rx-notes" class="form-input" rows="2" @bind="_notes" disabled="@(!CanEdit)"
+                          placeholder="Reposo, hielo, cita de control..."></textarea>
+            </div>
+
+            <h4 class="rx-subtitle">Plantillas</h4>
+            <p class="rx-hint">Pulse una plantilla para agregar sus medicamentos. Puede combinar varias y luego editar.</p>
+            <div class="rx-template-grid">
+                @foreach (var template in _templates)
+                {
+                    <button type="button" class="rx-template-card" disabled="@(!CanEdit)" @onclick="() => ApplyTemplate(template)">
+                        <span class="rx-template-cat">@template.Category</span>
+                        <strong>@template.Name</strong>
+                        <small>@template.Indication</small>
+                    </button>
+                }
+            </div>
+
+            <h4 class="rx-subtitle">Medicamentos (Rp)</h4>
+            @if (_items.Count == 0)
+            {
+                <p class="rx-hint">Aún no hay medicamentos. Elija una plantilla o agregue una línea.</p>
+            }
+            else
+            {
+                <div class="rx-item-list">
+                    @for (var i = 0; i < _items.Count; i++)
+                    {
+                        var index = i;
+                        var item = _items[index];
+                        <article class="rx-item-card">
+                            <div class="form-row">
+                                <div class="form-group"><label>Medicamento</label><input class="form-input" @bind="item.MedicationName" disabled="@(!CanEdit)" /></div>
+                                <div class="form-group"><label>Dosis</label><input class="form-input" @bind="item.Dosage" disabled="@(!CanEdit)" /></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Frecuencia</label><input class="form-input" @bind="item.Frequency" disabled="@(!CanEdit)" /></div>
+                                <div class="form-group"><label>Días</label><input class="form-input" type="number" min="1" max="60" @bind="item.DurationDays" disabled="@(!CanEdit)" /></div>
+                            </div>
+                            <div class="form-group"><label>Instrucciones</label><input class="form-input" @bind="item.SpecialInstructions" disabled="@(!CanEdit)" /></div>
+                            @if (CanEdit)
+                            {
+                                <button type="button" class="btn-outline" @onclick="() => RemoveItem(index)">Quitar</button>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+            @if (CanEdit)
+            {
+                <button type="button" class="btn-outline" @onclick="AddBlankItem">Agregar medicamento</button>
+            }
+
+            <div class="modal-actions rx-actions">
+                <button type="button" class="btn-outline" @onclick="CancelEdit">Cancelar</button>
+                <button type="button" class="btn-primary" disabled="@(_saving || !CanEdit)" @onclick="SaveAsync">@(_saving ? "Guardando..." : "Guardar receta")</button>
+            </div>
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando recetas..." />
+    }
+    else if (_recetas.Count == 0 && !_editing)
+    {
+        <div class="maintenance-empty"><p>Este paciente no tiene recetas guardadas.</p></div>
+    }
+    else if (!_editing)
+    {
+        <div class="rx-history">
+            @foreach (var receta in _recetas)
+            {
+                <article class="rx-history-card">
+                    <div>
+                        <strong>Receta #@receta.Id</strong>
+                        <p>@receta.IssuedAt.ToLocalTime().ToString("dd/MM/yyyy") · @(receta.DoctorName ?? "Sin médico") · @receta.ItemCount medicamento(s)</p>
+                        <p>@(string.IsNullOrWhiteSpace(receta.Diagnosis) ? receta.MedicationPreview : receta.Diagnosis)</p>
+                    </div>
+                    <div class="rx-history-actions">
+                        <a class="btn-outline" href="/pacientes/@PatientId/recetas/@receta.Id/imprimir">Imprimir</a>
+                        @if (CanEdit)
+                        {
+                            <button type="button" class="btn-outline" @onclick="() => EditAsync(receta.Id)">Editar</button>
+                            <button type="button" class="btn-outline" @onclick="() => DeleteAsync(receta.Id)">Anular</button>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+
+    private readonly List<PatientPrescriptionSummary> _recetas = [];
+    private readonly List<PrescriptionTemplate> _templates = [];
+    private readonly List<DoctorListItem> _doctors = [];
+    private readonly List<PatientPrescriptionItemModel> _items = [];
+    private bool _loading = true;
+    private bool _editing;
+    private bool _saving;
+    private int? _editingId;
+    private int _doctorId;
+    private DateTime _issuedDate = DateTime.Today;
+    private string? _diagnosis;
+    private string? _notes;
+    private string? _error;
+    private string? _message;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var recetasTask = AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await Prescriptions.ListAsync(PatientId);
+                return (response.Items, response.Error);
+            },
+            AuthService.IsTokenError);
+        var templatesTask = AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await Prescriptions.ListTemplatesAsync();
+                return (response.Items, response.Error);
+            },
+            AuthService.IsTokenError);
+        var doctorsTask = DoctorService.GetDoctorsAsync();
+
+        var recetas = await recetasTask;
+        var templates = await templatesTask;
+        var (doctors, _) = await doctorsTask;
+
+        _recetas.Clear();
+        _recetas.AddRange(recetas.Data);
+        _templates.Clear();
+        _templates.AddRange(templates.Data);
+        _doctors.Clear();
+        _doctors.AddRange(doctors.Where(d => d.IsActive));
+        _error = recetas.Error ?? templates.Error;
+        _loading = false;
+    }
+
+    private Task StartNewAsync()
+    {
+        _editing = true;
+        _editingId = null;
+        _issuedDate = DateTime.Today;
+        _diagnosis = null;
+        _notes = null;
+        _items.Clear();
+        _message = null;
+        _error = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task EditAsync(int id)
+    {
+        _error = null;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await Prescriptions.GetAsync(id);
+                return (response.Item, response.Error);
+            },
+            AuthService.IsTokenError);
+        if (result.Data == null)
+        {
+            _error = result.Error ?? "No se pudo abrir la receta.";
+            return;
+        }
+
+        _editing = true;
+        _editingId = id;
+        _issuedDate = result.Data.IssuedAt.Date;
+        _doctorId = result.Data.DoctorId ?? 0;
+        _diagnosis = result.Data.Diagnosis;
+        _notes = result.Data.Notes;
+        _items.Clear();
+        _items.AddRange(result.Data.Items);
+    }
+
+    private void CancelEdit()
+    {
+        _editing = false;
+        _editingId = null;
+        _items.Clear();
+    }
+
+    private void ApplyTemplate(PrescriptionTemplate template)
+    {
+        foreach (var line in template.Lines)
+        {
+            _items.Add(new PatientPrescriptionItemModel
+            {
+                TemplateKey = template.Key,
+                MedicationName = line.MedicationName,
+                Dosage = line.Dosage,
+                Frequency = line.Frequency,
+                DurationDays = line.DurationDays,
+                SpecialInstructions = line.SpecialInstructions
+            });
+        }
+    }
+
+    private void AddBlankItem() =>
+        _items.Add(new PatientPrescriptionItemModel { DurationDays = 7 });
+
+    private void RemoveItem(int index)
+    {
+        if (index >= 0 && index < _items.Count)
+            _items.RemoveAt(index);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_items.All(x => string.IsNullOrWhiteSpace(x.MedicationName)))
+        {
+            _error = "Agregue al menos un medicamento o una plantilla.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        _message = null;
+        var request = new SavePatientPrescriptionRequest
+        {
+            DoctorId = _doctorId == 0 ? null : _doctorId,
+            IssuedAt = _issuedDate,
+            Diagnosis = _diagnosis,
+            Notes = _notes,
+            Items = _items.Where(x => !string.IsNullOrWhiteSpace(x.MedicationName)).ToList()
+        };
+
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = _editingId.HasValue
+                    ? await Prescriptions.UpdateAsync(_editingId.Value, request)
+                    : await Prescriptions.CreateAsync(PatientId, request);
+                return (response.Item, response.Error);
+            },
+            AuthService.IsTokenError);
+
+        _saving = false;
+        if (result.Data == null)
+        {
+            _error = result.Error ?? "No se pudo guardar la receta.";
+            return;
+        }
+
+        _message = "Receta guardada.";
+        _editing = false;
+        _editingId = null;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        _error = null;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await Prescriptions.DeleteAsync(id);
+                return (response.Success, response.Error);
+            },
+            AuthService.IsTokenError);
+        if (!string.IsNullOrWhiteSpace(result.Error) || !result.Data)
+        {
+            _error = result.Error ?? "No se pudo anular la receta.";
+            return;
+        }
+        _message = "Receta anulada.";
+        await LoadAsync();
+    }
+}

@@ -2,5 +2,6 @@
 {
     public class GetDoctorListQuery : IRequest<Response<List<GetDoctorListDTO>>>
     {
+        public bool IncludeInactive { get; set; } = true;
     }
 }

@@ -1,0 +1,266 @@
+@page "/configuracion/mensajes-correo"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject EmailMessageSettingsService EmailSettings
+@inject AppointmentBookingService BookingService
+@inject IJSRuntime JS
+
+<PageTitle>Mensajes de correo — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/configuracion" class="back-link-inline">← Configuración</a>
+            <h1>Mensajes de correo</h1>
+            <p>Recordatorios automáticos, confirmación al agendar y felicitación de cumpleaños</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_saveMessage))
+    {
+        <div class="wizard-success">@_saveMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(_saveError))
+    {
+        <div class="wizard-error">@_saveError</div>
+    }
+
+    <form class="new-patient-form whatsapp-settings-form" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <div class="clinic-hours-card">
+            <h2>Recordatorio automático</h2>
+            <p class="billing-muted">
+                Se envía por correo si el paciente tiene email y el SMTP está configurado en
+                <a href="/configuracion/clinica">Datos de la clínica</a>.
+                Marque un día antes, una hora el mismo día, o ambos.
+            </p>
+            <label class="checkbox-label">
+                <input type="checkbox" @bind="_form.DayBeforeEnabled" />
+                Un día antes, a las
+            </label>
+            <div class="form-group">
+                <input class="form-input" type="time" disabled="@(!_form.DayBeforeEnabled)" @bind="_dayBeforeTime" />
+            </div>
+            <label class="checkbox-label">
+                <input type="checkbox" @bind="_form.SameDayEnabled" />
+                El mismo día de la cita, a las
+            </label>
+            <div class="form-group">
+                <input class="form-input" type="time" disabled="@(!_form.SameDayEnabled)" @bind="_sameDayTime" />
+            </div>
+        </div>
+
+        <p class="modal-confirm-text">
+            Variables (pulse una para insertarla en el cuerpo activo):
+        </p>
+        <div class="whatsapp-placeholder-list" role="group" aria-label="Variables de plantilla">
+            @foreach (var token in ActivePlaceholders)
+            {
+                <button type="button"
+                        class="whatsapp-placeholder-chip"
+                        title="Insertar @token"
+                        @onclick="() => InsertPlaceholderAsync(token)">@token</button>
+            }
+        </div>
+        <p class="whatsapp-placeholder-hint">Se insertará en: <strong>@_activeTemplateLabel</strong></p>
+
+        <div class="form-group">
+            <label>Asunto del recordatorio</label>
+            <input class="form-input" @bind="_form.ReminderSubject" @bind:event="oninput" maxlength="160" />
+        </div>
+        <div class="form-group">
+            <label>Cuerpo del recordatorio</label>
+            <textarea @ref="_reminderEditor"
+                      class="form-input"
+                      rows="4"
+                      @bind="_form.ReminderTemplate"
+                      @bind:event="oninput"
+                      @onfocus="() => SetActiveTemplate(EmailMessageKind.Reminder)"></textarea>
+            <div class="whatsapp-preview-label">Vista previa</div>
+            <div class="whatsapp-preview">@ReminderPreview</div>
+        </div>
+
+        <div class="form-group">
+            <label>Asunto de confirmación (al agendar, envío manual)</label>
+            <input class="form-input" @bind="_form.ConfirmationSubject" @bind:event="oninput" maxlength="160" />
+        </div>
+        <div class="form-group">
+            <label>Cuerpo de confirmación</label>
+            <textarea @ref="_confirmationEditor"
+                      class="form-input"
+                      rows="4"
+                      @bind="_form.ConfirmationTemplate"
+                      @bind:event="oninput"
+                      @onfocus="() => SetActiveTemplate(EmailMessageKind.Confirmation)"></textarea>
+            <div class="whatsapp-preview-label">Vista previa</div>
+            <div class="whatsapp-preview">@ConfirmationPreview</div>
+        </div>
+
+        <div class="clinic-hours-card">
+            <h2>Cumpleaños</h2>
+            <label class="checkbox-label">
+                <input type="checkbox" @bind="_form.BirthdayEnabled" />
+                Enviar felicitación el día del cumpleaños, a las
+            </label>
+            <div class="form-group">
+                <input class="form-input" type="time" disabled="@(!_form.BirthdayEnabled)" @bind="_birthdayTime" />
+            </div>
+            <div class="form-group">
+                <label>Asunto de cumpleaños</label>
+                <input class="form-input" disabled="@(!_form.BirthdayEnabled)" @bind="_form.BirthdaySubject" @bind:event="oninput" maxlength="160" />
+            </div>
+            <div class="form-group">
+                <label>Cuerpo de cumpleaños</label>
+                <textarea @ref="_birthdayEditor"
+                          class="form-input"
+                          rows="4"
+                          disabled="@(!_form.BirthdayEnabled)"
+                          @bind="_form.BirthdayTemplate"
+                          @bind:event="oninput"
+                          @onfocus="() => SetActiveTemplate(EmailMessageKind.Birthday)"></textarea>
+                <div class="whatsapp-preview-label">Vista previa</div>
+                <div class="whatsapp-preview">@BirthdayPreview</div>
+            </div>
+        </div>
+
+        <button class="btn-primary" type="submit" disabled="@_saving">
+            @(_saving ? "Guardando..." : "Guardar plantillas y horarios")
+        </button>
+    </form>
+</div>
+
+@code {
+    private static readonly string[] AppointmentPlaceholders = ["{nombre}", "{clinica}", "{fecha}", "{hora}", "{doctor}"];
+    private static readonly string[] BirthdayPlaceholders = ["{nombre}", "{clinica}", "{edad}"];
+
+    private EmailMessageSettings _form = new();
+    private ElementReference _reminderEditor;
+    private ElementReference _confirmationEditor;
+    private ElementReference _birthdayEditor;
+    private EmailMessageKind _activeTemplate = EmailMessageKind.Reminder;
+    private bool _saving;
+    private string? _saveMessage;
+    private string? _saveError;
+    private TimeOnly _dayBeforeTime = new(9, 0);
+    private TimeOnly _sameDayTime = new(8, 0);
+    private TimeOnly _birthdayTime = new(8, 0);
+
+    private string[] ActivePlaceholders =>
+        _activeTemplate == EmailMessageKind.Birthday ? BirthdayPlaceholders : AppointmentPlaceholders;
+
+    private string _activeTemplateLabel => _activeTemplate switch
+    {
+        EmailMessageKind.Confirmation => "Cuerpo de confirmación",
+        EmailMessageKind.Birthday => "Cuerpo de cumpleaños",
+        _ => "Cuerpo del recordatorio"
+    };
+
+    private string ReminderPreview => EmailSettings.Preview(_form.ReminderTemplate);
+    private string ConfirmationPreview => EmailSettings.Preview(_form.ConfirmationTemplate);
+    private string BirthdayPreview => EmailSettings.Preview(_form.BirthdayTemplate);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _form = EmailSettings.Get();
+        var (api, _) = await BookingService.GetPatientNotificationsAsync();
+        if (api != null)
+            _form.ApplyFromApi(api);
+        ApplyTimes();
+    }
+
+    private void ApplyTimes()
+    {
+        _dayBeforeTime = TimeOnly.FromTimeSpan(_form.DayBeforeSendTime);
+        _sameDayTime = TimeOnly.FromTimeSpan(_form.SameDaySendTime);
+        _birthdayTime = TimeOnly.FromTimeSpan(_form.BirthdaySendTime);
+    }
+
+    private void SetActiveTemplate(EmailMessageKind kind) => _activeTemplate = kind;
+
+    private async Task InsertPlaceholderAsync(string token)
+    {
+        var editor = _activeTemplate switch
+        {
+            EmailMessageKind.Confirmation => _confirmationEditor,
+            EmailMessageKind.Birthday => _birthdayEditor,
+            _ => _reminderEditor
+        };
+
+        try
+        {
+            var next = await JS.InvokeAsync<string?>("dentalCareUi.insertAtCursor", editor, token);
+            if (!string.IsNullOrEmpty(next))
+                AssignBody(next);
+        }
+        catch (JSException)
+        {
+            AssignBody((_activeTemplate switch
+            {
+                EmailMessageKind.Confirmation => _form.ConfirmationTemplate,
+                EmailMessageKind.Birthday => _form.BirthdayTemplate,
+                _ => _form.ReminderTemplate
+            }) + token);
+        }
+    }
+
+    private void AssignBody(string value)
+    {
+        if (_activeTemplate == EmailMessageKind.Confirmation)
+            _form.ConfirmationTemplate = value;
+        else if (_activeTemplate == EmailMessageKind.Birthday)
+            _form.BirthdayTemplate = value;
+        else
+            _form.ReminderTemplate = value;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _saveMessage = null;
+        _saveError = null;
+
+        _form.DayBeforeSendTime = _dayBeforeTime.ToTimeSpan();
+        _form.SameDaySendTime = _sameDayTime.ToTimeSpan();
+        _form.BirthdaySendTime = _birthdayTime.ToTimeSpan();
+
+        if (string.IsNullOrWhiteSpace(_form.ReminderTemplate)
+            || string.IsNullOrWhiteSpace(_form.ConfirmationTemplate)
+            || string.IsNullOrWhiteSpace(_form.ReminderSubject)
+            || string.IsNullOrWhiteSpace(_form.ConfirmationSubject))
+        {
+            _saveError = "Los asuntos y los cuerpos de recordatorio y confirmación son obligatorios.";
+            _saving = false;
+            return;
+        }
+
+        if (_form.BirthdayEnabled
+            && (string.IsNullOrWhiteSpace(_form.BirthdaySubject) || string.IsNullOrWhiteSpace(_form.BirthdayTemplate)))
+        {
+            _saveError = "Si activa cumpleaños, el asunto y el cuerpo son obligatorios.";
+            _saving = false;
+            return;
+        }
+
+        try
+        {
+            EmailSettings.Save(_form);
+            _form = EmailSettings.Get();
+            ApplyTimes();
+
+            var (ok, error) = await BookingService.SavePatientNotificationsAsync(_form.ToApi());
+            if (!ok)
+            {
+                _saveError = error ?? "Se guardaron las plantillas locales, pero no el envío automático en la API.";
+                _saving = false;
+                return;
+            }
+
+            _saveMessage = "Guardado. El recordatorio automático y los cumpleaños se enviarán según lo marcado.";
+        }
+        catch (Exception)
+        {
+            _saveError = "No se pudieron guardar las plantillas. Revise los permisos de App_Data.";
+        }
+
+        _saving = false;
+    }
+}

@@ -18,13 +18,16 @@
             _logger.LogInformation("Starting update process for payment with ID {PaymentId}", request.PaymentId);
             try
             {
-                var payment = await _unitOfWork.PaymentsRepository.GetByIdAsync(request.PaymentId);
+                var payment = await _unitOfWork.PaymentsRepository.GetPaymentWithLinesAsync(request.PaymentId, cancellationToken);
                 if (payment == null)
                 {
                     return NotFound<PaymentDTO>($"Payment with ID {request.PaymentId} not found.");
                 }
 
-                payment.UpdatePaymentDetails(request.Amount, request.PaymentMethod, request.Notes);
+                payment.UpdatePaymentDetails(
+                    Money.Resolve(request.AmountInput, request.Amount),
+                    request.PaymentMethod,
+                    request.Notes);
 
                 _unitOfWork.PaymentsRepository.Update(payment);
                 var result = await _unitOfWork.SaveAsync();
@@ -37,6 +40,10 @@
 
                 _logger.LogInformation("Payment with ID {PaymentId} updated successfully", request.PaymentId);
                 return Success(paymentDto, "Payment updated successfully.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest<PaymentDTO>(ex.Message);
             }
             catch (Exception ex)
             {

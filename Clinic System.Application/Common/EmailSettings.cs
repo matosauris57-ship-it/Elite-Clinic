@@ -2,10 +2,14 @@
 {
     public class EmailSettings
     {
-        public string Host { get; set; }        // مثلاً smtp.gmail.com
-        public int Port { get; set; }           // مثلاً 587
-        public string FromEmail { get; set; }   // إيميل العيادة
-        public string Password { get; set; }    // App Password من جوجل
-        public string SenderName { get; set; }  // اسم العيادة اللي هيظهر للمريض
+        public string Host { get; set; } = string.Empty;
+        public int Port { get; set; } = 587;
+        public string FromEmail { get; set; } = string.Empty;
+        public string SmtpUser { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string SenderName { get; set; } = string.Empty;
+
+        public string AuthUser =>
+            string.IsNullOrWhiteSpace(SmtpUser) ? FromEmail : SmtpUser;
     }
 }

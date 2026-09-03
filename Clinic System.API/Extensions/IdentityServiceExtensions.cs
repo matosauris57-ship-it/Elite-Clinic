@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.API.Extensions
+namespace Clinic_System.API.Extensions
 {
     public static class IdentityServiceExtensions
     {
@@ -11,11 +11,11 @@
             services.AddIdentity<ApplicationUser, IdentityRole>(options =>
             {
                 // Password settings
-                options.Password.RequireDigit = true;
-                options.Password.RequireLowercase = true;
-                options.Password.RequireUppercase = true;
-                options.Password.RequireNonAlphanumeric = true;
-                options.Password.RequiredLength = 8;
+                options.Password.RequireDigit = false;
+                options.Password.RequireLowercase = false;
+                options.Password.RequireUppercase = false;
+                options.Password.RequireNonAlphanumeric = false;
+                options.Password.RequiredLength = 6;
 
                 // User settings
                 options.User.RequireUniqueEmail = true;
@@ -54,6 +54,7 @@
             {
                 options.SaveToken = true;
                 options.RequireHttpsMetadata = false;
+                options.MapInboundClaims = true;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -62,7 +63,9 @@
                     ValidateIssuerSigningKey = true,
                     ValidIssuer = jwtSettings.IssuerIP,
                     ValidAudience = jwtSettings.AudienceIP,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecritKey))
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecritKey)),
+                    NameClaimType = ClaimTypes.Name,
+                    RoleClaimType = ClaimTypes.Role
                 };
             });
 

@@ -32,6 +32,18 @@
                 .Matches(@"^\+?[0-9]{10,15}$")
                 .When(x => !string.IsNullOrEmpty(x.Phone))
                 .WithMessage("Phone number must contain 10–15 digits (numbers only, optional +)");
+
+            RuleFor(x => x.DateOfBirth)
+                .LessThan(DateTime.Today)
+                .WithMessage("Date of Birth must be in the past")
+                .GreaterThan(new DateTime(1900, 1, 1))
+                .WithMessage("Date of Birth is not valid")
+                .When(x => x.DateOfBirth.HasValue);
+
+            RuleFor(x => x.Gender)
+                .Must(g => Enum.TryParse<Gender>(g, true, out _))
+                .WithMessage("Gender is invalid")
+                .When(x => !string.IsNullOrWhiteSpace(x.Gender));
         }
 
         public void ApplyCustomValidationsRules()
@@ -53,6 +65,13 @@
                 })
                 .WithMessage("Phone number is already exists")
                 .When(x => !string.IsNullOrEmpty(x.Phone));
+
+            RuleFor(x => x.Email)
+                .Custom((email, context) =>
+                {
+                    if (!ContactEmail.TryValidate(email, out _, out var error) && error != null)
+                        context.AddFailure(error);
+                });
         }
     }
 }

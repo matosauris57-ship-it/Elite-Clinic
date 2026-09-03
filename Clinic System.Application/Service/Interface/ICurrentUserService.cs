@@ -6,6 +6,9 @@
         bool IsAuthenticated { get; }
         int? DoctorId { get; }
         int? PatientId { get; }
+        bool IsAdmin { get; }
+        bool IsStaff { get; }
         Task<List<string>> GetCurrentUserRolesAsync();
+        bool HasPermission(string permission);
     }
 }

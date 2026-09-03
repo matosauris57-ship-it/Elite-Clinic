@@ -10,5 +10,7 @@
         Task<IEnumerable<Doctor?>> GetDoctorsWithAppointmentsAsync(
             Expression<Func<Appointment, bool>> appointmentPredicate, CancellationToken cancellationToken = default);
         Task<Doctor?> GetDoctorWithAppointmentsByIdAsync(int Id, CancellationToken cancellationToken = default);
+        Task<IEnumerable<Doctor?>> GetAllForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default);
+        Task<Doctor?> GetByIdIncludingDeletedAsync(int id, CancellationToken cancellationToken = default);
     }
 }

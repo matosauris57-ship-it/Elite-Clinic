@@ -1,0 +1,59 @@
+@page "/analitica"
+@page "/inventario"
+@page "/reportes"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "admin.panel")]
+@rendermode InteractiveServer
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>@_title — DentalCare Admin</PageTitle>
+
+<div class="coming-soon">
+    <div class="coming-soon-icon">
+        <Icon Name="@_iconName" Class="coming-soon-svg" />
+    </div>
+    <h1>@_title</h1>
+    <p>Esta sección estará disponible en la Fase 2 del proyecto.</p>
+    <a href="/" class="back-link">
+        <Icon Name="chevron-left" Class="back-link-icon" StrokeWidth="2" />
+        Volver al Dashboard
+    </a>
+</div>
+
+@code {
+    private string _title = "Próximamente";    private string _iconName = "construction";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var path = new Uri(Navigation.Uri).AbsolutePath.Trim('/');
+        (_title, _iconName) = path switch
+        {
+            "pacientes" => ("Pacientes", "users"),
+            "historial" => ("Historial Clínico", "clipboard-list"),
+            "facturacion" => ("Facturación", "credit-card"),
+            "analitica" => ("Analítica", "bar-chart-2"),
+            "inventario" => ("Inventario", "package"),
+            "reportes" => ("Reportes", "file-bar-chart"),
+            _ => ("Próximamente", "construction")
+        };
+
+        var requiredPermission = path switch
+        {
+            "pacientes" => "pacientes.view",
+            "historial" => "historial.view",
+            "facturacion" => "facturacion.view",
+            "analitica" => "analitica.view",
+            "inventario" => "inventario.view",
+            "reportes" => "reportes.view",
+            _ => null
+        };
+
+        if (requiredPermission != null)
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            if (!PermissionService.HasPermission(authState.User, requiredPermission))
+                Navigation.NavigateTo("/", forceLoad: false);
+        }
+    }
+}

@@ -1,8 +1,8 @@
-﻿namespace Clinic_System.API
+namespace Clinic_System.API
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             Log.Logger = new LoggerConfiguration()
             .WriteTo.Console()
@@ -26,14 +26,17 @@
 
                 builder.Services.AddDbContext<AppDbContext>(options =>
                 {
-                    options.UseLazyLoadingProxies().UseSqlServer(connectionString);
+                    options.UseLazyLoadingProxies()
+                        .UseSqlServer(connectionString)
+                        .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
                 });
 
                 builder.Services.AddHangfireServices(connectionString);
                 builder.Services.AddIdentityServices(builder.Configuration);
+                builder.Services.AddPermissionAuthorization();
                 builder.Services.AddSwaggerDocumentation();
                 builder.Services.AddCorsPolicies();
-                builder.Services.AddCustomRateLimiting();
+                builder.Services.AddCustomRateLimiting(builder.Environment.IsDevelopment());
                 builder.Services.AddSignalRServices();
                 builder.Services.AddMessageBrokerServices(builder.Configuration);
 
@@ -41,7 +44,12 @@
                 builder.Services.AddPersistenceDependencies();
                 builder.Services.AddApplicationDependencies();
                 builder.Services.AddInfrastructureDependencies(builder.Configuration);
+                builder.Services.AddSingleton<IClinicOperatingHoursService, FileClinicOperatingHoursService>();
+                builder.Services.AddSingleton<IEmailSettingsProvider, FileClinicEmailSettingsService>();
+                builder.Services.AddSingleton<IPatientNotificationSettingsService, FilePatientNotificationSettingsService>();
+                builder.Services.AddSingleton<IOdontogramSymbolConfigService, FileOdontogramSymbolConfigService>();
 
+                builder.Services.AddHttpContextAccessor();
                 builder.Services.AddControllers();
 
                 var app = builder.Build();
@@ -53,6 +61,7 @@
                     {
                         var context = services.GetRequiredService<AppDbContext>();
                         context.Database.Migrate();
+                        await DevDataSeeder.SeedAsync(services);
                     }
                     catch (Exception ex)
                     {
@@ -93,7 +102,7 @@
                 app.UseHangfireDashboard();
                 JobScheduler.ScheduleRecurringJobs(app);
 
-                app.Run();
+                await app.RunAsync();
             }
             catch (Exception ex)
             {

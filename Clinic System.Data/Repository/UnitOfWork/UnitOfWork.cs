@@ -1,4 +1,4 @@
-﻿using Clinic_System.Core.Exceptions;
+using Clinic_System.Core.Exceptions;
 using Microsoft.Data.SqlClient;
 
 namespace Clinic_System.Data.Repository.UnitOfWork
@@ -24,6 +24,22 @@ namespace Clinic_System.Data.Repository.UnitOfWork
         IPrescriptionRepository PrescriptionsRepo;
 
         IRefreshTokenRepository RefreshTokensRepo;
+
+        IDentalHistoryRepository DentalHistoriesRepo;
+        IToothRecordRepository ToothRecordsRepo;
+        IToothChartEntryRepository ToothChartEntriesRepo;
+        IDentalClinicalEventRepository DentalClinicalEventsRepo;
+        IDentalTreatmentRepository DentalTreatmentsRepo;
+        ITreatmentPlanRepository TreatmentPlansRepo;
+        IInvoiceLineRepository InvoiceLinesRepo;
+        ITreatmentProcedureRepository TreatmentProceduresRepo;
+        IDoctorProcedurePriceRepository DoctorProcedurePricesRepo;
+        IMedicalConditionRepository MedicalConditionsRepo;
+        IPatientMedicalConditionRepository PatientMedicalConditionsRepo;
+        IPeriodontalExamRepository PeriodontalExamsRepo;
+        IPatientPrescriptionRepository PatientPrescriptionsRepo;
+        IDashboardLayoutRepository DashboardLayoutsRepo;
+        IEmailCampaignRepository EmailCampaignsRepo;
 
         public IRefreshTokenRepository RefreshTokensRepository
         {
@@ -106,6 +122,141 @@ namespace Clinic_System.Data.Repository.UnitOfWork
                     PaymentsRepo = new PaymentRepository(context);
                 }
                 return PaymentsRepo;
+            }
+        }
+
+        public IDentalHistoryRepository DentalHistoriesRepository
+        {
+            get
+            {
+                DentalHistoriesRepo ??= new DentalHistoryRepository(context);
+                return DentalHistoriesRepo;
+            }
+        }
+
+        public IToothRecordRepository ToothRecordsRepository
+        {
+            get
+            {
+                ToothRecordsRepo ??= new ToothRecordRepository(context);
+                return ToothRecordsRepo;
+            }
+        }
+
+        public IToothChartEntryRepository ToothChartEntriesRepository
+        {
+            get
+            {
+                ToothChartEntriesRepo ??= new ToothChartEntryRepository(context);
+                return ToothChartEntriesRepo;
+            }
+        }
+
+        public IDentalClinicalEventRepository DentalClinicalEventsRepository
+        {
+            get
+            {
+                DentalClinicalEventsRepo ??= new DentalClinicalEventRepository(context);
+                return DentalClinicalEventsRepo;
+            }
+        }
+
+        public IDentalTreatmentRepository DentalTreatmentsRepository
+        {
+            get
+            {
+                DentalTreatmentsRepo ??= new DentalTreatmentRepository(context);
+                return DentalTreatmentsRepo;
+            }
+        }
+
+        public ITreatmentPlanRepository TreatmentPlansRepository
+        {
+            get
+            {
+                TreatmentPlansRepo ??= new TreatmentPlanRepository(context);
+                return TreatmentPlansRepo;
+            }
+        }
+
+        public IInvoiceLineRepository InvoiceLinesRepository
+        {
+            get
+            {
+                InvoiceLinesRepo ??= new InvoiceLineRepository(context);
+                return InvoiceLinesRepo;
+            }
+        }
+
+        public ITreatmentProcedureRepository TreatmentProceduresRepository
+        {
+            get
+            {
+                TreatmentProceduresRepo ??= new TreatmentProcedureRepository(context);
+                return TreatmentProceduresRepo;
+            }
+        }
+
+        public IDoctorProcedurePriceRepository DoctorProcedurePricesRepository
+        {
+            get
+            {
+                DoctorProcedurePricesRepo ??= new DoctorProcedurePriceRepository(context);
+                return DoctorProcedurePricesRepo;
+            }
+        }
+
+        public IMedicalConditionRepository MedicalConditionsRepository
+        {
+            get
+            {
+                MedicalConditionsRepo ??= new MedicalConditionRepository(context);
+                return MedicalConditionsRepo;
+            }
+        }
+
+        public IPatientMedicalConditionRepository PatientMedicalConditionsRepository
+        {
+            get
+            {
+                PatientMedicalConditionsRepo ??= new PatientMedicalConditionRepository(context);
+                return PatientMedicalConditionsRepo;
+            }
+        }
+
+        public IPeriodontalExamRepository PeriodontalExamsRepository
+        {
+            get
+            {
+                PeriodontalExamsRepo ??= new PeriodontalExamRepository(context);
+                return PeriodontalExamsRepo;
+            }
+        }
+
+        public IPatientPrescriptionRepository PatientPrescriptionsRepository
+        {
+            get
+            {
+                PatientPrescriptionsRepo ??= new PatientPrescriptionRepository(context);
+                return PatientPrescriptionsRepo;
+            }
+        }
+
+        public IDashboardLayoutRepository DashboardLayoutsRepository
+        {
+            get
+            {
+                DashboardLayoutsRepo ??= new DashboardLayoutRepository(context);
+                return DashboardLayoutsRepo;
+            }
+        }
+
+        public IEmailCampaignRepository EmailCampaignsRepository
+        {
+            get
+            {
+                EmailCampaignsRepo ??= new EmailCampaignRepository(context);
+                return EmailCampaignsRepo;
             }
         }
 

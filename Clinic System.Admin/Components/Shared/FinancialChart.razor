@@ -1,0 +1,93 @@
+@using System.Globalization
+<div class="widget finance-widget">
+    <div class="widget-head">
+        <div>
+            <h3>Ingresos @DateTime.Today.Year</h3>
+            <div class="finance-legend">
+                <span class="legend-item"><i class="dot green"></i> Cobrado <strong>@FormatMoney(YearTotal)</strong></span>
+            </div>
+        </div>
+    </div>
+
+    @if (YearTotal <= 0 && MonthlyIncome.All(v => v <= 0))
+    {
+        <div class="dash-empty">
+            <Icon Name="bar-chart-2" Class="dash-empty-icon" />
+            <p>Todavía no hay ingresos registrados este año.</p>
+        </div>
+    }
+    else
+    {
+        <div class="finance-chart-wrap">
+            <svg class="finance-chart" viewBox="0 0 600 200" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="dashIncomeGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#66BB6A" stop-opacity="0.45"/>
+                        <stop offset="100%" stop-color="#66BB6A" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+
+                @foreach (var gridY in new[] { 40, 80, 120, 160 })
+                {
+                    <line x1="0" y1="@gridY" x2="600" y2="@gridY" class="grid-line"/>
+                }
+
+                <path class="area-income" d="@IncomeAreaPath" fill="url(#dashIncomeGrad)"/>
+                <polyline class="line-income" points="@IncomeLine"/>
+            </svg>
+            <div class="chart-months">
+                @foreach (var m in _months)
+                {
+                    <span>@m</span>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo EsDo = CultureInfo.GetCultureInfo("es-DO");
+    private readonly string[] _months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+    [Parameter] public List<decimal> MonthlyIncome { get; set; } = [];
+    [Parameter] public decimal YearTotal { get; set; }
+
+    private decimal[] Series
+    {
+        get
+        {
+            var values = new decimal[12];
+            for (var i = 0; i < 12 && i < MonthlyIncome.Count; i++)
+                values[i] = MonthlyIncome[i];
+            return values;
+        }
+    }
+
+    private string IncomeLine => BuildLine(Series);
+    private string IncomeAreaPath => BuildArea(Series);
+
+    private static string FormatMoney(decimal amount) => amount.ToString("C0", EsDo);
+
+    private static string BuildLine(decimal[] values)
+    {
+        var max = values.Max();
+        if (max <= 0) max = 1;
+        var points = new List<string>();
+        for (var i = 0; i < values.Length; i++)
+        {
+            var x = i * (600.0 / (values.Length - 1));
+            var y = 180 - (double)(values[i] / max * 140);
+            points.Add($"{x:F0},{y:F0}");
+        }
+        return string.Join(" ", points);
+    }
+
+    private static string BuildArea(decimal[] values)
+    {
+        var line = BuildLine(values);
+        var parts = line.Split(' ');
+        var first = parts[0].Split(',')[0];
+        var last = parts[^1].Split(',')[0];
+        return $"M{first},180 L{line} L{last},180 Z";
+    }
+}

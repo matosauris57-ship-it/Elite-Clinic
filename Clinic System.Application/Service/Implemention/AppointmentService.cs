@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Service.Implemention
+namespace Clinic_System.Application.Service.Implemention
 {
     public class AppointmentService : IAppointmentService
     {
@@ -7,7 +7,7 @@
         private readonly IPaymentService paymentService;
         private readonly IMedicalRecordService medicalRecordService;
         private readonly ILogger<AppointmentService> logger;
-        private readonly ClinicSettings clinicSettings;
+        private readonly IClinicOperatingHoursService operatingHours;
         private readonly IDistributedLockService _lockService;
         public AppointmentService(
             IMessagePublisher messagePublisher,
@@ -15,7 +15,7 @@
             IPaymentService paymentService,
             IMedicalRecordService medicalRecordService,
             ILogger<AppointmentService> logger,
-            IOptions<ClinicSettings> clinicSettings,
+            IClinicOperatingHoursService operatingHours,
             IDistributedLockService lockService)
         {
             _messagePublisher = messagePublisher;
@@ -23,7 +23,7 @@
             this.paymentService = paymentService;
             this.medicalRecordService = medicalRecordService;
             this.logger = logger;
-            this.clinicSettings = clinicSettings.Value;
+            this.operatingHours = operatingHours;
             _lockService = lockService;
         }
 
@@ -37,13 +37,20 @@
         {
             logger.LogInformation("Fetching available slots for DoctorId: {DoctorId} on Date: {Date}", doctorId, date.ToShortDateString());
 
+            var hours = await operatingHours.GetAsync(cancellationToken);
+            if (!hours.IsOpenOn(date))
+            {
+                logger.LogInformation("Clinic is closed on {Date} ({Day})", date.ToShortDateString(), date.DayOfWeek);
+                return [];
+            }
+
             var bookedAppointments = await GetBookedAppointmentsAsync(doctorId, date, cancellationToken);
 
             var bookedTimes = bookedAppointments
                 .Select(a => a.AppointmentDate.TimeOfDay)
                 .ToHashSet();
 
-            var allPossibleSlots = GenerateSlots(clinicSettings.DayStartTime, clinicSettings.DayEndTime, clinicSettings.SlotDurationInMinutes);
+            var allPossibleSlots = hours.GenerateSlots();
 
             var availableSlots = allPossibleSlots
             .Where(slot => !bookedTimes.Contains(slot))
@@ -70,15 +77,13 @@
                 logger.LogInformation("Auto-cancelling overdue appointment ID: {Id}", appointment.Id);
                 appointment.SystemExpire(); // استخدام ميثود الـ Domain اللي إنت عاملها
 
-                if (appointment.Payment != null && appointment.Payment.PaymentStatus == PaymentStatus.Pending)
-                {
-                    appointment.Payment.MarkAsCancelling("Appointment cancelled");
-                }
+                if (appointment.Payment != null)
+                    StatePaymentOnAppointmentCancellation(appointment);
 
                 await _messagePublisher.PublishAsync(new AppointmentAutoCancelledEvent
                 {
                     AppointmentId = appointment.Id,
-                    PatientUserId = appointment.Patient.ApplicationUserId,
+                    PatientUserId = appointment.Patient.ApplicationUserId ?? string.Empty,
                     PatientName = appointment.Patient.FullName,
                     DoctorName = appointment.Doctor.FullName,
                     DoctorSpecialization = appointment.Doctor.Specialization,
@@ -90,7 +95,7 @@
             await unitOfWork.SaveAsync();
         }
 
-        public async Task<Appointment> BookAppointmentAsync(int patientId, int doctorId, DateTime appointmentDate, TimeSpan appointmentTime, CancellationToken cancellationToken = default)
+        public async Task<Appointment> BookAppointmentAsync(int patientId, int doctorId, DateTime appointmentDate, TimeSpan appointmentTime, CancellationToken cancellationToken = default, int? treatmentProcedureId = null, decimal? quotedAmount = null)
         {
             var appointmentDateTime = appointmentDate.Date.Add(appointmentTime);
 
@@ -122,7 +127,9 @@
                          .GetBookedAppointmentsAsync(doctorId, appointmentDate, cancellationToken);
 
                     if (appointmentDateTime < DateTime.Now)
-                        throw new ValidationException("Cannot book an appointment in the past.");
+                        throw new ValidationException("No se puede agendar una cita en una fecha u hora pasada.");
+
+                    await EnsureClinicSlotAsync(appointmentDate, appointmentTime, cancellationToken);
 
                     var isSlotBooked = bookedAppointmentsOnDay
                         .Any(a => a.AppointmentDate == appointmentDateTime);
@@ -155,7 +162,11 @@
                         throw new DatabaseSaveException("Failed to save the new appointment to the database.");
                     }
 
-                    await paymentService.CreatePaymentAsync(appointment.Id, cancellationToken);
+                    decimal? paymentAmount = quotedAmount.HasValue && quotedAmount.Value > 0
+                        ? Money.Normalize(quotedAmount.Value)
+                        : null;
+
+                    await paymentService.CreatePaymentAsync(appointment.Id, paymentAmount, cancellationToken);
 
                     // 4. *** الحفظ الفعلي والـ COMMIT (Transactional Safety) ***
 
@@ -181,7 +192,7 @@
                 await _messagePublisher.PublishAsync(new AppointmentBookedEvent
                 {
                     AppointmentId = appointment2.Id,
-                    PatientUserId = appointment2.Patient.ApplicationUserId,
+                    PatientUserId = appointment2.Patient.ApplicationUserId ?? string.Empty,
                     PatientName = appointment2.Patient.FullName,
                     DoctorName = appointment2.Doctor.FullName,
                     DoctorSpecialization = appointment2.Doctor.Specialization,
@@ -238,6 +249,8 @@
                 var bookedAppointmentsOnDay = await unitOfWork.AppointmentsRepository
                      .GetBookedAppointmentsAsync(appointment.DoctorId, command.AppointmentDate, cancellationToken);
 
+                await EnsureClinicSlotAsync(command.AppointmentDate, command.AppointmentTime, cancellationToken);
+
                 var isSlotBooked = bookedAppointmentsOnDay
                     .Any(a => a.AppointmentDate == appointmentDateTime && a.Id != command.AppointmentId);
                 
@@ -266,7 +279,7 @@
                 await _messagePublisher.PublishAsync(new AppointmentRescheduledEvent
                 {
                     AppointmentId = appointment.Id,
-                    PatientUserId = appointment.Patient.ApplicationUserId,
+                    PatientUserId = appointment.Patient.ApplicationUserId ?? string.Empty,
                     PatientName = appointment.Patient.FullName,
                     DoctorName = appointment.Doctor.FullName,
                     DoctorSpecialization = appointment.Doctor.Specialization,
@@ -322,7 +335,7 @@
             await _messagePublisher.PublishAsync(new AppointmentCancelledEvent
             {
                 AppointmentId = appointment.Id,
-                PatientUserId = appointment.Patient.ApplicationUserId,
+                PatientUserId = appointment.Patient.ApplicationUserId ?? string.Empty,
                 PatientName = appointment.Patient.FullName,
                 DoctorName = appointment.Doctor.FullName,
                 DoctorSpecialization = appointment.Doctor.Specialization,
@@ -384,7 +397,7 @@
             await _messagePublisher.PublishAsync(new AppointmentConfirmedEvent
             {
                 AppointmentId = appointment.Id,
-                PatientUserId = appointment.Patient.ApplicationUserId,
+                PatientUserId = appointment.Patient.ApplicationUserId ?? string.Empty,
                 PatientName = appointment.Patient.FullName,
                 DoctorName = appointment.Doctor.FullName,
                 DoctorSpecialization = appointment.Doctor.Specialization,
@@ -428,7 +441,7 @@
             await _messagePublisher.PublishAsync(new AppointmentNoShowEvent
             {
                 AppointmentId = appointment.Id,
-                PatientUserId = appointment.Patient.ApplicationUserId,
+                PatientUserId = appointment.Patient.ApplicationUserId ?? string.Empty,
                 PatientName = appointment.Patient.FullName,
                 DoctorName = appointment.Doctor.FullName,
                 DoctorSpecialization = appointment.Doctor.Specialization,
@@ -491,7 +504,7 @@
             await _messagePublisher.PublishAsync(new MedicalReportGeneratedEvent
             {
                 AppointmentId = appointment.Id,
-                PatientUserId = appointment.Patient.ApplicationUserId,
+                PatientUserId = appointment.Patient.ApplicationUserId ?? string.Empty,
                 PatientName = appointment.Patient.FullName,
                 DoctorName = appointment.Doctor.FullName,
                 DoctorSpecialization = appointment.Doctor.Specialization,
@@ -514,38 +527,28 @@
             return appointment;
         }
 
-        /// <summary>
-        /// دالة مساعدة لتوليد قائمة كل الأوقات الممكنة في يوم عمل الدكتور
-        /// </summary>
-        private List<TimeSpan> GenerateSlots(TimeSpan startTime, TimeSpan endTime, int durationMinutes)
+        private async Task EnsureClinicSlotAsync(DateTime date, TimeSpan time, CancellationToken cancellationToken)
         {
-            logger.LogInformation("Generating slots from {StartTime} to {EndTime} with duration {DurationMinutes} minutes",
-                startTime, endTime, durationMinutes);
+            var hours = await operatingHours.GetAsync(cancellationToken);
+            if (hours.Allows(date, time))
+                return;
 
-            var slots = new List<TimeSpan>();
-            var currentSlot = startTime;
-
-            // طالما أن الوقت الحالي يسبق نهاية العمل (مع التأكد من أن الموعد الأخير له مدة كافية)
-            while (currentSlot.Add(TimeSpan.FromMinutes(durationMinutes)) <= endTime)
-            {
-                slots.Add(currentSlot);
-                currentSlot = currentSlot.Add(TimeSpan.FromMinutes(durationMinutes));
-            }
-
-            logger.LogInformation("Generated {SlotCount} slots", slots.Count);
-
-            return slots;
+            throw new ValidationException("El horario seleccionado está fuera del horario de trabajo de la clínica.");
         }
 
         private void StatePaymentOnAppointmentCancellation(Appointment appointment)
         {
-            if (appointment.Payment != null && appointment.Payment.PaymentStatus == PaymentStatus.Pending)
-            {
-                appointment.Payment.MarkAsCancelling("Appointment cancelled");
-            }
-            else if (appointment.Payment != null && appointment.Payment.PaymentStatus == PaymentStatus.Paid)
+            if (appointment.Payment == null)
+                return;
+
+            if (appointment.Payment.PaymentStatus is PaymentStatus.Paid or PaymentStatus.PartiallyPaid
+                || appointment.Payment.AmountCollected > 0)
             {
                 appointment.Payment.MarkAsRefunded("Appointment cancelled by patient.");
+            }
+            else if (appointment.Payment.PaymentStatus is PaymentStatus.Pending or PaymentStatus.Failed)
+            {
+                appointment.Payment.MarkAsCancelling("Appointment cancelled");
             }
         }
 
@@ -611,11 +614,8 @@
 
         public async Task<AppointmentStatsDto> GetAdminAppointmentsStatsAsync(GetAdminAppointmentsStatsQuery query, CancellationToken cancellationToken = default)
         {
-            var start = query.StartDate ?? DateTime.Today;
-            var end = query.EndDate ?? DateTime.Today.AddDays(1).AddSeconds(-1);
-
             var counts = await unitOfWork.AppointmentsRepository
-                .GetAppointmentsCountByStatusAsync(start, end, cancellationToken);
+                .GetAppointmentsCountByStatusAsync(query.StartDate, query.EndDate, cancellationToken);
 
             return new AppointmentStatsDto
             {
@@ -627,6 +627,24 @@
                 Rescheduled = counts.ContainsKey(AppointmentStatus.Rescheduled) ? counts[AppointmentStatus.Rescheduled] : 0,
                 Completed = counts.ContainsKey(AppointmentStatus.Completed) ? counts[AppointmentStatus.Completed] : 0
             };
+        }
+
+        public async Task<PagedResult<Appointment>> GetAgendaForAdminAsync(GetAdminAgendaQuery query, CancellationToken cancellationToken = default)
+        {
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.IsPaged ? query.PageSize!.Value : 0;
+            var (items, totalCount) = await unitOfWork.AppointmentsRepository.GetAgendaForAdminAsync(
+                query.Date,
+                query.DoctorId,
+                query.Status,
+                query.EndDate,
+                pageNumber,
+                pageSize,
+                query.Search,
+                cancellationToken);
+
+            var resultPageSize = pageSize > 0 ? pageSize : Math.Max(totalCount, 1);
+            return new PagedResult<Appointment>(items, totalCount, pageNumber, resultPageSize);
         }
     }
 }

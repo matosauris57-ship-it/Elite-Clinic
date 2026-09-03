@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.DTOs.Patients
+namespace Clinic_System.Application.DTOs.Patients
 {
     public class CreatePatientDTO
     {
@@ -8,7 +8,8 @@
         public string DateOfBirth { get; set; }
         public string Address { get; set; } = null!;
         public string Phone { get; set; } = null!;
+        public string? NationalId { get; set; }
         public string CreatedAt { get; set; }
-        public string Email { get; set; }
+        public string? Email { get; set; }
     }
 }

@@ -1,0 +1,75 @@
+<div class="widget alerts-widget dash-panel">
+    <div class="widget-head">
+        <h3>Alertas importantes</h3>
+        <span class="widget-pill">@FilteredAlerts.Count activas</span>
+    </div>
+
+    <div class="alert-tabs">
+        @foreach (var tab in _tabs)
+        {
+            <button class="alert-tab @(tab.Key == _activeTab ? "active" : "")"
+                    @onclick="() => SelectTab(tab.Key)">
+                @tab.Label (@tab.Count)
+            </button>
+        }
+    </div>
+
+    <div class="alert-cards">
+        @if (FilteredAlerts.Count == 0)
+        {
+            <div class="dash-empty">
+                <p>No hay alertas en esta categoría.</p>
+            </div>
+        }
+        @foreach (var alert in FilteredAlerts)
+        {
+            <div class="alert-card severity-@alert.Severity">
+                <div class="alert-card-top">
+                    <span class="alert-severity-tag">@GetSeverityTag(alert)</span>
+                    <span class="alert-card-time">@alert.Time</span>
+                </div>
+                <div class="alert-card-title">@alert.Title</div>
+                <div class="alert-card-desc">@alert.Description</div>
+                @if (!string.IsNullOrEmpty(alert.ActionLabel) && !string.IsNullOrEmpty(alert.ActionHref))
+                {
+                    <NavLink class="alert-action-btn" href="@alert.ActionHref">
+                        @alert.ActionLabel
+                        <Icon Name="chevron-right" Class="alert-action-icon" StrokeWidth="2" />
+                    </NavLink>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<DashboardAlert> Alerts { get; set; } = [];
+
+    private string _activeTab = "all";
+
+    private List<(string Key, string Label, int Count)> _tabs =>
+    [
+        ("all", "Todas", Alerts.Count),
+        ("critical", "Críticas", Alerts.Count(a => a.Severity == "critical")),
+        ("warning", "Avisos", Alerts.Count(a => a.Severity == "warning")),
+        ("info", "Info", Alerts.Count(a => a.Severity is "info" or "success"))
+    ];
+
+    private List<DashboardAlert> FilteredAlerts => _activeTab switch
+    {
+        "critical" => Alerts.Where(a => a.Severity == "critical").ToList(),
+        "warning" => Alerts.Where(a => a.Severity == "warning").ToList(),
+        "info" => Alerts.Where(a => a.Severity is "info" or "success").ToList(),
+        _ => Alerts
+    };
+
+    private void SelectTab(string tab) => _activeTab = tab;
+
+    private static string GetSeverityTag(DashboardAlert alert) => alert.Severity switch
+    {
+        "critical" => "CRÍTICO",
+        "warning" => "AVISO",
+        "success" => "OK",
+        _ => "INFO"
+    };
+}

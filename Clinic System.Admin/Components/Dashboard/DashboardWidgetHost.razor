@@ -1,0 +1,259 @@
+@using Clinic_System.Core.Dashboard
+@using System.Globalization
+
+@if (Data == null)
+{
+    <AnimatedLoader Compact="true" Message="Cargando datos..." />
+}
+else
+{
+    switch (WidgetKey)
+    {
+        case DashboardWidgetKeys.AppointmentsTodayKpi:
+            <MetricCard IconName="calendar" Value="@Data.AppointmentsToday.ToString()" Label="Citas de hoy"
+                        Trend="@($"{Data.AppointmentsToday} activas")" TrendClass="neutral" AccentClass="accent-purple" />
+            break;
+        case DashboardWidgetKeys.WaitingCountKpi:
+            <MetricCard IconName="users" Value="@Data.WaitingCount.ToString()" Label="Pacientes esperando"
+                        Trend="@(Data.WaitingCount > 0 ? "Hora de cita ya pasó" : "Nadie en cola")"
+                        TrendClass="@(Data.WaitingCount > 0 ? "down" : "neutral")" AccentClass="accent-yellow" />
+            break;
+        case DashboardWidgetKeys.DailyRevenueKpi:
+            @if (Data.BillingRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver cobros." />
+            }
+            else
+            {
+                <MetricCard IconName="dollar-sign" Value="@FormatMoney(Data.DailyRevenue)" Label="Cobros del día"
+                            Trend="@($"{Data.TodayCollections.Count} transacción(es)")" TrendClass="up" AccentClass="accent-green"
+                            SparklineData="@(Data.SparklineRevenue.Count > 0 ? Data.SparklineRevenue : null)" />
+            }
+            break;
+        case DashboardWidgetKeys.PendingTreatmentsKpi:
+            <MetricCard IconName="clipboard-list" Value="@Data.PendingTreatmentsCount.ToString()" Label="Tratamientos pendientes"
+                        Trend="@(Data.TreatmentsRestricted ? "Sin permiso de consulta" : "Planificados o en curso")"
+                        TrendClass="neutral" AccentClass="accent-teal" />
+            break;
+        case DashboardWidgetKeys.TodayAppointments:
+            <DashboardAppointmentList Items="Data.TodayAppointments" />
+            break;
+        case DashboardWidgetKeys.WaitingQueue:
+            <DashboardQueue Items="Data.WaitingPatients" />
+            break;
+        case DashboardWidgetKeys.DailyCollections:
+            <DashboardCollections Items="Data.TodayCollections" Total="Data.DailyRevenue" Restricted="Data.BillingRestricted" />
+            break;
+        case DashboardWidgetKeys.MonthlyIncomeChart:
+            @if (Data.BillingRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver ingresos." />
+            }
+            else
+            {
+                <FinancialChart MonthlyIncome="Data.MonthlyIncome" YearTotal="Data.YearToDateRevenue" />
+            }
+            break;
+        case DashboardWidgetKeys.SmartAlerts:
+            <SmartAlertsPanel Alerts="Data.Alerts" />
+            break;
+        case DashboardWidgetKeys.PendingTreatments:
+            <DashboardPendingTreatments Items="Data.PendingTreatments" Restricted="Data.TreatmentsRestricted" />
+            break;
+        case DashboardWidgetKeys.UpcomingDues:
+            <DashboardDues Items="Data.UpcomingDues" Restricted="Data.BillingRestricted" />
+            break;
+        case DashboardWidgetKeys.PatientsRegistered:
+            @if (Data.PatientsRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver pacientes." Retry="OnRetry" />
+            }
+            else if (!string.IsNullOrWhiteSpace(Data.PatientsError))
+            {
+                <WidgetState Message="No se pudieron cargar los pacientes." Retry="OnRetry" />
+            }
+            else
+            {
+                <MetricCard IconName="users" Value="@(Data.PatientStats?.TotalPatients.ToString("N0", EsDo) ?? "0")"
+                            Label="Pacientes registrados" Trend="Total activo en la clínica" TrendClass="neutral" AccentClass="accent-blue" />
+            }
+            break;
+        case DashboardWidgetKeys.PatientsNew:
+            @if (Data.PatientsRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver pacientes." Retry="OnRetry" />
+            }
+            else if (!string.IsNullOrWhiteSpace(Data.PatientsError))
+            {
+                <WidgetState Message="No se pudieron cargar los pacientes nuevos." Retry="OnRetry" />
+            }
+            else
+            {
+                <MetricCard IconName="user-plus" Value="@(Data.PatientStats?.NewThisMonth.ToString() ?? "0")"
+                            Label="Pacientes nuevos" Trend="@NewPatientsTrend()" TrendClass="@NewPatientsTrendClass()" AccentClass="accent-teal" />
+            }
+            break;
+        case DashboardWidgetKeys.UpcomingAppointments:
+            <UpcomingAppointmentsWidget Items="Upcoming(Data)" />
+            break;
+        case DashboardWidgetKeys.AppointmentsCompleted:
+            <MetricCard IconName="check-circle-2" Value="@(Data.TodayStats?.Completed.ToString() ?? "0")"
+                        Label="Citas completadas" Trend="Hoy" TrendClass="up" AccentClass="accent-green" />
+            break;
+        case DashboardWidgetKeys.AppointmentsCancelled:
+            <MetricCard IconName="x" Value="@(Data.TodayStats?.Cancelled.ToString() ?? "0")"
+                        Label="Citas canceladas" Trend="Hoy" TrendClass="neutral" AccentClass="accent-yellow" />
+            break;
+        case DashboardWidgetKeys.AppointmentsNoShow:
+            <MetricCard IconName="alert-triangle" Value="@(Data.TodayStats?.NoShow.ToString() ?? "0")"
+                        Label="Citas no asistidas" Trend="Hoy" TrendClass="down" AccentClass="accent-red" />
+            break;
+        case DashboardWidgetKeys.AppointmentsWeekChart:
+            <WeekAppointmentsChart Counts="Data.WeekAppointmentCounts" Labels="Data.WeekDayLabels" />
+            break;
+        case DashboardWidgetKeys.TreatmentsCompleted:
+            @if (Data.TreatmentsRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver tratamientos." />
+            }
+            else
+            {
+                <MetricCard IconName="check-circle-2" Value="@Data.CompletedTreatmentsCount.ToString()"
+                            Label="Tratamientos completados" Trend="Histórico" TrendClass="up" AccentClass="accent-green" />
+            }
+            break;
+        case DashboardWidgetKeys.TreatmentMix:
+            @if (Data.TreatmentsRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver tratamientos." />
+            }
+            else
+            {
+                <TreatmentMixLiveWidget Slices="Data.TreatmentMix" />
+            }
+            break;
+        case DashboardWidgetKeys.RevenueSummary:
+            @if (Data.BillingRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver ingresos." />
+            }
+            else
+            {
+                <MetricCard IconName="dollar-sign" Value="@FormatMoney(RevenueForPeriod())"
+                            Label="@RevenueLabel()" Trend="@($"Periodo: {PeriodLabel()}")" TrendClass="up" AccentClass="accent-green" />
+            }
+            break;
+        case DashboardWidgetKeys.PaymentMethods:
+            @if (Data.BillingRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver cobros." />
+            }
+            else
+            {
+                <PaymentMethodsWidget Cash="Data.CashToday" Card="Data.CardToday" InstaPay="Data.InstaPayToday" />
+            }
+            break;
+        case DashboardWidgetKeys.RecentActivity:
+            @if (Data.HistoryRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver el historial clínico." />
+            }
+            else if (!string.IsNullOrWhiteSpace(Data.ActivityError))
+            {
+                <WidgetState Message="No se pudo cargar la actividad reciente." Retry="OnRetry" />
+            }
+            else
+            {
+                <RecentActivityWidget Items="Data.RecentActivity" />
+            }
+            break;
+        case DashboardWidgetKeys.PeriodontalIncomplete:
+            @if (Data.PeriodontalRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver periodontogramas." />
+            }
+            else if (!string.IsNullOrWhiteSpace(Data.PeriodontalError))
+            {
+                <WidgetState Message="No se pudieron cargar las evaluaciones periodontales." Retry="OnRetry" />
+            }
+            else
+            {
+                <MetricCard IconName="clipboard-list" Value="@Data.PeriodontalIncompleteCount.ToString()"
+                            Label="Periodontogramas incompletos" Trend="Sin sitios registrados" TrendClass="neutral" AccentClass="accent-yellow" />
+            }
+            break;
+        case DashboardWidgetKeys.SystemStatus:
+            <SystemStatusWidget ApiError="@Data.ApiConnectionError" />
+            break;
+        default:
+            <WidgetState Message="Widget no disponible." />
+            break;
+    }
+}
+
+@code {
+    private static readonly CultureInfo EsDo = CultureInfo.GetCultureInfo("es-DO");
+
+    [Parameter] public string WidgetKey { get; set; } = string.Empty;
+    [Parameter] public DashboardData? Data { get; set; }
+    [Parameter] public DashboardWidgetPlacement? Placement { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    private static string FormatMoney(decimal amount) => amount.ToString("C0", EsDo);
+
+    private List<AppointmentAgendaItem> Upcoming(DashboardData data)
+    {
+        var limit = 10;
+        if (Placement?.Settings.TryGetValue("limit", out var raw) == true && int.TryParse(raw, out var parsed))
+            limit = parsed;
+        var now = DateTime.Now;
+        return data.TodayAppointments
+            .Where(a => a.ParsedDate is DateTime dt && dt >= now)
+            .OrderBy(a => a.ParsedDate)
+            .Take(limit)
+            .ToList();
+    }
+
+    private string NewPatientsTrend()
+    {
+        var stats = Data?.PatientStats;
+        if (stats == null) return "Este mes";
+        if (stats.NewLastMonth <= 0)
+            return stats.NewThisMonth == 0 ? "Sin altas este mes" : "Sin comparación el mes anterior";
+        var delta = (int)Math.Round((stats.NewThisMonth - stats.NewLastMonth) * 100.0 / stats.NewLastMonth);
+        var arrow = delta >= 0 ? "↑" : "↓";
+        return $"{arrow} {Math.Abs(delta)}% respecto al mes anterior";
+    }
+
+    private string NewPatientsTrendClass()
+    {
+        var stats = Data?.PatientStats;
+        if (stats == null || stats.NewLastMonth <= 0) return "neutral";
+        return stats.NewThisMonth >= stats.NewLastMonth ? "up" : "down";
+    }
+
+    private string Period() =>
+        Placement?.Settings.TryGetValue("period", out var period) == true ? period : "today";
+
+    private string PeriodLabel() => Period() switch
+    {
+        "week" => "Esta semana",
+        "month" => "Este mes",
+        "year" => "Este año",
+        _ => "Hoy"
+    };
+
+    private string RevenueLabel() => $"Ingresos · {PeriodLabel()}";
+
+    private decimal RevenueForPeriod()
+    {
+        if (Data == null) return 0;
+        return Period() switch
+        {
+            "week" => Data.RevenueWeek,
+            "month" => Data.RevenueMonth,
+            "year" => Data.RevenueYear,
+            _ => Data.RevenueToday
+        };
+    }
+}

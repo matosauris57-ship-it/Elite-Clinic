@@ -4,17 +4,20 @@
     {
         private readonly IIdentityService identityService;
         private readonly IAuthenticationService authenticationService;
-        private readonly IUnitOfWork unitOfWork; // 1. زودنا الـ UoW
+        private readonly IPermissionResolver permissionResolver;
+        private readonly IUnitOfWork unitOfWork;
         private readonly ILogger<LoginCommandHandler> logger;
 
         public LoginCommandHandler(
             IIdentityService identityService,
             IAuthenticationService authenticationService,
-            IUnitOfWork unitOfWork, // الحقن هنا
+            IPermissionResolver permissionResolver,
+            IUnitOfWork unitOfWork,
             ILogger<LoginCommandHandler> logger)
         {
             this.identityService = identityService;
             this.authenticationService = authenticationService;
+            this.permissionResolver = permissionResolver;
             this.unitOfWork = unitOfWork;
             this.logger = logger;
         }
@@ -38,27 +41,44 @@
                     return Failure<LoginResponseDTO>("Email address is not confirmed.");
                 }
 
+                var permissions = (await permissionResolver.ResolvePermissionsAsync(Id, cancellationToken)).ToList();
+
+                if (request.ForAdminPanel && !AdminPermissionCatalog.CanAccessAdminPanel(Roles, permissions))
+                {
+                    logger.LogWarning("Admin panel access denied for user: {EmailOrUserName}", request.EmailOrUserName);
+                    return Unauthorized<LoginResponseDTO>("No tienes permisos para acceder al panel de administración.");
+                }
+
                 var customClaims = new List<Claim>();
 
-                if (Roles.Contains("Doctor"))
+                foreach (var permission in permissions)
+                    customClaims.Add(new Claim(AdminPermissionCatalog.ClaimType, permission));
+
+                if (Roles.Contains("Doctor", StringComparer.OrdinalIgnoreCase))
                 {
-                    // بنروح نجيب الـ Doctor ID من الداتابيز
                     var doctor = await unitOfWork.DoctorsRepository.GetDoctorByUserIdAsync(Id);
                     if (doctor != null)
                     {
                         customClaims.Add(new Claim("DoctorId", doctor.Id.ToString()));
+                        id = doctor.Id;
                     }
-                    id = doctor.Id;
+                    else
+                    {
+                        logger.LogWarning("User {UserId} has Doctor role but no doctor profile.", Id);
+                    }
                 }
-                else if (Roles.Contains("Patient"))
+                else if (Roles.Contains("Patient", StringComparer.OrdinalIgnoreCase))
                 {
-                    // بنروح نجيب الـ Patient ID من الداتابيز
                     var patient = await unitOfWork.PatientsRepository.GetPatientByUserIdAsync(Id);
                     if (patient != null)
                     {
                         customClaims.Add(new Claim("PatientId", patient.Id.ToString()));
+                        id = patient.Id;
                     }
-                    id = patient.Id;
+                    else
+                    {
+                        logger.LogWarning("User {UserId} has Patient role but no patient profile.", Id);
+                    }
                 }
 
                 var (accesstoken, refreshtoken, expiresAt, userName, email,roles) =
@@ -75,7 +95,8 @@
                     AccessToken = accesstoken,
                     RefreshToken = refreshtoken,
                     ExpiresAt = expiresAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                    Roles = roles ?? new List<string>()
+                    Roles = roles ?? new List<string>(),
+                    Permissions = permissions
                 };
 
                 return Success(response, "Login Successful");

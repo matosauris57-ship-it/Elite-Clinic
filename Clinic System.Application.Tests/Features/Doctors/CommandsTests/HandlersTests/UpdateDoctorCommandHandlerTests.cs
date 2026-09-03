@@ -12,6 +12,7 @@
         public UpdateDoctorCommandHandlerTests()
         {
             _mockCurrentUserService = new Mock<ICurrentUserService>();
+            _mockCurrentUserService.Setup(s => s.IsAdmin).Returns(true);
             _mockUnitOfWork = new Mock<IUnitOfWork>();
             _mockDoctorService = new Mock<IDoctorService>();
             _mockMapper = new Mock<IMapper>();

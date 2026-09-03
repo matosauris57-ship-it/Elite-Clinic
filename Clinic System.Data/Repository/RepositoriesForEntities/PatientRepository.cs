@@ -60,5 +60,58 @@
                 .Select(p => p.ApplicationUserId)
                 .FirstOrDefaultAsync(cancellationToken);
         }
+
+        public async Task<IEnumerable<Patient?>> GetAllForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default)
+        {
+            IQueryable<Patient> query = context.Patients.AsNoTracking();
+
+            if (includeInactive)
+                query = query.IgnoreQueryFilters();
+
+            return await query
+                .OrderBy(p => p.FullName)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<Patient?> GetByIdIncludingDeletedAsync(int id, CancellationToken cancellationToken = default)
+        {
+            return await context.Patients
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+        }
+
+        public async Task<List<Patient>> GetForBirthdayEmailsAsync(int year, CancellationToken cancellationToken = default)
+        {
+            return await context.Patients
+                .Where(p => p.Email != null
+                    && p.Email != ""
+                    && !p.EmailInvalid
+                    && (p.BirthdayEmailLastSentYear == null || p.BirthdayEmailLastSentYear != year))
+                .ToListAsync(cancellationToken);
+        }
+
+        public Task<List<Patient>> GetEmailCampaignAudienceAsync(CancellationToken cancellationToken = default) =>
+            context.Patients
+                .Where(p => p.Email != null
+                    && p.Email != ""
+                    && !p.OptOutEmailCampaigns
+                    && !p.EmailInvalid)
+                .OrderBy(p => p.Id)
+                .ToListAsync(cancellationToken);
+
+        public async Task<(int WithEmail, int OptedOut, int Invalid, int Eligible)> CountEmailCampaignAudienceAsync(
+            CancellationToken cancellationToken = default)
+        {
+            var withEmail = await context.Patients.CountAsync(
+                p => p.Email != null && p.Email != "", cancellationToken);
+            var optedOut = await context.Patients.CountAsync(
+                p => p.Email != null && p.Email != "" && p.OptOutEmailCampaigns, cancellationToken);
+            var invalid = await context.Patients.CountAsync(
+                p => p.Email != null && p.Email != "" && p.EmailInvalid, cancellationToken);
+            var eligible = await context.Patients.CountAsync(
+                p => p.Email != null && p.Email != "" && !p.OptOutEmailCampaigns && !p.EmailInvalid,
+                cancellationToken);
+            return (withEmail, optedOut, invalid, eligible);
+        }
     }
 }

@@ -1,0 +1,1268 @@
+@page "/agendar-cita"
+@using Clinic_System.Core.Finance
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "agendar-cita.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AppointmentBookingService BookingService
+@inject TreatmentProcedureMaintenanceService ProcedureService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject WhatsAppMessageSettingsService WhatsAppSettings
+@inject EmailMessageSettingsService EmailMessageSettings
+@inject IJSRuntime JS
+
+<PageTitle>Agendar Cita — DentalCare Admin</PageTitle>
+
+@if (_state.IsSuccess && _state.BookedAppointment != null)
+{
+    <div class="appointment-success">
+        <div class="success-card">
+            <div class="success-icon-wrap">
+                <Icon Name="check-circle-2" Class="success-icon" StrokeWidth="1.5" />
+            </div>
+            <h1>¡Cita Agendada con Éxito!</h1>
+            <p>La cita ha sido registrada en el sistema. Se enviará una confirmación al paciente.</p>
+
+            <div class="success-summary">
+                <div class="summary-row"><span>ID de cita</span><strong>#@_state.BookedAppointment.Id</strong></div>
+                <div class="summary-row"><span>Paciente</span><strong>@_state.SelectedPatient?.FullName</strong></div>
+                <div class="summary-row"><span>Tratamiento</span><strong>@_state.SelectedTreatment?.Name</strong></div>
+                <div class="summary-row"><span>Precio</span><strong>@FormatSelectedTreatmentPrice()</strong></div>
+                <div class="summary-row"><span>Médico</span><strong>@_state.SelectedDoctor?.FullName</strong></div>
+                <div class="summary-row"><span>Fecha</span><strong>@FormatDate(_state.SelectedDate)</strong></div>
+                <div class="summary-row"><span>Hora</span><strong>@FormatTime(_state.SelectedTime)</strong></div>
+                <div class="summary-row"><span>Sala</span><strong>@_state.Room</strong></div>
+            </div>
+
+            <div class="success-actions">
+                <button class="btn-primary" @onclick="OpenWhatsAppConfirmation">
+                    <Icon Name="message-circle" Class="btn-svg" />
+                    Confirmación WhatsApp
+                </button>
+                <button class="btn-outline" @onclick="OpenEmailConfirmation">
+                    <Icon Name="mail" Class="btn-svg" />
+                    Confirmación correo
+                </button>
+                <button class="btn-outline" @onclick="ResetWizard">
+                    <Icon Name="calendar-plus" Class="btn-svg" />
+                    Agendar otra
+                </button>
+                <a href="@GetAgendaLink()" class="btn-outline">
+                    <Icon Name="calendar" Class="btn-svg" />
+                    Ver agenda
+                </a>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="appointment-page">
+        <div class="appointment-header">
+            <h1>Agendar Nueva Cita</h1>
+            <p>Completa los pasos para registrar la cita en el sistema</p>
+        </div>
+
+        <div class="appointment-wizard">
+            <aside class="wizard-stepper">
+                @foreach (var step in _steps)
+                {
+                    <div class="wizard-step @GetStepClass(step.Number)">
+                        <div class="step-icon-wrap">
+                            @if (step.Number < _state.CurrentStep)
+                            {
+                                <Icon Name="check" Class="step-icon" StrokeWidth="2.5" />
+                            }
+                            else
+                            {
+                                <Icon Name="@step.Icon" Class="step-icon" />
+                            }
+                        </div>
+                        <div class="step-text">
+                            <span class="step-label">PASO @step.Number</span>
+                            <span class="step-name">@step.Name</span>
+                        </div>
+                    </div>
+                }
+
+                @if (_state.SelectedTreatment != null)
+                {
+                    <div class="wizard-mini-summary">
+                        <span class="mini-label">RESUMEN</span>
+                        <div>@_state.SelectedTreatment.Name</div>
+                        <div>@FormatSelectedTreatmentPrice()</div>
+                        <div class="mini-muted">@_state.SelectedTreatment.DurationMinutes min</div>
+                        @if (_state.SelectedDoctor != null)
+                        {
+                            <div>@_state.SelectedDoctor.FullName</div>
+                        }
+                        @if (_state.SelectedDate.HasValue)
+                        {
+                            <div>@FormatDate(_state.SelectedDate)</div>
+                        }
+                        @if (_state.SelectedTime.HasValue)
+                        {
+                            <div>@FormatTime(_state.SelectedTime)</div>
+                        }
+                    </div>
+                }
+            </aside>
+
+            <div class="wizard-main">
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="wizard-error">@_error</div>
+                }
+                @if (!string.IsNullOrEmpty(_successMessage))
+                {
+                    <div class="wizard-success">@_successMessage</div>
+                }
+
+                @switch (_state.CurrentStep)
+                {
+                    case 1:
+                        <div class="step-content">
+                            <div class="step-head">
+                                <h2>Seleccionar Paciente</h2>
+                                <p>Elige un paciente existente o registra uno nuevo</p>
+                            </div>
+                            <div class="tab-toggle">
+                                <button class="tab-btn @(_patientTab == "existing" ? "active" : "")" @onclick="ShowExistingPatientsAsync">Paciente existente</button>
+                                <button class="tab-btn @(_patientTab == "new" ? "active" : "")" @onclick='() => _patientTab = "new"'>Nuevo paciente</button>
+                            </div>
+
+                            @if (_patientTab == "existing")
+                            {
+                                <div class="search-field">
+                                    <Icon Name="search" Class="field-icon" />
+                                    <input type="text" placeholder="Buscar paciente por nombre, cédula o ID..." @bind="_patientSearch" @bind:event="oninput" />
+                                </div>
+                                <div class="patient-list">
+                                    @if (_loadingPatients)
+                                    {
+                                        <AnimatedLoader Compact="true" Message="Cargando pacientes..." />
+                                    }
+                                    else if (!string.IsNullOrEmpty(_patientsLoadError))
+                                    {
+                                        <div class="wizard-empty wizard-error-text">@_patientsLoadError</div>
+                                    }
+                                    else if (!FilteredPatients.Any())
+                                    {
+                                        <div class="wizard-empty">No hay pacientes. Registra uno nuevo.</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var (patient, index) in FilteredPatients.Select((p, i) => (p, i)))
+                                        {
+                                            <button class="patient-card @(_state.SelectedPatient?.Id == patient.Id ? "selected" : "")"
+                                                    @onclick="() => SelectPatient(patient)">
+                                                <span class="avatar @GetAvatarClass(index)">@GetInitials(patient.FullName)</span>
+                                                <span class="patient-info">
+                                                    <span class="patient-name">@patient.FullName</span>
+                                                    <span class="patient-id">@FormatPatientMeta(patient)</span>
+                                                </span>
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                                @if (_state.SelectedPatient != null)
+                                {
+                                    <PatientClinicalHistoryPanel PatientId="_state.SelectedPatient.Id"
+                                                                 PatientName="@_state.SelectedPatient.FullName"
+                                                                 Collapsible="true" />
+                                }
+                            }
+                            else
+                            {
+                                <form class="new-patient-card" @onsubmit="CreatePatientAsync" @onsubmit:preventDefault>
+                                    <div class="np-banner">
+                                        <span class="np-banner-icon">
+                                            <Icon Name="user-plus" Class="np-banner-svg" />
+                                        </span>
+                                        <div>
+                                            <strong>Ficha del paciente</strong>
+                                            <p>Registra identidad y contacto. La cédula es obligatoria para facturas y recetas.</p>
+                                        </div>
+                                    </div>
+
+                                    <section class="np-section">
+                                        <h3 class="np-section-title">Identidad</h3>
+                                        <div class="np-grid">
+                                            <div class="form-group np-span-2">
+                                                <label>Nombre completo <span class="np-req">*</span></label>
+                                                <input class="form-input" @bind="_newPatient.FullName" placeholder="Nombre y apellidos" autocomplete="name" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Cédula <span class="np-req">*</span></label>
+                                                <input class="form-input" @bind="_newPatient.NationalId" placeholder="000-0000000-0" maxlength="20" autocomplete="off" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Fecha de nacimiento <span class="np-req">*</span></label>
+                                                <input class="form-input" type="date"
+                                                       max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                                                       value="@_newPatient.DateOfBirth.ToString("yyyy-MM-dd")"
+                                                       @onchange="OnNewPatientBirthChanged" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Edad</label>
+                                                <input class="form-input" readonly value="@GetNewPatientAgeLabel()" />
+                                            </div>
+                                            <div class="form-group np-span-2">
+                                                <label>Género</label>
+                                                <div class="np-segment" role="group" aria-label="Género">
+                                                    <button type="button"
+                                                            class="np-segment-btn @(_newPatient.Gender == "Male" ? "active" : "")"
+                                                            @onclick='() => _newPatient.Gender = "Male"'>Masculino</button>
+                                                    <button type="button"
+                                                            class="np-segment-btn @(_newPatient.Gender == "Female" ? "active" : "")"
+                                                            @onclick='() => _newPatient.Gender = "Female"'>Femenino</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section class="np-section">
+                                        <h3 class="np-section-title">Contacto</h3>
+                                        <div class="np-grid">
+                                            <div class="form-group">
+                                                <label>Teléfono <span class="np-req">*</span></label>
+                                                <input class="form-input" @bind="_newPatient.Phone" placeholder="809 555 1234" inputmode="tel" autocomplete="tel" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Celular</label>
+                                                <input class="form-input" @bind="_newPatient.MobilePhone" placeholder="Opcional" inputmode="tel" />
+                                            </div>
+                                            <div class="form-group np-span-2">
+                                                <label>Correo</label>
+                                                <input class="form-input" type="email" @bind="_newPatient.Email" placeholder="Opcional — paciente@correo.com" autocomplete="email" />
+                                            </div>
+                                            <div class="form-group np-span-2">
+                                                <label>Dirección</label>
+                                                <input class="form-input" @bind="_newPatient.Address" placeholder="Calle, sector, ciudad" autocomplete="street-address" />
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <div class="np-actions">
+                                        <p class="np-hint">Después de registrar, continúa con el tratamiento.</p>
+                                        <button type="submit" class="btn-primary np-submit" disabled="@_creatingPatient">
+                                            <Icon Name="user-plus" Class="btn-svg" />
+                                            @(_creatingPatient ? "Registrando..." : "Registrar paciente")
+                                        </button>
+                                    </div>
+                                </form>
+                            }
+                        </div>
+                        break;
+
+                    case 2:
+                        <div class="step-content">
+                            <div class="step-head">
+                                <h2>Tipo de tratamiento</h2>
+                                <p>Elige el procedimiento. El precio se indica aquí, para esta cita.</p>
+                            </div>
+                            <div class="treatment-toolbar">
+                                <div class="search-field treatment-search">
+                                    <Icon Name="search" Class="field-icon" />
+                                    <input type="text" placeholder="Buscar por nombre o categoría..." @bind="_treatmentSearch" @bind:event="oninput" />
+                                </div>
+                                <div class="treatment-chips">
+                                    <button type="button" class="treatment-chip @(string.IsNullOrEmpty(_treatmentCategoryFilter) ? "active" : "")"
+                                            @onclick='() => _treatmentCategoryFilter = string.Empty'>Todos</button>
+                                    @foreach (var category in TreatmentCategories)
+                                    {
+                                        <button type="button" class="treatment-chip @(_treatmentCategoryFilter == category ? "active" : "")"
+                                                @onclick="() => _treatmentCategoryFilter = category">@FormatCategory(category)</button>
+                                    }
+                                </div>
+                            </div>
+                            <div class="treatment-grid">
+                                @if (_loadingCatalog)
+                                {
+                                    <AnimatedLoader Compact="true" Message="Cargando tratamientos..." />
+                                }
+                                else if (!string.IsNullOrEmpty(_catalogLoadError))
+                                {
+                                    <div class="wizard-error">@_catalogLoadError</div>
+                                }
+                                else if (!FilteredTreatments.Any())
+                                {
+                                    <div class="wizard-empty">No hay tratamientos activos en el catálogo.</div>
+                                }
+                                else
+                                {
+                                    @foreach (var treatment in FilteredTreatments)
+                                    {
+                                        var selected = _state.SelectedTreatment?.Id == treatment.Id;
+                                        <button type="button" class="treatment-card @(selected ? "selected" : "")"
+                                                @onclick="() => SelectTreatment(treatment)">
+                                            <span class="treatment-cat">@FormatCategory(treatment.Category)</span>
+                                            <span class="treatment-name">@treatment.Name</span>
+                                            <div class="treatment-meta">
+                                                <span class="treatment-duration">
+                                                    <Icon Name="clock" Class="treatment-duration-icon" />
+                                                    @treatment.DurationMinutes min
+                                                </span>
+                                                @if (selected)
+                                                {
+                                                    <span class="treatment-selected-mark">Seleccionado</span>
+                                                }
+                                            </div>
+                                        </button>
+                                    }
+                                }
+                            </div>
+                            @if (_state.SelectedTreatment != null)
+                            {
+                                <div class="treatment-quote">
+                                    <div class="treatment-quote-copy">
+                                        <span class="treatment-quote-kicker">Precio de esta cita</span>
+                                        <strong>@_state.SelectedTreatment.Name</strong>
+                                        <p>Ingresa el monto a cobrar. No está predefinido en el catálogo.</p>
+                                    </div>
+                                    <label class="treatment-quote-field">
+                                        <span>RD$</span>
+                                        <input class="form-input" type="text" inputmode="decimal" autocomplete="off"
+                                               placeholder="0.00" @bind="_state.QuotedPriceInput" @bind:event="oninput" />
+                                    </label>
+                                </div>
+                            }
+                        </div>
+                        break;
+
+                    case 3:
+                        <div class="step-content">
+                            <div class="step-head">
+                                <h2>Seleccionar Médico</h2>
+                                <p>Elige el profesional que atenderá la cita</p>
+                            </div>
+                            <div class="doctor-list-wizard">
+                                @if (_loadingDoctors)
+                                {
+                                    <AnimatedLoader Compact="true" Message="Cargando médicos..." />
+                                }
+                                else if (!_doctors.Any())
+                                {
+                                    <div class="wizard-empty">No hay médicos registrados en el sistema.</div>
+                                }
+                                else
+                                {
+                                    @foreach (var (doctor, index) in _doctors.Select((d, i) => (d, i)))
+                                    {
+                                        <button class="doctor-card @(_state.SelectedDoctor?.Id == doctor.Id ? "selected" : "")"
+                                                @onclick="() => SelectDoctor(doctor)">
+                                            <span class="avatar @GetAvatarClass(index)">@GetInitials(doctor.FullName)</span>
+                                            <span class="doctor-info">
+                                                <span class="doctor-name">@doctor.FullName</span>
+                                                <span class="doctor-spec">@doctor.Specialization</span>
+                                            </span>
+                                        </button>
+                                    }
+                                }
+                            </div>
+                        </div>
+                        break;
+
+                    case 4:
+                        <div class="step-content">
+                            <div class="step-head">
+                                <h2>Fecha y Hora</h2>
+                                <p>Selecciona el día y horario disponible</p>
+                            </div>
+                            <div class="datetime-layout">
+                                <div class="mini-calendar">
+                                    <div class="cal-header">
+                                        <button class="cal-nav" @onclick="PrevMonth">‹</button>
+                                        <span>@_calendarMonth.ToString("MMMM yyyy", _culture)</span>
+                                        <button class="cal-nav" @onclick="NextMonth">›</button>
+                                    </div>
+                                    <div class="cal-weekdays">
+                                        @foreach (var d in _weekDays)
+                                        {
+                                            <span>@d</span>
+                                        }
+                                    </div>
+                                    <div class="cal-days">
+                                        @foreach (var day in GetCalendarDays())
+                                        {
+                                            if (day == null)
+                                            {
+                                                <span class="cal-day empty"></span>
+                                            }
+                                            else
+                                            {
+                                                <button class="cal-day @GetDayClass(day.Value)"
+                                                        disabled="@(day.Value < DateTime.Today || !IsWorkingDay(day.Value))"
+                                                        @onclick="() => SelectDate(day.Value)">
+                                                    @day.Value.Day
+                                                </button>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="slots-panel">
+                                    <h3>HORARIOS DISPONIBLES — @FormatDate(_state.SelectedDate)</h3>
+                                    @if (!_state.SelectedDate.HasValue)
+                                    {
+                                        <p class="slots-hint">Selecciona una fecha en el calendario</p>
+                                    }
+                                    else if (_loadingSlots)
+                                    {
+                                        <AnimatedLoader Compact="true" Message="Cargando horarios..." />
+                                    }
+                                    else
+                                    {
+                                        @if (_state.SelectedDate.HasValue && !IsWorkingDay(_state.SelectedDate.Value))
+                                        {
+                                            <p class="slots-hint">La clínica no abre este día. Elija un día laboral.</p>
+                                        }
+                                        else if (!VisibleSlots.Any())
+                                        {
+                                            <p class="slots-hint">No hay horarios disponibles en este día. Pruebe otra fecha.</p>
+                                        }
+                                        else
+                                        {
+                                            <div class="slots-grid">
+                                                @foreach (var slot in VisibleSlots)
+                                                {
+                                                    var available = _availableSlots.Contains(slot);
+                                                    var selected = _state.SelectedTime == slot;
+                                                    <button type="button" class="slot-btn @(available ? "available" : "occupied") @(selected ? "selected" : "")"
+                                                            disabled="@(!available)"
+                                                            @onclick="() => SelectTime(slot)">
+                                                        @if (!available) { <span class="slot-dot occupied"></span> }
+                                                        else if (selected) { <span class="slot-dot available"></span> }
+                                                        <span class="@(!available ? "struck" : "")">@slot.ToString(@"hh\:mm")</span>
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                        <div class="slots-legend">
+                                            <span><i class="slot-dot available"></i> Disponible</span>
+                                            <span><i class="slot-dot occupied"></i> Ocupado</span>
+                                        </div>
+                                    }
+                                    <label class="notes-label">NOTAS ADICIONALES (OPCIONAL)</label>
+                                    <textarea class="notes-input" placeholder="Indicaciones especiales, preparación previa, alertas..."
+                                              @bind="_state.Notes"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                        break;
+
+                    case 5:
+                        <div class="step-content">
+                            <div class="step-head">
+                                <h2>Confirmar Cita</h2>
+                                <p>Revisa los detalles antes de agendar</p>
+                            </div>
+                            <div class="confirm-box">
+                                <span class="confirm-label">RESUMEN DE LA CITA</span>
+                                <div class="confirm-grid">
+                                    <div><span>PACIENTE</span><strong>@_state.SelectedPatient?.FullName</strong></div>
+                                    <div><span>TRATAMIENTO</span><strong>@_state.SelectedTreatment?.Name</strong></div>
+                                    <div><span>MÉDICO</span><strong>@_state.SelectedDoctor?.FullName</strong></div>
+                                    <div><span>SALA</span><strong>@_state.Room</strong></div>
+                                    <div><span>FECHA</span><strong class="accent-purple">@FormatDate(_state.SelectedDate)</strong></div>
+                                    <div><span>HORA</span><strong class="accent-purple">@FormatTime(_state.SelectedTime)</strong></div>
+                                    <div><span>DURACIÓN</span><strong class="accent-yellow">@(_state.SelectedTreatment?.DurationMinutes ?? 0) min</strong></div>
+                                    <div><span>PRECIO</span><strong class="accent-green">@FormatSelectedTreatmentPrice()</strong></div>
+                                </div>
+                            </div>
+                            @if (_state.SelectedPatient != null)
+                            {
+                                <PatientClinicalHistoryPanel PatientId="_state.SelectedPatient.Id"
+                                                             PatientName="@_state.SelectedPatient.FullName"
+                                                             Collapsible="true" />
+                            }
+                            <div class="reminder-section">
+                                <div class="reminder-head">
+                                    <Icon Name="bell" Class="reminder-icon" />
+                                    <span>Recordatorio automático</span>
+                                    <label class="ai-toggle small">
+                                        <input type="checkbox" @bind="_state.ReminderEnabled" />
+                                        <span class="ai-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="reminder-channels">
+                                    @foreach (var ch in _reminderChannels)
+                                    {
+                                        <button type="button" class="channel-btn @(_state.ReminderChannel == ch ? "active" : "")"
+                                                @onclick="() => _state.ReminderChannel = ch">@ch</button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        break;
+                }
+
+                <div class="wizard-footer">
+                    <button type="button" class="btn-ghost" disabled="@(_state.CurrentStep == 1)" @onclick="PrevStep">
+                        <Icon Name="chevron-left" Class="btn-svg" />
+                        Anterior
+                    </button>
+                    <div class="wizard-dots">
+                        @for (var i = 1; i <= 5; i++)
+                        {
+                            <span class="dot @(i == _state.CurrentStep ? "active" : i < _state.CurrentStep ? "done" : "")"></span>
+                        }
+                    </div>
+                    @if (_state.CurrentStep < 5)
+                    {
+                        <button type="button" class="btn-primary" disabled="@(!CanGoNext())" @onclick="NextStep">
+                            Siguiente
+                            <Icon Name="chevron-right" Class="btn-svg" StrokeWidth="2" />
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn-primary" disabled="@(_booking || !CanGoNext())" @onclick="ConfirmBookingAsync">
+                            <Icon Name="check" Class="btn-svg" StrokeWidth="2.5" />
+                            @(_booking ? "Agendando..." : "Confirmar Cita")
+                        </button>
+                    }
+                </div>
+                @if (_state.CurrentStep == 5 && !string.IsNullOrEmpty(_error))
+                {
+                    <div id="booking-error" class="wizard-error" role="alert">@_error</div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showWhatsAppModal)
+{
+    <div class="modal-overlay" @onclick="CloseWhatsAppModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Confirmación WhatsApp</h2>
+                <button class="modal-close" @onclick="CloseWhatsAppModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_whatsAppError))
+            {
+                <div class="wizard-error">@_whatsAppError</div>
+            }
+            else
+            {
+                <p class="modal-confirm-text">Revise el mensaje y pulse Enviar en WhatsApp. El sistema no lo envía solo.</p>
+                <div class="whatsapp-message-box">@_whatsAppPreview</div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseWhatsAppModal">Cancelar</button>
+                <button class="btn-primary" disabled="@(string.IsNullOrEmpty(_whatsAppUrl))" @onclick="OpenWhatsAppAsync">Abrir WhatsApp</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showEmailModal)
+{
+    <div class="modal-overlay" @onclick="CloseEmailModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Confirmación por correo</h2>
+                <button class="modal-close" @onclick="CloseEmailModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_emailError))
+            {
+                <div class="wizard-error">@_emailError</div>
+            }
+            else
+            {
+                <p class="modal-confirm-text">Se enviará a <strong>@_emailTo</strong>. Revise el mensaje antes de enviarlo.</p>
+                <div class="whatsapp-message-box">@_emailPreview</div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseEmailModal">Cancelar</button>
+                <button class="btn-primary" disabled="@(_sendingEmail || string.IsNullOrEmpty(_emailTo) || !string.IsNullOrEmpty(_emailError))" @onclick="SendEmailAsync">
+                    @(_sendingEmail ? "Enviando..." : "Enviar correo")
+                </button>
+            </div>
+            @if (_sendingEmail)
+            {
+                <AnimatedLoader Overlay="true" Message="Enviando correo..." />
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private readonly AppointmentWizardState _state = new();
+    private readonly CreatePatientRequest _newPatient = new();
+    private readonly System.Globalization.CultureInfo _culture = System.Globalization.CultureInfo.GetCultureInfo("es-ES");
+    private readonly string[] _weekDays = ["L", "M", "X", "J", "V", "S", "D"];
+    private readonly string[] _reminderChannels = ["WhatsApp", "EMAIL", "SMS"];
+
+    private readonly List<(int Number, string Name, string Icon)> _steps =
+    [
+        (1, "Paciente", "user"),
+        (2, "Tratamiento", "pill"),
+        (3, "Médico", "stethoscope"),
+        (4, "Fecha & Hora", "calendar-days"),
+        (5, "Confirmar", "check-circle-2")
+    ];
+
+    private List<PatientListItem> _patients = [];
+    private List<DoctorListItem> _doctors = [];
+    private List<TreatmentCatalogItem> _catalogItems = [];
+    private List<TimeSpan> _availableSlots = [];
+    private List<TimeSpan> _allSlots = [];
+    private ClinicSchedule _schedule = new();
+
+    private IEnumerable<TimeSpan> VisibleSlots =>
+        !_state.SelectedDate.HasValue || !IsWorkingDay(_state.SelectedDate.Value)
+            ? []
+            : _state.SelectedDate.Value.Date > DateTime.Today
+                ? _allSlots
+                : _allSlots.Where(slot => _state.SelectedDate.Value.Date.Add(slot) > DateTime.Now);
+
+    private bool _showWhatsAppModal;
+    private string? _whatsAppPreview;
+    private string? _whatsAppUrl;
+    private string? _whatsAppError;
+    private bool _showEmailModal;
+    private bool _sendingEmail;
+    private string? _emailPreview;
+    private string? _emailTo;
+    private string? _emailSubject;
+    private string? _emailError;
+    private string _patientSearch = string.Empty;
+    private string _treatmentSearch = string.Empty;
+    private string _treatmentCategoryFilter = string.Empty;
+    private string _patientTab = "existing";
+    private string? _error;
+    private string? _successMessage;
+    private string? _patientsLoadError;
+    private string? _catalogLoadError;
+    private bool _loadingPatients = true;
+    private bool _loadingDoctors = true;
+    private bool _loadingCatalog = true;
+    private bool _loadingSlots;
+    private bool _creatingPatient;
+    private bool _booking;
+    private DateTime _calendarMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+    private IEnumerable<PatientListItem> FilteredPatients =>
+        string.IsNullOrWhiteSpace(_patientSearch)
+            ? _patients
+            : _patients.Where(p => MatchesPatientSearch(p, _patientSearch));
+
+    private IEnumerable<string> TreatmentCategories =>
+        _catalogItems.Select(t => t.Category)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c);
+
+    private IEnumerable<TreatmentCatalogItem> FilteredTreatments
+    {
+        get
+        {
+            IEnumerable<TreatmentCatalogItem> items = _catalogItems;
+            if (!string.IsNullOrWhiteSpace(_treatmentCategoryFilter))
+                items = items.Where(t => t.Category.Equals(_treatmentCategoryFilter, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(_treatmentSearch))
+            {
+                items = items.Where(t =>
+                    t.Name.Contains(_treatmentSearch, StringComparison.OrdinalIgnoreCase) ||
+                    t.Category.Contains(_treatmentSearch, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return items;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.EnsureSessionLoadedAsync();
+        await ApplyScheduleAsync();
+        await ReloadPatientsAsync();
+        await ReloadCatalogAsync();
+        _doctors = await BookingService.GetDoctorsAsync();
+        _loadingDoctors = false;
+
+        ApplyBookingQuery();
+
+        if (!_state.SelectedDate.HasValue)
+            _state.SelectedDate = DateTime.Today;
+
+        if (!IsWorkingDay(_state.SelectedDate.Value))
+            _state.SelectedDate = NextOpenDay(_state.SelectedDate.Value);
+
+        _calendarMonth = new DateTime(_state.SelectedDate.Value.Year, _state.SelectedDate.Value.Month, 1);
+
+        if (_state.SelectedDoctor != null && _state.SelectedDate.HasValue)
+            await LoadSlotsAsync();
+    }
+
+    private void ApplyBookingQuery()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+        if (query.TryGetValue("fecha", out var fechaVal) &&
+            DateTime.TryParseExact(fechaVal.ToString(), "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var fecha))
+        {
+            _state.SelectedDate = fecha.Date;
+        }
+
+        if (query.TryGetValue("hora", out var horaVal) && TimeSpan.TryParse(horaVal.ToString(), out var hora))
+            _state.SelectedTime = hora;
+
+        if (query.TryGetValue("medico", out var medicoVal) && int.TryParse(medicoVal.ToString(), out var doctorId))
+            _state.SelectedDoctor = _doctors.FirstOrDefault(d => d.Id == doctorId);
+    }
+
+    private async Task ReloadCatalogAsync()
+    {
+        _loadingCatalog = true;
+        _catalogLoadError = null;
+
+        var (items, error) = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var result = await ProcedureService.GetActiveProceduresAsync();
+                return (result.Items, result.Error);
+            },
+            AuthService.IsTokenError);
+
+        _catalogItems = items.Select(p => new TreatmentCatalogItem
+        {
+            Id = p.Id,
+            Category = p.Category,
+            Name = p.Name,
+            DurationMinutes = p.DurationMinutes
+        }).ToList();
+
+        _catalogLoadError = error;
+        _loadingCatalog = false;
+    }
+
+    private void SelectPatient(PatientListItem patient) => _state.SelectedPatient = patient;
+
+    private void SelectTreatment(TreatmentCatalogItem treatment)
+    {
+        var changed = _state.SelectedTreatment?.Id != treatment.Id;
+        _state.SelectedTreatment = treatment;
+        if (changed)
+            _state.QuotedPriceInput = string.Empty;
+    }
+
+    private void SelectDoctor(DoctorListItem doctor) => _state.SelectedDoctor = doctor;
+
+    private static string FormatCategory(string category) =>
+        string.IsNullOrWhiteSpace(category) ? "General" : category.Replace('_', ' ');
+
+    private bool TryGetQuotedAmount(out decimal amount)
+    {
+        amount = 0;
+        return Money.TryParse(_state.QuotedPriceInput, out amount) && amount > 0;
+    }
+
+    private string FormatSelectedTreatmentPrice() =>
+        TryGetQuotedAmount(out var amount) ? Money.Format(amount) : "Pendiente";
+
+    private async Task ApplyScheduleAsync()
+    {
+        var (schedule, _) = await BookingService.GetClinicScheduleAsync();
+        if (schedule != null)
+            _schedule = schedule;
+
+        _allSlots = AppointmentBookingService.GenerateAllSlots(
+            _schedule.OpenTime,
+            _schedule.CloseTime,
+            _schedule.SlotDurationMinutes);
+    }
+
+    private bool IsWorkingDay(DateTime day) => _schedule.IsOpenOn(day);
+
+    private DateTime NextOpenDay(DateTime from)
+    {
+        for (var i = 0; i < 14; i++)
+        {
+            var candidate = from.Date.AddDays(i);
+            if (candidate >= DateTime.Today && IsWorkingDay(candidate))
+                return candidate;
+        }
+
+        return from.Date;
+    }
+
+    private async Task SelectDate(DateTime date)
+    {
+        _state.SelectedDate = date;
+        _state.SelectedTime = null;
+        await LoadSlotsAsync();
+    }
+
+    private void SelectTime(TimeSpan time) => _state.SelectedTime = time;
+
+    private async Task LoadSlotsAsync()
+    {
+        if (_state.SelectedDoctor == null || !_state.SelectedDate.HasValue) return;
+        _loadingSlots = true;
+        _availableSlots = await BookingService.GetAvailableSlotsAsync(_state.SelectedDoctor.Id, _state.SelectedDate.Value);
+        if (_state.SelectedDate.Value.Date == DateTime.Today)
+        {
+            _availableSlots = _availableSlots
+                .Where(slot => DateTime.Today.Add(slot) > DateTime.Now)
+                .ToList();
+        }
+        _loadingSlots = false;
+    }
+
+    private async Task CreatePatientAsync()
+    {
+        _error = null;
+        _successMessage = null;
+        if (string.IsNullOrWhiteSpace(_newPatient.FullName) || string.IsNullOrWhiteSpace(_newPatient.Phone))
+        {
+            _error = "Nombre y teléfono son obligatorios.";
+            return;
+        }
+
+        var nationalId = _newPatient.NationalId?.Trim();
+        if (string.IsNullOrWhiteSpace(nationalId))
+        {
+            _error = "La cédula es obligatoria.";
+            return;
+        }
+
+        if (_newPatient.DateOfBirth == default || _newPatient.DateOfBirth.Date >= DateTime.Today)
+        {
+            _error = "Indique una fecha de nacimiento válida.";
+            return;
+        }
+
+        var age = GetAgeFromBirth(_newPatient.DateOfBirth);
+        if (age is < 1 or > 120)
+        {
+            _error = "La edad debe estar entre 1 y 120 años.";
+            return;
+        }
+
+        var phoneDigits = new string(_newPatient.Phone.Where(char.IsDigit).ToArray());
+        if (phoneDigits.Length is < 10 or > 15)
+        {
+            _error = "El teléfono debe tener entre 10 y 15 dígitos.";
+            return;
+        }
+
+        if (!ContactEmail.TryValidate(_newPatient.Email, out var email, out var emailError))
+        {
+            _error = emailError;
+            return;
+        }
+        _newPatient.Email = email;
+
+        _creatingPatient = true;
+        _newPatient.NationalId = nationalId;
+        _newPatient.Phone = phoneDigits;
+        _newPatient.Age = age;
+        _newPatient.MobilePhone = string.IsNullOrWhiteSpace(_newPatient.MobilePhone) ? null : _newPatient.MobilePhone.Trim();
+        if (string.IsNullOrWhiteSpace(_newPatient.Address)) _newPatient.Address = "Sin dirección";
+
+        var (success, error, patient) = await BookingService.CreatePatientAsync(_newPatient);
+        _creatingPatient = false;
+
+        if (!success || patient == null)
+        {
+            _error = error ?? "Error al crear paciente.";
+            return;
+        }
+
+        _patientSearch = string.Empty;
+        await ReloadPatientsAsync();
+        UpsertPatient(patient);
+        _state.SelectedPatient = _patients.FirstOrDefault(p => p.Id == patient.Id) ?? patient;
+        _patientTab = "existing";
+        _successMessage = $"Paciente \"{patient.FullName}\" registrado y seleccionado.";
+    }
+
+    private async Task ShowExistingPatientsAsync()
+    {
+        _patientTab = "existing";
+        await ReloadPatientsAsync();
+    }
+
+    private async Task ReloadPatientsAsync()
+    {
+        _loadingPatients = true;
+        _patientsLoadError = null;
+
+        var (patients, error) = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var result = await BookingService.GetPatientsAsync();
+                return (result.Patients, result.Error);
+            },
+            AuthService.IsTokenError);
+
+        _patients = patients;
+        _patientsLoadError = error;
+        _loadingPatients = false;
+    }
+
+    private void UpsertPatient(PatientListItem patient)
+    {
+        var index = _patients.FindIndex(p => p.Id == patient.Id);
+        if (index >= 0)
+            _patients[index] = patient;
+        else
+            _patients.Insert(0, patient);
+    }
+
+    private bool CanGoNext() => _state.CurrentStep switch
+    {
+        1 => _state.SelectedPatient != null,
+        2 => _state.SelectedTreatment != null && TryGetQuotedAmount(out _),
+        3 => _state.SelectedDoctor != null,
+        4 => _state.SelectedDate.HasValue && _state.SelectedTime.HasValue,
+        5 => _state.SelectedPatient != null && _state.SelectedTreatment != null &&
+             _state.SelectedDoctor != null && _state.SelectedDate.HasValue && _state.SelectedTime.HasValue &&
+             TryGetQuotedAmount(out _),
+        _ => false
+    };
+
+    private async Task NextStep()
+    {
+        _error = null;
+        if (_state.CurrentStep == 3 && _state.SelectedDoctor != null)
+            await LoadSlotsAsync();
+        if (_state.CurrentStep < 5)
+            _state.CurrentStep++;
+    }
+
+    private void PrevStep()
+    {
+        _error = null;
+        if (_state.CurrentStep > 1)
+            _state.CurrentStep--;
+    }
+
+    private async Task ConfirmBookingAsync()
+    {
+        if (_state.SelectedPatient == null || _state.SelectedDoctor == null ||
+            !_state.SelectedDate.HasValue || !_state.SelectedTime.HasValue)
+        {
+            _error = "Faltan datos de la cita. Vuelva a los pasos anteriores y complete paciente, médico, fecha y hora.";
+            await ShowBookingErrorAsync();
+            return;
+        }
+
+        if (!TryGetQuotedAmount(out _))
+        {
+            _error = "Indique el precio del tratamiento en el paso 2.";
+            await ShowBookingErrorAsync();
+            return;
+        }
+
+        var appointmentDateTime = _state.SelectedDate.Value.Date.Add(_state.SelectedTime.Value);
+        if (appointmentDateTime <= DateTime.Now)
+        {
+            _state.SelectedTime = null;
+            _error = "Ese horario ya pasó. Vuelva al paso Fecha y Hora y seleccione un horario futuro.";
+            await ShowBookingErrorAsync();
+            return;
+        }
+
+        _booking = true;
+        _error = null;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+
+        try
+        {
+            var request = new BookAppointmentRequest
+            {
+                PatientId = _state.SelectedPatient.Id,
+                DoctorId = _state.SelectedDoctor.Id,
+                AppointmentDate = _state.SelectedDate.Value.Date,
+                AppointmentTime = _state.SelectedTime.Value,
+                TreatmentProcedureId = _state.SelectedTreatment?.Id,
+                QuotedAmount = TryGetQuotedAmount(out var quoted) ? quoted : null
+            };
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var (attempt, error) = await AuthService.WithTokenRetryAsync(
+                async () =>
+                {
+                    var booked = await BookingService.BookAsync(request, timeout.Token);
+                    return (booked, booked.Success ? null : booked.Error);
+                },
+                err => AuthService.IsTokenError(err));
+
+            if (!attempt.Success || attempt.Result == null)
+            {
+                _error = error ?? "No se pudo agendar la cita.";
+
+                if (attempt.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    Navigation.NavigateTo("/auth/logout", forceLoad: true);
+                    return;
+                }
+
+                await ShowBookingErrorAsync();
+                return;
+            }
+
+            _state.BookedAppointment = attempt.Result;
+            _state.IsSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            _error = $"No se pudo agendar la cita: {ex.Message}";
+            await ShowBookingErrorAsync();
+        }
+        finally
+        {
+            _booking = false;
+        }
+    }
+
+    private async Task ShowBookingErrorAsync()
+    {
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareUi.scrollToBookingError");
+        }
+        catch (JSException)
+        {
+            // El mensaje sigue visible aunque el desplazamiento no esté disponible.
+        }
+    }
+
+    private void OpenWhatsAppConfirmation()
+    {
+        var phone = !string.IsNullOrWhiteSpace(_state.SelectedPatient?.Phone)
+            ? _state.SelectedPatient.Phone
+            : _state.SelectedPatient?.MobilePhone;
+
+        DateTime? when = _state.SelectedDate.HasValue && _state.SelectedTime.HasValue
+            ? _state.SelectedDate.Value.Date.Add(_state.SelectedTime.Value)
+            : _state.SelectedDate;
+
+        var result = WhatsAppSettings.TryBuildLink(WhatsAppMessageKind.Confirmation, new WhatsAppAppointmentContext
+        {
+            PatientName = _state.SelectedPatient?.FullName ?? string.Empty,
+            PatientPhone = phone,
+            DoctorName = _state.SelectedDoctor?.FullName ?? string.Empty,
+            AppointmentDateTime = when
+        });
+
+        _whatsAppError = result.Success ? null : result.Error;
+        _whatsAppUrl = result.Url;
+        _whatsAppPreview = result.RenderedMessage;
+        _showWhatsAppModal = true;
+    }
+
+    private void CloseWhatsAppModal()
+    {
+        _showWhatsAppModal = false;
+        _whatsAppError = null;
+        _whatsAppUrl = null;
+        _whatsAppPreview = null;
+    }
+
+    private async Task OpenWhatsAppAsync()
+    {
+        if (string.IsNullOrEmpty(_whatsAppUrl))
+            return;
+
+        await JS.InvokeVoidAsync("open", _whatsAppUrl, "_blank");
+        CloseWhatsAppModal();
+    }
+
+    private WhatsAppAppointmentContext CurrentEmailContext()
+    {
+        DateTime? when = _state.SelectedDate.HasValue && _state.SelectedTime.HasValue
+            ? _state.SelectedDate.Value.Date.Add(_state.SelectedTime.Value)
+            : _state.SelectedDate;
+
+        return new WhatsAppAppointmentContext
+        {
+            PatientName = _state.SelectedPatient?.FullName ?? string.Empty,
+            PatientEmail = _state.SelectedPatient?.Email,
+            DoctorName = _state.SelectedDoctor?.FullName ?? string.Empty,
+            AppointmentDateTime = when
+        };
+    }
+
+    private void OpenEmailConfirmation()
+    {
+        var result = EmailMessageSettings.TryCompose(EmailMessageKind.Confirmation, CurrentEmailContext());
+        _emailError = result.Success ? null : result.Error;
+        _emailTo = result.To;
+        _emailSubject = result.Subject;
+        _emailPreview = result.Body;
+        _showEmailModal = true;
+    }
+
+    private void CloseEmailModal()
+    {
+        _showEmailModal = false;
+        _sendingEmail = false;
+        _emailError = null;
+        _emailTo = null;
+        _emailSubject = null;
+        _emailPreview = null;
+    }
+
+    private async Task SendEmailAsync()
+    {
+        if (string.IsNullOrEmpty(_emailTo) || string.IsNullOrEmpty(_emailSubject) || string.IsNullOrEmpty(_emailPreview))
+            return;
+
+        _sendingEmail = true;
+        var (ok, error) = await BookingService.SendPatientEmailAsync(_emailTo, _emailSubject, _emailPreview);
+        _sendingEmail = false;
+        if (!ok)
+        {
+            _emailError = error ?? "No se pudo enviar el correo.";
+            return;
+        }
+
+        CloseEmailModal();
+    }
+
+    private void ResetWizard()
+    {
+        _state.CurrentStep = 1;
+        _state.SelectedPatient = null;
+        _state.SelectedTreatment = null;
+        _state.QuotedPriceInput = string.Empty;
+        _state.SelectedDoctor = null;
+        _state.SelectedDate = DateTime.Today;
+        _state.SelectedTime = null;
+        _state.Notes = string.Empty;
+        _state.IsSuccess = false;
+        _state.BookedAppointment = null;
+        _error = null;
+        CloseWhatsAppModal();
+        CloseEmailModal();
+    }
+
+    private void PrevMonth() => _calendarMonth = _calendarMonth.AddMonths(-1);
+    private void NextMonth() => _calendarMonth = _calendarMonth.AddMonths(1);
+
+    private IEnumerable<DateTime?> GetCalendarDays()
+    {
+        var first = new DateTime(_calendarMonth.Year, _calendarMonth.Month, 1);
+        var offset = ((int)first.DayOfWeek + 6) % 7;
+        for (var i = 0; i < offset; i++) yield return null;
+        for (var d = 1; d <= DateTime.DaysInMonth(_calendarMonth.Year, _calendarMonth.Month); d++)
+            yield return new DateTime(_calendarMonth.Year, _calendarMonth.Month, d);
+    }
+
+    private string GetStepClass(int step) =>
+        step < _state.CurrentStep ? "completed" : step == _state.CurrentStep ? "active" : "pending";
+
+    private string GetDayClass(DateTime day)
+    {
+        if (_state.SelectedDate?.Date == day.Date)
+            return "selected";
+        if (!IsWorkingDay(day))
+            return "closed";
+        return "";
+    }
+
+    private static bool MatchesPatientSearch(PatientListItem patient, string search)
+    {
+        if (patient.FullName.Contains(search, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (patient.Id.ToString().Contains(search, StringComparison.OrdinalIgnoreCase)
+            || $"P-{patient.Id:D4}".Contains(search, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(patient.NationalId))
+            return false;
+
+        if (patient.NationalId.Contains(search, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var normalizedSearch = NormalizeId(search);
+        return normalizedSearch.Length > 0
+            && NormalizeId(patient.NationalId).Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeId(string value) =>
+        string.Concat(value.Where(char.IsLetterOrDigit));
+
+    private static string FormatPatientMeta(PatientListItem patient)
+    {
+        var cedula = string.IsNullOrWhiteSpace(patient.NationalId) ? "Sin cédula" : $"Céd. {patient.NationalId}";
+        var age = GetAgeLabel(patient.DateOfBirth);
+        return string.IsNullOrEmpty(age) ? cedula : $"{cedula} · {age}";
+    }
+
+    private static string GetAgeLabel(string? dateOfBirth)
+    {
+        if (string.IsNullOrWhiteSpace(dateOfBirth) || !DateTime.TryParse(dateOfBirth, out var birth))
+            return string.Empty;
+
+        var today = DateTime.Today;
+        var years = today.Year - birth.Year;
+        if (birth.Date > today.AddYears(-years))
+            years--;
+
+        if (years < 0)
+            return string.Empty;
+
+        return years == 1 ? "1 año" : $"{years} años";
+    }
+
+    private static string GetInitials(string name) =>
+        string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpper(w[0])));
+
+    private static string GetAvatarClass(int index) => $"avatar-{index % 4}";
+
+    private string FormatDate(DateTime? date) =>
+        date?.ToString("d 'de' MMMM yyyy", _culture) ?? "—";
+
+    private static string FormatTime(TimeSpan? time) =>
+        time?.ToString(@"hh\:mm") ?? "—";
+
+    private void OnNewPatientBirthChanged(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), out var birth))
+            return;
+
+        _newPatient.DateOfBirth = birth.Date;
+        _newPatient.Age = GetAgeFromBirth(birth);
+    }
+
+    private string GetNewPatientAgeLabel()
+    {
+        var years = GetAgeFromBirth(_newPatient.DateOfBirth);
+        if (years < 0)
+            return "—";
+        return years == 1 ? "1 año" : $"{years} años";
+    }
+
+    private static int GetAgeFromBirth(DateTime birth)
+    {
+        if (birth == default)
+            return 0;
+
+        var today = DateTime.Today;
+        var years = today.Year - birth.Year;
+        if (birth.Date > today.AddYears(-years))
+            years--;
+        return years;
+    }
+
+    private string GetAgendaLink()
+    {
+        if (_state.BookedAppointment == null || !_state.SelectedDate.HasValue)
+            return "/agenda";
+
+        var fecha = _state.SelectedDate.Value.ToString("yyyy-MM-dd");
+        var id = _state.BookedAppointment.Id;
+        return $"/agenda?fecha={fecha}&id={id}";
+    }
+}

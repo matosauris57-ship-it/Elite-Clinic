@@ -4,11 +4,16 @@
     {
         private readonly IUnitOfWork unitOfWork;
         private readonly ICurrentUserService currentUserService;
+        private readonly IClinicOperatingHoursService operatingHours;
 
-        public BookAppointmentCommandValidator(IUnitOfWork unitOfWork, ICurrentUserService currentUserService)
+        public BookAppointmentCommandValidator(
+            IUnitOfWork unitOfWork,
+            ICurrentUserService currentUserService,
+            IClinicOperatingHoursService operatingHours)
         {
             this.unitOfWork = unitOfWork;
             this.currentUserService = currentUserService;
+            this.operatingHours = operatingHours;
 
             ApplyRules();
         }
@@ -27,15 +32,21 @@
                 .When(x => currentUserService.PatientId == null);
 
             RuleFor(x => x.AppointmentDate)
-               .GreaterThanOrEqualTo(DateTime.Today)
-               .WithMessage("Appointment date cannot be in the past");
+                .GreaterThanOrEqualTo(DateTime.Today)
+                .WithMessage("La fecha de la cita no puede estar en el pasado.")
+                .Must((command, date) => date.Date.Add(command.AppointmentTime) > DateTime.Now)
+                .WithMessage("La fecha y hora de la cita deben ser posteriores a la hora actual.");
 
             RuleFor(x => x.AppointmentTime)
-            .NotEmpty()
-            .WithMessage("Appointment time is required")
-            // تحقق من أن الوقت يقع بين 12:00:00 و 22:00:00
-            .Must(BeWithinServiceHours)
-            .WithMessage("The appointment time must be between 12:00PM and 10:00PM.");
+                .NotEmpty()
+                .WithMessage("La hora de la cita es obligatoria.")
+                .MustAsync(BeWithinClinicHours)
+                .WithMessage("El horario está fuera del horario de trabajo de la clínica.");
+
+            RuleFor(x => x.QuotedAmount)
+                .GreaterThan(0)
+                .When(x => x.QuotedAmount.HasValue)
+                .WithMessage("El precio del tratamiento debe ser mayor a 0.");
         }
 
         private async Task<bool> DoctorExists(int doctorId, CancellationToken cancellationToken)
@@ -54,14 +65,10 @@
             return patient != null;
         }
 
-        // >> الميثود المساعدة الجديدة في Validator
-        private bool BeWithinServiceHours(TimeSpan appointmentTime)
+        private async Task<bool> BeWithinClinicHours(BookAppointmentCommand command, TimeSpan time, CancellationToken cancellationToken)
         {
-            var DefaultStartTime = new TimeSpan(12, 0, 0); // 12:00 PM
-            var DefaultEndTime = new TimeSpan(22, 0, 0);  // 10:00 PM
-
-            // يجب أن يكون الوقت >= بداية الخدمة و < نهاية الخدمة (لأن الـ Slot Duration يجب أن يُحسب)
-            return appointmentTime >= DefaultStartTime && appointmentTime < DefaultEndTime;
+            var hours = await operatingHours.GetAsync(cancellationToken);
+            return hours.Allows(command.AppointmentDate, time);
         }
     }
 }

@@ -1,0 +1,136 @@
+@page "/configuracion/dashboard"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode InteractiveServer
+@using Clinic_System.Core.Dashboard
+@inject DashboardLayoutApiService LayoutApi
+@inject IJSRuntime JS
+
+<PageTitle>Widgets del Dashboard — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Configuración del Dashboard</h1>
+            <p>Activa o desactiva los widgets disponibles para toda la clínica. Cada usuario puede reorganizar los habilitados.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando widgets..." />
+    }
+    else if (_config != null)
+    {
+        <div class="widget dash-panel">
+            <div class="widget-head">
+                <h3>Widgets disponibles</h3>
+            </div>
+            <div class="dash-widget-checklist">
+                @foreach (var widget in _config.Widgets)
+                {
+                    <label class="@(widget.Required ? "is-required" : "")">
+                        <input type="checkbox"
+                               checked="@widget.Enabled"
+                               disabled="@widget.Required"
+                               @onchange="e => Toggle(widget, (bool)(e.Value ?? false))" />
+                        <span>
+                            <strong>@widget.Title</strong>
+                            <small>@widget.Description · Permiso: @widget.Permission</small>
+                        </span>
+                    </label>
+                }
+            </div>
+            <div class="dash-modal-actions" style="justify-content:flex-start;margin-top:1rem">
+                <button class="btn-primary" disabled="@_saving" @onclick="SaveAsync">Guardar configuración</button>
+                <button class="btn-outline" disabled="@_saving" @onclick="RestoreAsync">Restaurar valores predeterminados</button>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_status))
+            {
+                <p class="dash-panel-sub">@_status</p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private DashboardClinicConfigResponse? _config;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _status;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var (data, error) = await LayoutApi.GetClinicConfigAsync();
+            _config = data;
+            _error = data == null ? error : null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Toggle(DashboardCatalogItem widget, bool enabled)
+    {
+        widget.Enabled = widget.Required || enabled;
+        if (_config?.Layout != null)
+            _config.Layout = DashboardLayoutEngine.SetVisible(_config.Layout, widget.Key, widget.Enabled);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_config?.Layout == null) return;
+        _saving = true;
+        try
+        {
+            var (data, error) = await LayoutApi.SaveClinicConfigAsync(_config.Layout);
+            if (data != null)
+            {
+                _config = data;
+                _status = "Configuración guardada.";
+                _error = null;
+            }
+            else
+            {
+                _error = error;
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RestoreAsync()
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "¿Restaurar los widgets de la clínica a los valores predeterminados?");
+        if (!confirmed) return;
+        _saving = true;
+        try
+        {
+            var (data, error) = await LayoutApi.RestoreClinicConfigAsync();
+            if (data != null)
+            {
+                _config = data;
+                _status = "Valores predeterminados restaurados.";
+            }
+            else _error = error;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

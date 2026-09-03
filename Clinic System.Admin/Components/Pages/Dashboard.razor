@@ -1,0 +1,479 @@
+@page "/"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "dashboard.view")]
+@rendermode InteractiveServer
+@using Clinic_System.Core.Dashboard
+@using System.Globalization
+@inject DashboardService DashboardService
+@inject DashboardLayoutApiService LayoutApi
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthState
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Hoy — DentalCare Admin</PageTitle>
+
+<div class="dashboard-page @(_editMode ? "dashboard-is-editing" : "")">
+    <div class="command-header">
+        <div class="command-titles">
+            <h1>Hoy en la clínica</h1>
+            <p>@_todayLabel · Operación del día con datos reales</p>
+        </div>
+        <div class="command-actions">
+            @if (!string.IsNullOrWhiteSpace(_saveStatus))
+            {
+                <span class="dash-save-status" aria-live="polite">@_saveStatus</span>
+            }
+            <button class="btn-outline" disabled="@_loading" @onclick="ReloadAsync">
+                <Icon Name="refresh-cw" Class="btn-svg" />
+                Actualizar
+            </button>
+            @if (_editMode)
+            {
+                <button class="btn-outline" @onclick="OpenAddPanelAsync" aria-label="Agregar widget">
+                    <Icon Name="plus" Class="btn-svg" />
+                    Widgets ocultos
+                </button>
+                <button class="btn-outline" @onclick="RestoreAsync">Restaurar Dashboard</button>
+                <button class="btn-primary" @onclick="ExitEditAsync">
+                    <Icon Name="check" Class="btn-svg" />
+                    Listo
+                </button>
+            }
+            else
+            {
+                <button class="btn-outline" @onclick="EnterEdit">Personalizar Dashboard</button>
+                <a href="/agendar-cita" class="btn-primary">
+                    <Icon Name="calendar-plus" Class="btn-svg" StrokeWidth="2" />
+                    Agendar cita
+                </a>
+            }
+        </div>
+    </div>
+
+    @if (_editMode)
+    {
+        <div class="dashboard-edit-banner" role="status">
+            Modo edición: arrastra desde ⋮⋮, redimensiona desde la esquina o con S/M/L, y activa o desactiva widgets a la derecha.
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_layoutError))
+    {
+        <ErrorBanner Message="@_layoutError" OnRetry="LoadLayoutAsync" />
+    }
+    @if (!string.IsNullOrEmpty(_data?.ApiConnectionError))
+    {
+        <ErrorBanner Message="@_data.ApiConnectionError" OnRetry="ReloadAsync" />
+    }
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando el día clínico..." />
+    }
+    else if (_layout != null)
+    {
+        <div class="@(_editMode ? "dashboard-edit-layout" : null)">
+            <DashboardGrid VisibleItems="VisibleItems"
+                           Data="_data"
+                           EditMode="_editMode"
+                           OnRetry="ReloadAsync"
+                           OnHide="HideWidget"
+                           OnConfigure="OpenSettings"
+                           OnPreset="ApplyPreset"
+                           LayoutChanged="OnLayoutChanged" />
+
+            @if (_editMode)
+            {
+                <aside class="dashboard-widget-manager" aria-label="Widgets del Dashboard">
+                    <h2>Widgets</h2>
+                    <p class="dash-panel-sub">Marca los widgets que quieres ver. Los cambios se guardan solos. Si falta alguno, actívalo en Configuración → Dashboard.</p>
+                    <div class="dash-widget-checklist">
+                        @foreach (var option in _widgetToggles)
+                        {
+                            <label>
+                                <input type="checkbox"
+                                       checked="@option.Visible"
+                                       disabled="@option.Disabled"
+                                       @onchange="e => ToggleWidgetAsync(option.Key, (bool)(e.Value ?? false))" />
+                                <span>
+                                    <strong>@option.Title</strong>
+                                    <small>@option.Description</small>
+                                </span>
+                            </label>
+                        }
+                    </div>
+                </aside>
+            }
+        </div>
+    }
+</div>
+
+@if (_showAdd)
+{
+    <div class="dash-modal-backdrop" @onclick="CloseAddPanel">
+        <div class="dash-modal" @onclick:stopPropagation="true" role="dialog" aria-labelledby="add-widget-title">
+            <h2 id="add-widget-title">Agregar widget</h2>
+            <p>Solo se listan widgets habilitados para la clínica y permitidos para tu rol.</p>
+            <div class="dash-widget-checklist">
+                @foreach (var option in AddableWidgets)
+                {
+                    <label>
+                        <input type="checkbox" @bind="option.Selected" />
+                        <span>
+                            <strong>@option.Title</strong>
+                            <small>@option.Description</small>
+                        </span>
+                    </label>
+                }
+            </div>
+            <div class="dash-modal-actions">
+                <button class="btn-outline" @onclick="CloseAddPanel">Cancelar</button>
+                <button class="btn-primary" @onclick="AddSelectedWidgets">Agregar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_settingsKey != null && DashboardWidgetCatalog.TryGet(_settingsKey, out var settingsDef))
+{
+    <div class="dash-modal-backdrop" @onclick="CloseSettings">
+        <div class="dash-modal" @onclick:stopPropagation="true" role="dialog" aria-labelledby="widget-settings-title">
+            <h2 id="widget-settings-title">Opciones · @settingsDef.Title</h2>
+            @if (_settingsKey == DashboardWidgetKeys.RevenueSummary)
+            {
+                <label class="dash-field">
+                    Periodo
+                    <select @bind="_settingsPeriod">
+                        <option value="today">Hoy</option>
+                        <option value="week">Esta semana</option>
+                        <option value="month">Este mes</option>
+                        <option value="year">Este año</option>
+                    </select>
+                </label>
+            }
+            else if (_settingsKey == DashboardWidgetKeys.UpcomingAppointments)
+            {
+                <label class="dash-field">
+                    Mostrar
+                    <select @bind="_settingsLimit">
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                        <option value="15">15</option>
+                        <option value="20">20</option>
+                    </select>
+                </label>
+            }
+            else if (_settingsKey == DashboardWidgetKeys.RecentActivity)
+            {
+                <label class="dash-field">
+                    Periodo
+                    <select @bind="_settingsPeriod">
+                        <option value="24h">Últimas 24 horas</option>
+                        <option value="7d">Últimos 7 días</option>
+                        <option value="30d">Últimos 30 días</option>
+                    </select>
+                </label>
+            }
+            <div class="dash-modal-actions">
+                <button class="btn-outline" @onclick="CloseSettings">Cancelar</button>
+                <button class="btn-primary" @onclick="SaveSettings">Guardar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly CultureInfo EsDo = CultureInfo.GetCultureInfo("es-DO");
+    private DashboardData? _data;
+    private DashboardLayoutDocument? _layout;
+    private bool _loading = true;
+    private bool _editMode;
+    private string _todayLabel = string.Empty;
+    private string? _layoutError;
+    private string? _saveStatus;
+    private bool _showAdd;
+    private string? _settingsKey;
+    private string _settingsPeriod = "today";
+    private string _settingsLimit = "10";
+    private List<string> _clinicEnabledKeys = [];
+    private CancellationTokenSource? _saveCts;
+    private readonly List<WidgetToggle> _widgetToggles = [];
+    private readonly List<AddOption> _addOptions = [];
+
+    private List<DashboardWidgetPlacement> VisibleItems =>
+        _layout == null ? [] : DashboardLayoutEngine.VisibleItems(_layout).ToList();
+
+    private IEnumerable<AddOption> AddableWidgets => _addOptions.Where(o => !o.AlreadyVisible);
+
+    protected override Task OnInitializedAsync() => LoadLayoutAsync();
+
+    private async Task LoadLayoutAsync()
+    {
+        _loading = true;
+        _layoutError = null;
+        try
+        {
+            var (response, error) = await LayoutApi.GetLayoutAsync();
+            if (response?.Layout != null)
+            {
+                _layout = DashboardLayoutEngine.Normalize(response.Layout);
+                _clinicEnabledKeys = response.ClinicEnabledKeys;
+            }
+            else
+            {
+                _layout = DashboardWidgetCatalog.CreateDefaultLayout();
+                _layoutError = error;
+            }
+            await ReloadDataAsync();
+            await RefreshWidgetTogglesAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ReloadAsync() => await ReloadDataAsync();
+
+    private async Task ReloadDataAsync()
+    {
+        var keys = VisibleItems.Select(i => i.WidgetKey);
+        _data = await DashboardService.GetDashboardDataAsync(keys);
+        var day = _data.Today == default ? DateTime.Today : _data.Today;
+        _todayLabel = day.ToString("dddd d 'de' MMMM", EsDo);
+        await RefreshActivityAsync();
+    }
+
+    private async Task EnterEdit()
+    {
+        _editMode = true;
+        await RefreshWidgetTogglesAsync();
+    }
+
+    private async Task ExitEditAsync()
+    {
+        _editMode = false;
+        _showAdd = false;
+        _settingsKey = null;
+        await SaveNowAsync();
+    }
+
+    private Task HideWidget(string key) => ToggleWidgetAsync(key, false);
+
+    private async Task ApplyPreset((string Key, string Preset) value)
+    {
+        if (_layout == null) return;
+        _layout = DashboardLayoutEngine.ApplyPresetSize(_layout, value.Key, value.Preset);
+        await SaveNowAsync();
+    }
+
+    private async Task OnLayoutChanged(List<GridNodeChange> nodes)
+    {
+        if (_layout == null || !_editMode) return;
+        var positions = nodes.Select(n => new DashboardWidgetPlacement
+        {
+            Id = n.Id,
+            X = n.X,
+            Y = n.Y,
+            W = n.W,
+            H = n.H
+        });
+        _layout = DashboardLayoutEngine.ApplyPositions(_layout, positions);
+        QueueSave();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenAddPanelAsync()
+    {
+        if (_layout == null) return;
+        var user = (await AuthState.GetAuthenticationStateAsync()).User;
+        _addOptions.Clear();
+        foreach (var def in DashboardWidgetCatalog.All)
+        {
+            var item = _layout.Items.First(i => i.WidgetKey == def.Key);
+            if (item.Visible) continue;
+            if (def.Required) continue;
+            if (_clinicEnabledKeys.Count > 0 && !_clinicEnabledKeys.Contains(def.Key, StringComparer.OrdinalIgnoreCase))
+                continue;
+            if (!PermissionService.HasPermission(user, def.Permission))
+                continue;
+            _addOptions.Add(new AddOption
+            {
+                Key = def.Key,
+                Title = def.Title,
+                Description = def.Description,
+                AlreadyVisible = false
+            });
+        }
+        _showAdd = true;
+    }
+
+    private void CloseAddPanel() => _showAdd = false;
+
+    private async Task AddSelectedWidgets()
+    {
+        if (_layout == null) return;
+        foreach (var option in _addOptions.Where(o => o.Selected))
+            _layout = DashboardLayoutEngine.SetVisible(_layout, option.Key, true);
+        _showAdd = false;
+        await SaveNowAsync();
+        await ReloadDataAsync();
+        await RefreshWidgetTogglesAsync();
+    }
+
+    private void OpenSettings(string key)
+    {
+        _settingsKey = key;
+        var item = _layout?.Items.FirstOrDefault(i => i.WidgetKey == key);
+        _settingsPeriod = item?.Settings.GetValueOrDefault("period") ?? (key == DashboardWidgetKeys.RecentActivity ? "7d" : "today");
+        _settingsLimit = item?.Settings.GetValueOrDefault("limit") ?? "10";
+    }
+
+    private void CloseSettings() => _settingsKey = null;
+
+    private async Task SaveSettings()
+    {
+        if (_layout == null || _settingsKey == null) return;
+        var item = _layout.Items.First(i => i.WidgetKey == _settingsKey);
+        if (_settingsKey == DashboardWidgetKeys.RevenueSummary)
+            item.Settings["period"] = _settingsPeriod;
+        if (_settingsKey == DashboardWidgetKeys.UpcomingAppointments)
+            item.Settings["limit"] = _settingsLimit;
+        if (_settingsKey == DashboardWidgetKeys.RecentActivity)
+            item.Settings["period"] = _settingsPeriod;
+        _settingsKey = null;
+        await SaveNowAsync();
+        await RefreshActivityAsync();
+    }
+
+    private async Task RestoreAsync()
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "¿Desea restaurar el Dashboard a su configuración predeterminada?");
+        if (!confirmed) return;
+        var (response, error) = await LayoutApi.RestoreLayoutAsync();
+        if (response?.Layout != null)
+        {
+            _layout = DashboardLayoutEngine.Normalize(response.Layout);
+            _saveStatus = "Restaurado";
+            await ReloadDataAsync();
+            await RefreshWidgetTogglesAsync();
+        }
+        else
+        {
+            _layoutError = error ?? "No se pudo restaurar.";
+        }
+    }
+
+    private void QueueSave()
+    {
+        _saveCts?.Cancel();
+        _saveCts = new CancellationTokenSource();
+        var token = _saveCts.Token;
+        _ = SaveDebouncedAsync(token);
+    }
+
+    private async Task SaveDebouncedAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(700, token);
+            await SaveNowAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task SaveNowAsync()
+    {
+        if (_layout == null) return;
+        _saveStatus = "Guardando...";
+        await InvokeAsync(StateHasChanged);
+        var (response, error) = await LayoutApi.SaveLayoutAsync(_layout);
+        if (response?.Layout != null)
+        {
+            _layout = DashboardLayoutEngine.Normalize(response.Layout);
+            _saveStatus = "Guardado";
+            _layoutError = null;
+        }
+        else
+        {
+            _saveStatus = "No se pudo guardar";
+            _layoutError = error;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshActivityAsync()
+    {
+        if (_data == null || _layout == null) return;
+        var item = _layout.Items.FirstOrDefault(i => i.WidgetKey == DashboardWidgetKeys.RecentActivity);
+        if (item is not { Visible: true }) return;
+        var period = item.Settings.GetValueOrDefault("period") ?? "7d";
+        var take = item.Settings.TryGetValue("limit", out var raw) && int.TryParse(raw, out var n) ? n : 10;
+        var (items, error) = await LayoutApi.GetRecentActivityAsync(period, take);
+        _data.RecentActivity = items ?? [];
+        _data.ActivityError = error;
+        _data.HistoryRestricted = !string.IsNullOrWhiteSpace(error) && error.Contains("autoriz", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task RefreshWidgetTogglesAsync()
+    {
+        if (_layout == null) return;
+        var user = (await AuthState.GetAuthenticationStateAsync()).User;
+        _widgetToggles.Clear();
+        foreach (var def in DashboardWidgetCatalog.All)
+        {
+            var item = _layout.Items.First(i => i.WidgetKey == def.Key);
+            var allowed = PermissionService.HasPermission(user, def.Permission);
+            var clinicOk = _clinicEnabledKeys.Count == 0
+                || _clinicEnabledKeys.Contains(def.Key, StringComparer.OrdinalIgnoreCase)
+                || def.Required;
+            if (!allowed)
+                continue;
+            if (!clinicOk && !item.Visible)
+                continue;
+            _widgetToggles.Add(new WidgetToggle
+            {
+                Key = def.Key,
+                Title = def.Title,
+                Description = def.Description,
+                Visible = item.Visible,
+                Disabled = def.Required
+            });
+        }
+    }
+
+    private async Task ToggleWidgetAsync(string key, bool visible)
+    {
+        if (_layout == null) return;
+        _layout = DashboardLayoutEngine.SetVisible(_layout, key, visible);
+        await RefreshWidgetTogglesAsync();
+        await SaveNowAsync();
+        await ReloadDataAsync();
+    }
+
+    public void Dispose()
+    {
+        _saveCts?.Cancel();
+        _saveCts?.Dispose();
+    }
+
+    private sealed class WidgetToggle
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool Visible { get; set; }
+        public bool Disabled { get; set; }
+    }
+
+    private sealed class AddOption
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool Selected { get; set; }
+        public bool AlreadyVisible { get; set; }
+    }
+}

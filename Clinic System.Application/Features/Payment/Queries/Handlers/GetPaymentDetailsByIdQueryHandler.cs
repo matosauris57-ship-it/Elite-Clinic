@@ -32,7 +32,11 @@
                 var patientId = payment.Appointment?.PatientId;
 
                 var roles = await _currentUserService.GetCurrentUserRolesAsync();
-                if (!roles.Contains("Admin"))
+                var canViewBilling = roles.Contains("Admin")
+                    || _currentUserService.HasPermission(
+                        AdminPermissionCatalog.Build("facturacion", AdminPermissionCatalog.Actions.View));
+
+                if (!canViewBilling)
                 {
                     if (CurrentDoctorId.HasValue)
                     {

@@ -136,6 +136,12 @@ namespace Clinic_System.Data.Configurations
 
             builder.HasIndex(p => p.CreatedAt)
                 .HasDatabaseName("IX_Payments_CreatedAt");
+
+            builder.Ignore(p => p.InvoiceTotal);
+            builder.Ignore(p => p.AmountCollected);
+            builder.Ignore(p => p.Balance);
+            builder.Ignore(p => p.CanEditInvoice);
+            builder.Ignore(p => p.CanReceivePayment);
         }
     }
 }

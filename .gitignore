@@ -362,3 +362,14 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /ملخص_سريع_للتقييم.md
+
+# WhatsApp message templates (runtime, Admin)
+**/App_Data/whatsapp-message-settings.json
+**/App_Data/email-message-settings.json
+**/App_Data/patient-notification-settings.json
+**/App_Data/clinic-profile.json
+**/App_Data/clinic-email-settings.json
+**/App_Data/odontogram-symbol-config.json
+**/App_Data/clinic-schedule.json
+**/wwwroot/uploads/clinic/*
+!**/wwwroot/uploads/clinic/.gitkeep

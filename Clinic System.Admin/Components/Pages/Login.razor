@@ -1,0 +1,98 @@
+@page "/login"
+@layout LoginLayout
+@rendermode InteractiveServer
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ClinicProfileService ClinicProfile
+
+<PageTitle>Iniciar sesión — @_clinic.Name</PageTitle>
+
+<div class="login-card">
+    <div class="login-brand">
+        <div class="login-logo">
+            @if (!string.IsNullOrWhiteSpace(_clinic.DisplayLogoUrl))
+            {
+                <img class="login-logo-image" src="@_clinic.DisplayLogoUrl" alt="" />
+            }
+            else
+            {
+                <Icon Name="tooth" Class="login-logo-svg" StrokeWidth="1.6" />
+            }
+        </div>
+        <h1>@_clinic.Name</h1>
+        <p>@(string.IsNullOrWhiteSpace(_clinic.Slogan) ? "Panel de administración" : _clinic.Slogan)</p>
+    </div>
+
+    <EditForm Model="_model" OnValidSubmit="HandleLoginAsync" class="login-form">
+        <DataAnnotationsValidator />
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="login-error">@_error</div>
+        }
+
+        <div class="form-group">
+            <label for="email">Correo electrónico</label>
+            <InputText id="email" @bind-Value="_model.Email" class="form-input" placeholder="admin@clinic.com" />
+        </div>
+
+        <div class="form-group">
+            <label for="password">Contraseña</label>
+            <InputText id="password" type="password" @bind-Value="_model.Password" class="form-input" placeholder="••••••••" />
+        </div>
+
+        <button type="submit" class="login-btn" disabled="@_loading">
+            @(_loading ? "Iniciando sesión..." : "Iniciar sesión")
+        </button>
+    </EditForm>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Overlay="true" Message="Iniciando sesión..." />
+    }
+
+    <p class="login-hint">Credenciales de prueba: admin@clinic.com / Admin@123</p>
+</div>
+
+@code {
+    private readonly LoginModel _model = new();
+    private string? _error;
+    private bool _loading;
+    private ClinicProfile _clinic = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _clinic = ClinicProfile.Get();
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        var (success, error, bootstrapKey, _) = await AuthService.LoginAsync(_model.Email, _model.Password);
+
+        _loading = false;
+
+        if (success && !string.IsNullOrEmpty(bootstrapKey))
+        {
+            Navigation.NavigateTo($"/auth/complete?key={bootstrapKey}", forceLoad: true);
+        }
+        else
+        {
+            _error = error;
+        }
+    }
+
+    private class LoginModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}

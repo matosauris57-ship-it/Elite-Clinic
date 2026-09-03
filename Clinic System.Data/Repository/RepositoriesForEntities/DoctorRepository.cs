@@ -81,5 +81,24 @@
                 .Include(d => d.Appointments.OrderBy(a => a.AppointmentDate))
                 .FirstOrDefaultAsync(d => d.Id == Id);
         }
+
+        public async Task<IEnumerable<Doctor?>> GetAllForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default)
+        {
+            IQueryable<Doctor> query = context.Doctors.AsNoTracking();
+
+            if (includeInactive)
+                query = query.IgnoreQueryFilters();
+
+            return await query
+                .OrderBy(d => d.FullName)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<Doctor?> GetByIdIncludingDeletedAsync(int id, CancellationToken cancellationToken = default)
+        {
+            return await context.Doctors
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
+        }
     }
 }

@@ -1,0 +1,352 @@
+@inject PeriodontalExamService PerioApi
+@inject AuthService AuthService
+@using Clinic_System.Core.Validation
+
+<section class="periodontogram-module" aria-labelledby="perio-module-heading">
+    @if (!string.IsNullOrWhiteSpace(_toast) || !string.IsNullOrWhiteSpace(_toastError))
+    {
+        <div class="app-toast-host" aria-live="polite" aria-atomic="true">
+            @if (!string.IsNullOrWhiteSpace(_toast))
+            {
+                <div class="app-toast is-success" role="status">@_toast</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_toastError))
+            {
+                <div class="app-toast is-error" role="alert">@_toastError</div>
+            }
+        </div>
+    }
+
+    <div class="clinical-section-heading">
+        <div>
+            <h3 id="perio-module-heading">Periodontograma</h3>
+            <p>
+                Paciente: <strong>@PatientName</strong>
+                @if (_exam != null)
+                {
+                    <span> · Evaluación: @_exam.ExaminedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                    @if (!string.IsNullOrWhiteSpace(_exam.DoctorName))
+                    {
+                        <span> · Odontólogo: @_exam.DoctorName</span>
+                    }
+                }
+            </p>
+        </div>
+        <div class="perio-toolbar">
+            @if (CanEdit)
+            {
+                @if (_exams.Count > 0)
+                {
+                    <button type="button" class="btn-outline" disabled="@_busy" @onclick="() => CreateExamAsync(true)">Copiar última</button>
+                }
+                <button type="button" class="btn-outline" disabled="@_busy" @onclick="() => CreateExamAsync(false)">Evaluación en blanco</button>
+            }
+            @if (_exam != null && CanEdit && _exam.IsLatest)
+            {
+                <button type="button" class="btn-primary" disabled="@_busy" @onclick="SaveAsync">@(_busy ? "Guardando..." : "Guardar evaluación")</button>
+            }
+            @if (_exam is { IsLatest: true } && CanEdit)
+            {
+                <button type="button" class="btn-table btn-table-danger" disabled="@_busy" @onclick="() => _confirmDelete = true">Eliminar</button>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    @if (!CanEdit)
+    {
+        <div class="clinical-readonly-note">Modo consulta. La edición requiere permiso <code>periodontograma.edit</code>.</div>
+    }
+    else if (_exam is { IsLatest: false })
+    {
+        <div class="clinical-readonly-note">Esta evaluación es histórica y no se puede modificar. Cree una nueva para registrar cambios.</div>
+    }
+
+    @if (_confirmDelete)
+    {
+        <div class="clinical-readonly-note">
+            ¿Eliminar esta evaluación? El historial anterior se conserva.
+            <button type="button" class="btn-outline" @onclick="() => _confirmDelete = false">Cancelar</button>
+            <button type="button" class="btn-table btn-table-danger" @onclick="DeleteAsync">Confirmar eliminación</button>
+        </div>
+    }
+
+    @if (_exam != null && _exams.Count >= 2)
+    {
+        <div class="form-row perio-compare-row">
+            <div class="form-group">
+                <label for="perio-compare-exam">Comparar con</label>
+                <select id="perio-compare-exam" class="form-input" @bind="_compareExamId">
+                    @foreach (var exam in _exams.Where(x => x.Id != _exam.Id))
+                    {
+                        <option value="@exam.Id">@exam.ExaminedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</option>
+                    }
+                </select>
+            </div>
+            <button type="button" class="btn-outline" disabled="@(_busy || _compareExamId <= 0)" @onclick="CompareAsync">Comparar</button>
+        </div>
+    }
+
+    <PeriodontalLegend />
+
+    @if (_loading)
+    {
+        <AnimatedLoader Compact="true" Message="Cargando periodontograma..." />
+    }
+    else if (_exam != null)
+    {
+        <PeriodontalFullChart Exam="_exam" SelectedTooth="_selectedTooth" SelectedToothChanged="SelectTooth" />
+
+        <PeriodontalToothEditor Tooth="_selected"
+                                ReadOnly="@(!CanEdit || !_exam.IsLatest)"
+                                NavigateToTooth="SelectTooth" />
+
+        <div class="form-group" style="margin-top:1rem;">
+            <label for="perio-exam-notes">Notas de la evaluación</label>
+            <textarea id="perio-exam-notes" class="form-input" rows="3" maxlength="2000"
+                      disabled="@(!CanEdit || !_exam.IsLatest)" @bind="_exam.Notes"></textarea>
+        </div>
+    }
+    else
+    {
+        <p>No hay una evaluación abierta. Use <strong>Evaluación en blanco</strong> o <strong>Copiar última</strong> para comenzar el periodontograma de este paciente.</p>
+    }
+
+    <PeriodontalHistory Exams="_exams" SelectedExamId="_exam?.Id" OpenExam="OpenExamAsync" />
+    <PeriodontalComparePanel Compare="_compare" />
+</section>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public string PatientName { get; set; } = "";
+    [Parameter] public bool CanEdit { get; set; }
+
+    private List<PeriodontalExamSummary> _exams = [];
+    private PeriodontalExamDetail? _exam;
+    private PeriodontalToothModel? _selected;
+    private int? _selectedTooth = 16;
+    private PeriodontalCompareResult? _compare;
+    private int _compareExamId;
+    private string? _error;
+    private string? _toast;
+    private string? _toastError;
+    private CancellationTokenSource? _toastCts;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _confirmDelete;
+    private int _loadedPatientId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedPatientId == PatientId)
+            return;
+        _loadedPatientId = PatientId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var list = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PerioApi.ListAsync(PatientId);
+                return (response.Items, response.Error);
+            },
+            AuthService.IsTokenError);
+        _exams = list.Data ?? [];
+        _error = list.Error;
+        if (_error == null && _exams.Count > 0)
+            await OpenExamAsync(_exams[0].Id);
+        _loading = false;
+    }
+
+    private async Task OpenExamAsync(int examId)
+    {
+        _busy = true;
+        _compare = null;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PerioApi.GetAsync(examId);
+                return (response.Exam, response.Error);
+            },
+            AuthService.IsTokenError);
+        _busy = false;
+        if (result.Error != null)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        _exam = result.Data;
+        if (_exam != null)
+        {
+            foreach (var number in PeriodontalCalculations.PermanentArchOrder)
+                PeriodontalChartFactory.EnsureTooth(_exam, number);
+            SelectTooth(_selectedTooth ?? 16);
+            _compareExamId = _exams.FirstOrDefault(x => x.Id != _exam.Id)?.Id ?? 0;
+        }
+    }
+
+    private void SelectTooth(int toothNumber)
+    {
+        if (_exam == null)
+            return;
+        _selectedTooth = toothNumber;
+        _selected = PeriodontalChartFactory.EnsureTooth(_exam, toothNumber);
+    }
+
+    private async Task CreateExamAsync(bool copyLatest)
+    {
+        _busy = true;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PerioApi.CreateAsync(PatientId, copyLatest);
+                return (response.Exam, response.Error);
+            },
+            AuthService.IsTokenError);
+        _busy = false;
+        if (result.Error != null)
+        {
+            ShowToast(error: result.Error);
+            _error = result.Error;
+            return;
+        }
+
+        _error = null;
+        ShowToast(success: copyLatest
+            ? "Nueva evaluación creada a partir de la anterior. Las piezas ausentes del odontograma quedan marcadas."
+            : "Evaluación en blanco creada. Las piezas ausentes del odontograma quedan marcadas.");
+        await LoadListAndOpen(result.Data?.Id);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_exam == null)
+        {
+            ShowToast(error: "No hay una evaluación seleccionada.");
+            return;
+        }
+
+        _busy = true;
+        var request = new SavePeriodontalExamRequest
+        {
+            ExaminedAt = _exam.ExaminedAt,
+            Notes = _exam.Notes,
+            Teeth = _exam.Teeth
+        };
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PerioApi.SaveAsync(_exam.Id, request);
+                return (response.Exam, response.Error);
+            },
+            AuthService.IsTokenError);
+        _busy = false;
+        if (result.Error != null)
+        {
+            ShowToast(error: result.Error);
+            _error = result.Error;
+            return;
+        }
+
+        _error = null;
+        ShowToast(success: "Evaluación periodontal guardada.");
+        await LoadListAndOpen(result.Data?.Id ?? _exam.Id);
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_exam == null)
+            return;
+        _busy = true;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PerioApi.DeleteAsync(_exam.Id);
+                return (response.Success, response.Error);
+            },
+            AuthService.IsTokenError);
+        _busy = false;
+        _confirmDelete = false;
+        if (!result.Data || result.Error != null)
+        {
+            ShowToast(error: result.Error ?? "No se pudo eliminar.");
+            _error = result.Error ?? "No se pudo eliminar.";
+            return;
+        }
+
+        ShowToast(success: "Evaluación eliminada.");
+        _exam = null;
+        await LoadAsync();
+    }
+
+    private async Task CompareAsync()
+    {
+        if (_exam == null || _compareExamId <= 0)
+            return;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PerioApi.CompareAsync(_compareExamId, _exam.Id);
+                return (response.Compare, response.Error);
+            },
+            AuthService.IsTokenError);
+        if (result.Error != null)
+        {
+            ShowToast(error: result.Error);
+            _error = result.Error;
+            return;
+        }
+        _compare = result.Data;
+    }
+
+    private async Task LoadListAndOpen(int? examId)
+    {
+        var list = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PerioApi.ListAsync(PatientId);
+                return (response.Items, response.Error);
+            },
+            AuthService.IsTokenError);
+        _exams = list.Data ?? [];
+        if (examId.HasValue)
+            await OpenExamAsync(examId.Value);
+        else if (_exams.Count > 0)
+            await OpenExamAsync(_exams[0].Id);
+    }
+
+    private void ShowToast(string? success = null, string? error = null)
+    {
+        _toast = success;
+        _toastError = error;
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+        _ = DismissToastLaterAsync(token);
+    }
+
+    private async Task DismissToastLaterAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(string.IsNullOrEmpty(_toastError) ? 4500 : 7000, token);
+            if (token.IsCancellationRequested)
+                return;
+            _toast = null;
+            _toastError = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+}

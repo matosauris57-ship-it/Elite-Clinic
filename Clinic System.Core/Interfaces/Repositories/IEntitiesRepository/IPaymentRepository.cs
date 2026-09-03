@@ -10,9 +10,11 @@
         PaymentStatus? status,
         PaymentMethod? method,
         int pageNumber,
-        int pageSize);
+        int pageSize,
+        string? search = null);
 
         Task<Payment> GetPaymentDetailsByIdAsync(int id);
+        Task<Payment?> GetPaymentWithLinesAsync(int id, CancellationToken cancellationToken = default);
         Task<(decimal total, decimal cash, decimal insta, decimal card, int count)> GetDailyTotalsAsync(DateTime date, CancellationToken cancellationToken = default);
         Task<Payment?> GetPaymentByAppointmentIdAsync(int appointmentId);
 

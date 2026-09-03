@@ -1,0 +1,100 @@
+@page "/facturacion/{PaymentId:int}/imprimir"
+@layout PrintLayout
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "facturacion.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject BillingMaintenanceService BillingService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Factura #@PaymentId</PageTitle>
+
+<div class="invoice-print-page">
+    <div class="invoice-print-toolbar no-print">
+        <a class="btn-outline" href="@BackHref">@BackLabel</a>
+        <div class="invoice-print-modes">
+            <a class="@(ShowLineDetails ? "btn-primary" : "btn-outline")" href="@ModeUrl("detalle")">Con detalle</a>
+            <a class="@(ShowLineDetails ? "btn-outline" : "btn-primary")" href="@ModeUrl("resumen")">Solo total</a>
+        </div>
+        <button class="btn-primary" disabled="@_loading" @onclick="PrintAsync">Imprimir</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_loading || _payment == null)
+    {
+        <AnimatedLoader Message="Cargando factura..." />
+    }
+    else
+    {
+        <InvoiceDocument Payment="@_payment" Lines="@_lines" ShowLineDetails="@ShowLineDetails" />
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int PaymentId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "vista")]
+    public string? Vista { get; set; }
+
+    [SupplyParameterFromQuery(Name = "volver")]
+    public string? Volver { get; set; }
+
+    private PaymentListItem? _payment;
+    private List<InvoiceLineItem> _lines = [];
+    private bool _loading = true;
+    private string? _error;
+
+    private bool ShowLineDetails => !string.Equals(Vista, "resumen", StringComparison.OrdinalIgnoreCase);
+    private bool HasPatientReturn => IsSafeReturn(Volver);
+    private string BackHref => HasPatientReturn ? Volver! : "/facturacion";
+    private string BackLabel => HasPatientReturn ? "Volver a la ficha" : "Volver a facturación";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var paymentTask = BillingService.GetPaymentAsync(PaymentId);
+        var linesTask = BillingService.GetInvoiceLinesAsync(PaymentId);
+        var (payment, paymentError) = await paymentTask;
+        var (lines, linesError) = await linesTask;
+        _payment = payment;
+        _lines = lines;
+        _error = paymentError ?? linesError;
+        if (_payment == null && string.IsNullOrWhiteSpace(_error))
+            _error = "No se encontró el pago.";
+        _loading = false;
+    }
+
+    private string ModeUrl(string vista)
+    {
+        var query = $"vista={vista}";
+        if (HasPatientReturn)
+            query += $"&volver={Uri.EscapeDataString(Volver!)}";
+        var uri = Navigation.ToAbsoluteUri($"/facturacion/{PaymentId}/imprimir?{query}");
+        return uri.PathAndQuery;
+    }
+
+    private static bool IsSafeReturn(string? href) =>
+        !string.IsNullOrWhiteSpace(href)
+        && href.StartsWith('/')
+        && !href.StartsWith("//");
+
+    private async Task PrintAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareUi.printPage");
+        }
+        catch
+        {
+        }
+    }
+}

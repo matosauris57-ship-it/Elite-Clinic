@@ -1,0 +1,32 @@
+@using Clinic_System.Core.Dashboard
+
+<DashboardWidgetFrame Item="Item"
+                      Title="@Definition.Title"
+                      EditMode="EditMode"
+                      Required="Definition.Required"
+                      HasSettings="@HasSettings"
+                      OnHide="Hide"
+                      OnConfigure="Configure"
+                      OnPreset="ApplyPreset">
+    <DashboardWidgetHost WidgetKey="@Item.WidgetKey" Data="Data" Placement="Item" OnRetry="OnRetry" />
+</DashboardWidgetFrame>
+
+@code {
+    [Parameter] public DashboardWidgetPlacement Item { get; set; } = new();
+    [Parameter] public DashboardWidgetDefinition Definition { get; set; } = null!;
+    [Parameter] public DashboardData? Data { get; set; }
+    [Parameter] public bool EditMode { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public EventCallback<string> OnHide { get; set; }
+    [Parameter] public EventCallback<string> OnConfigure { get; set; }
+    [Parameter] public EventCallback<(string Key, string Preset)> OnPreset { get; set; }
+
+    private bool HasSettings =>
+        Item.WidgetKey is DashboardWidgetKeys.RevenueSummary
+            or DashboardWidgetKeys.UpcomingAppointments
+            or DashboardWidgetKeys.RecentActivity;
+
+    private Task Hide() => OnHide.InvokeAsync(Item.WidgetKey);
+    private Task Configure() => OnConfigure.InvokeAsync(Item.WidgetKey);
+    private Task ApplyPreset(string preset) => OnPreset.InvokeAsync((Item.WidgetKey, preset));
+}

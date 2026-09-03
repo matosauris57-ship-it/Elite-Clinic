@@ -1,0 +1,23 @@
+<div class="widget dash-panel">
+    <div class="widget-head">
+        <h3>Estado del sistema</h3>
+        <span class="status-pill @(string.IsNullOrWhiteSpace(ApiError) ? "online" : "")">
+            <span class="status-dot"></span>
+            @(string.IsNullOrWhiteSpace(ApiError) ? "API EN LÍNEA" : "SIN CONEXIÓN")
+        </span>
+    </div>
+    @if (string.IsNullOrWhiteSpace(ApiError))
+    {
+        <p class="dash-panel-sub">El panel está conectado a la API clínica.</p>
+    }
+    else
+    {
+        <div class="dash-empty">
+            <p>@ApiError</p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? ApiError { get; set; }
+}

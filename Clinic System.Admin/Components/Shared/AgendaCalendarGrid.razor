@@ -1,0 +1,129 @@
+@using DentalCare.Admin.Models
+
+<div class="agenda-cal @(_days.Count == 1 ? "is-daily" : "is-weekly")">
+    <div class="agenda-cal-head">
+        <button type="button" class="agenda-cal-arrow" disabled="@Disabled" @onclick="OnPrev" title="Anterior">‹</button>
+        <div class="agenda-cal-days" style="@GridTemplate">
+            <span class="agenda-cal-time-col"></span>
+            @foreach (var day in _days)
+            {
+                <button type="button"
+                        class="agenda-cal-day-head @GetDayHeadClass(day)"
+                        disabled="@Disabled"
+                        title="@(IsOpenOn(day) ? null : "Clínica cerrada")"
+                        @onclick="() => OnSelectDay.InvokeAsync(day)">
+                    <span class="agenda-cal-day-name">@day.ToString("dddd", _culture)</span>
+                    <span class="agenda-cal-day-num">@day.ToString("dd")</span>
+                </button>
+            }
+            <span class="agenda-cal-time-col"></span>
+        </div>
+        <button type="button" class="agenda-cal-arrow" disabled="@Disabled" @onclick="OnNext" title="Siguiente">›</button>
+    </div>
+
+    <div class="agenda-cal-scroll">
+        @foreach (var slot in Slots)
+        {
+            <div class="agenda-cal-row" style="@GridTemplate">
+                <div class="agenda-cal-time-col">@slot.ToString(@"hh\:mm")</div>
+                @foreach (var day in _days)
+                {
+                    var slotAppointments = GetAppointmentsForCell(day, slot);
+                    var isOpen = IsOpenOn(day);
+                    <div class="agenda-cal-cell @(slotAppointments.Count > 0 ? "has-appt" : isOpen ? "is-free" : "is-closed")">
+                        @if (slotAppointments.Count > 0)
+                        {
+                            @foreach (var appt in slotAppointments)
+                            {
+                                <button type="button"
+                                        class="agenda-cal-block @GetBlockClass(appt) @(IsHighlighted(appt) ? "highlight" : "")"
+                                        disabled="@Saving"
+                                        title="@($"{appt.PatientFullName} · {appt.DoctorName}")"
+                                        @onclick="() => OnOpenDetail.InvokeAsync(appt)"
+                                        @onclick:stopPropagation="true">
+                                    <span class="agenda-cal-block-name">@appt.PatientFullName</span>
+                                    <span class="agenda-cal-block-meta">@appt.DoctorName</span>
+                                </button>
+                            }
+                        }
+                        else if (isOpen)
+                        {
+                            <button type="button"
+                                    class="agenda-cal-free"
+                                    disabled="@Disabled"
+                                    title="Agendar en este horario"
+                                    @onclick="() => OnBookSlot.InvokeAsync((day, slot))">
+                                <Icon Name="plus" Class="agenda-cal-plus" />
+                            </button>
+                        }
+                    </div>
+                }
+                <div class="agenda-cal-time-col">@slot.ToString(@"hh\:mm")</div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo _culture = new("es-ES");
+
+    [Parameter] public IReadOnlyList<DateTime> Days { get; set; } = [];
+    [Parameter] public IReadOnlyList<TimeSpan> Slots { get; set; } = [];
+    [Parameter] public int SlotDurationMinutes { get; set; } = 15;
+    [Parameter] public IReadOnlyList<int> WorkingDays { get; set; } = [0, 1, 2, 3, 4, 5, 6];
+    [Parameter] public IEnumerable<AppointmentAgendaItem> Appointments { get; set; } = [];
+    [Parameter] public DateTime SelectedDate { get; set; }
+    [Parameter] public int? HighlightId { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool Saving { get; set; }
+    [Parameter] public EventCallback OnPrev { get; set; }
+    [Parameter] public EventCallback OnNext { get; set; }
+    [Parameter] public EventCallback<DateTime> OnSelectDay { get; set; }
+    [Parameter] public EventCallback<AppointmentAgendaItem> OnOpenDetail { get; set; }
+    [Parameter] public EventCallback<(DateTime Date, TimeSpan Time)> OnBookSlot { get; set; }
+
+    private IReadOnlyList<DateTime> _days => Days;
+
+    private string GridTemplate =>
+        $"grid-template-columns: 3.25rem repeat({Math.Max(_days.Count, 1)}, minmax(7.5rem, 1fr)) 3.25rem";
+
+    private bool IsHighlighted(AppointmentAgendaItem appt) =>
+        HighlightId.HasValue && appt.Id == HighlightId.Value;
+
+    private bool IsOpenOn(DateTime day) =>
+        WorkingDays.Count == 0 || WorkingDays.Contains((int)day.DayOfWeek);
+
+    private string GetDayHeadClass(DateTime day)
+    {
+        var classes = new List<string>();
+        if (day.Date == DateTime.Today) classes.Add("is-today");
+        if (day.Date == SelectedDate.Date) classes.Add("is-selected");
+        if (!IsOpenOn(day)) classes.Add("is-closed");
+        return string.Join(" ", classes);
+    }
+
+    private List<AppointmentAgendaItem> GetAppointmentsForCell(DateTime day, TimeSpan slot)
+    {
+        var minutes = SlotDurationMinutes is < 5 or > 120 ? 15 : SlotDurationMinutes;
+        var next = slot.Add(TimeSpan.FromMinutes(minutes));
+        return Appointments.Where(a =>
+        {
+            var dt = a.ParsedDate;
+            return dt.HasValue
+                && dt.Value.Date == day.Date
+                && dt.Value.TimeOfDay >= slot
+                && dt.Value.TimeOfDay < next;
+        }).ToList();
+    }
+
+    private static string GetBlockClass(AppointmentAgendaItem appt) => appt.Status switch
+    {
+        "Pending" => "block-pending",
+        "Confirmed" => "block-confirmed",
+        "Rescheduled" => "block-rescheduled",
+        "Completed" => "block-completed",
+        "Cancelled" => "block-cancelled",
+        "NoShow" => "block-noshow",
+        _ => "block-pending"
+    };
+}

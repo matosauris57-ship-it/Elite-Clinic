@@ -32,7 +32,12 @@
         {
             logger.LogInformation("Handling BookAppointmentCommand for PatientId: {PatientId}, DoctorId: {DoctorId}", request.PatientId, request.DoctorId);
 
-            var (authorizedId, errorResponse) = await GetAuthorizedPatientId(request.PatientId);
+            var createPermission = AdminPermissionCatalog.Build(
+                "agendar-cita",
+                AdminPermissionCatalog.Actions.Create);
+            var (authorizedId, errorResponse) = await GetAuthorizedPatientId(
+                request.PatientId,
+                createPermission);
 
             if (errorResponse != null) return errorResponse;
 
@@ -45,7 +50,9 @@
                                request.DoctorId,
                                request.AppointmentDate,
                                request.AppointmentTime,
-                               cancellationToken
+                               cancellationToken,
+                               request.TreatmentProcedureId,
+                               request.QuotedAmount
                            );
 
                 var appointmentDto = mapper.Map<AppointmentDTO>(newAppointment);
@@ -78,17 +85,22 @@
 
                 await notificationsService.SendToGroupAsync("Admins", notificationDto);
 
-                return Created(appointmentDto, "Appointment booked successfully.");
+                return Created(appointmentDto, "Cita agendada correctamente.");
             }
-            catch (SlotAlreadyBookedException ex) when (ex.Message.Contains("not available"))
+            catch (SlotAlreadyBookedException ex)
             {
                 logger.LogWarning("Booking failed: {ErrorMessage}", ex.Message);
-                return BadRequest<AppointmentDTO>(ex.Message);
+                return BadRequest<AppointmentDTO>("El horario seleccionado ya no está disponible. Elija otro horario.");
+            }
+            catch (ValidationException ex)
+            {
+                logger.LogWarning("Booking validation failed: {ErrorMessage}", ex.Message);
+                return BadRequest<AppointmentDTO>("No se puede agendar una cita en una fecha u hora pasada.");
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "An error occurred while booking appointment for PatientId: {PatientId}, DoctorId: {DoctorId}", request.PatientId, request.DoctorId);
-                return BadRequest<AppointmentDTO>("Error occurred while processing booking: " + ex.Message);
+                return BadRequest<AppointmentDTO>("No se pudo agendar la cita. Inténtelo nuevamente.");
             }
         }
     }

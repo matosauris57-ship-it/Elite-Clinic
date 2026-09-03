@@ -6,5 +6,7 @@
         public int DoctorId { get; set; }
         public DateTime AppointmentDate { get; set; }
         public TimeSpan AppointmentTime { get; set; }
+        public int? TreatmentProcedureId { get; set; }
+        public decimal? QuotedAmount { get; set; }
     }
 }

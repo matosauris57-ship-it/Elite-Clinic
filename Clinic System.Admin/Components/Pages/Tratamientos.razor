@@ -1,0 +1,437 @@
+@page "/tratamientos"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "tratamientos.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject TreatmentProcedureMaintenanceService ProcedureService
+@inject AuthService AuthService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Catálogo de tratamientos — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page tx-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Catálogo de procedimientos</h1>
+            <p>Servicios que se ofrecen en la clínica. El precio se indica al agendar o facturar.</p>
+        </div>
+        <div class="command-actions">
+            <a href="/tratamientos-clinicos" class="btn-outline">
+                <Icon Name="activity" Class="btn-svg" />
+                Ver tratamientos clínicos
+            </a>
+            @if (_canCreateProcedure)
+            {
+                <button class="btn-primary" @onclick="OpenCreateProcedureModal">
+                    <Icon Name="plus" Class="btn-svg" />
+                    Nuevo procedimiento
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="agenda-kpi-row">
+        <div class="agenda-kpi"><span class="agenda-kpi-value">@_procedures.Count</span><span class="agenda-kpi-label">Total</span></div>
+        <div class="agenda-kpi accent-green"><span class="agenda-kpi-value">@ActiveCount</span><span class="agenda-kpi-label">Activos</span></div>
+        <div class="agenda-kpi accent-purple"><span class="agenda-kpi-value">@InactiveCount</span><span class="agenda-kpi-label">Inactivos</span></div>
+        <div class="agenda-kpi accent-teal"><span class="agenda-kpi-value">@CategoryCount</span><span class="agenda-kpi-label">Categorías</span></div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_catalogLoadError))
+    {
+        <ErrorBanner Message="@_catalogLoadError" OnRetry="ReloadCatalogAsync" />
+    }
+
+    <div class="tx-chip-row">
+        <button class="tx-chip @(_categoryFilter == "" ? "active" : "")" @onclick='() => _categoryFilter = ""'>Todas</button>
+        @foreach (var cat in Categories)
+        {
+            <button class="tx-chip @(_categoryFilter == cat ? "active" : "")" @onclick="() => _categoryFilter = cat">@FormatCategory(cat)</button>
+        }
+    </div>
+
+    <div class="maintenance-toolbar">
+        <div class="search-field maintenance-search">
+            <Icon Name="search" Class="field-icon" />
+            <input type="text" placeholder="Buscar por nombre, código o categoría..."
+                   @bind="_catalogSearch" @bind:event="oninput" />
+        </div>
+        <select class="form-input maintenance-status-filter" @bind="_statusFilter">
+            <option value="all">Todos los estados</option>
+            <option value="active">Activos</option>
+            <option value="inactive">Inactivos</option>
+        </select>
+        <span class="maintenance-count">@FilteredProcedures.Count() procedimiento(s)</span>
+    </div>
+
+    @if (_catalogLoading)
+    {
+        <AnimatedLoader Message="Cargando catálogo..." />
+    }
+    else if (!FilteredProcedures.Any() && string.IsNullOrEmpty(_catalogLoadError))
+    {
+        <div class="agenda-empty-state">
+            <h3>No hay procedimientos para mostrar</h3>
+            <p>@(HasCatalogFilters ? "Ningún procedimiento coincide con los filtros." : "Aún no hay procedimientos en el catálogo.")</p>
+            <div class="agenda-empty-actions">
+                @if (HasCatalogFilters)
+                {
+                    <button class="btn-outline" @onclick="ClearCatalogFilters">Limpiar filtros</button>
+                }
+                else if (_canCreateProcedure)
+                {
+                    <button class="btn-primary" @onclick="OpenCreateProcedureModal">Nuevo procedimiento</button>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="tx-procedure-grid">
+            @foreach (var item in FilteredProcedures)
+            {
+                <article class="tx-procedure-card @(item.IsActive ? "" : "is-inactive")">
+                    <div class="tx-procedure-card-top">
+                        <span class="widget-pill tx-cat @GetCategoryClass(item.Category)">@FormatCategory(item.Category)</span>
+                        <span class="status-badge @(item.IsActive ? "status-active" : "status-inactive")">
+                            @(item.IsActive ? "Activo" : "Inactivo")
+                        </span>
+                    </div>
+                    <h3>@item.Name</h3>
+                    <p class="tx-procedure-code">@item.Code</p>
+                    <div class="tx-procedure-meta">
+                        <span class="tx-duration">
+                            <Icon Name="clock" Class="tx-meta-icon" />
+                            @item.DurationMinutes min
+                        </span>
+                    </div>
+                    <div class="tx-procedure-actions">
+                        @if (_canEditProcedure)
+                        {
+                            <button class="btn-table" @onclick="() => OpenEditProcedureModal(item)">Editar</button>
+                        }
+                        @if (_canDeleteProcedure)
+                        {
+                            <button class="btn-table btn-table-danger" @onclick="() => OpenDeleteProcedureModal(item)">Eliminar</button>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@if (_showProcedureModal)
+{
+    <div class="modal-overlay" @onclick="CloseProcedureModal">
+        <div class="modal-panel modal-panel-wide" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@(_isProcedureEdit ? "Editar procedimiento" : "Nuevo procedimiento")</h2>
+                <button class="modal-close" @onclick="CloseProcedureModal">×</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_procedureFormError))
+            {
+                <div class="wizard-error">@_procedureFormError</div>
+            }
+
+            <div class="new-patient-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Código</label>
+                        <input class="form-input" @bind="_procedureForm.Code" placeholder="limpieza-dental" />
+                    </div>
+                    <div class="form-group">
+                        <label>Categoría</label>
+                        <select class="form-input" @bind="_procedureForm.Category">
+                            @foreach (var cat in Categories)
+                            {
+                                <option value="@cat">@cat</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nombre</label>
+                        <input class="form-input" @bind="_procedureForm.Name" />
+                    </div>
+                    <div class="form-group">
+                        <label>Duración (min)</label>
+                        <input class="form-input" type="number" min="1" @bind="_procedureForm.DurationMinutes" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" @bind="_procedureForm.IsActive" />
+                            Activo en catálogo
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseProcedureModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_procedureSaving" @onclick="SaveProcedureAsync">
+                    @(_procedureSaving ? "Guardando..." : "Guardar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showProcedureDeleteModal && _procedureToDelete != null)
+{
+    <div class="modal-overlay" @onclick="CloseProcedureDeleteModal">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Eliminar procedimiento</h2>
+                <button class="modal-close" @onclick="CloseProcedureDeleteModal">×</button>
+            </div>
+            <p class="modal-confirm-text">¿Eliminar <strong>@_procedureToDelete.Name</strong> del catálogo?</p>
+            @if (!string.IsNullOrEmpty(_procedureDeleteError))
+            {
+                <div class="wizard-error">@_procedureDeleteError</div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseProcedureDeleteModal">Cancelar</button>
+                <button class="btn-danger" disabled="@_procedureDeleting" @onclick="ConfirmDeleteProcedureAsync">
+                    @(_procedureDeleting ? "Eliminando..." : "Eliminar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly string[] Categories =
+    [
+        "PREVENTIVO", "CIRUGÍA", "ORTODONCIA", "ESTÉTICA",
+        "ENDODONCIA", "IMPLANTOLOGÍA", "DIAGNÓSTICO"
+    ];
+
+    private List<TreatmentProcedureListItem> _procedures = [];
+    private string _catalogSearch = string.Empty;
+    private string _categoryFilter = string.Empty;
+    private string _statusFilter = "all";
+    private bool _catalogLoading = true;
+    private string? _catalogLoadError;
+
+    private bool _showProcedureModal;
+    private bool _isProcedureEdit;
+    private bool _procedureSaving;
+    private string? _procedureFormError;
+    private CreateTreatmentProcedureRequest _procedureForm = new();
+    private int _editingProcedureId;
+
+    private bool _showProcedureDeleteModal;
+    private TreatmentProcedureListItem? _procedureToDelete;
+    private bool _procedureDeleting;
+    private string? _procedureDeleteError;
+
+    private bool _canCreateProcedure;
+    private bool _canEditProcedure;
+    private bool _canDeleteProcedure;
+
+    private int ActiveCount => _procedures.Count(p => p.IsActive);
+    private int InactiveCount => _procedures.Count(p => !p.IsActive);
+    private int CategoryCount => _procedures.Select(p => p.Category).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+    private bool HasCatalogFilters =>
+        !string.IsNullOrWhiteSpace(_catalogSearch) ||
+        !string.IsNullOrWhiteSpace(_categoryFilter) ||
+        _statusFilter != "all";
+
+    private IEnumerable<TreatmentProcedureListItem> FilteredProcedures =>
+        _procedures.Where(p =>
+        {
+            if (!string.IsNullOrWhiteSpace(_categoryFilter) &&
+                !p.Category.Equals(_categoryFilter, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (_statusFilter == "active" && !p.IsActive)
+                return false;
+            if (_statusFilter == "inactive" && p.IsActive)
+                return false;
+
+            if (string.IsNullOrWhiteSpace(_catalogSearch))
+                return true;
+
+            return p.Name.Contains(_catalogSearch, StringComparison.OrdinalIgnoreCase) ||
+                   p.Category.Contains(_catalogSearch, StringComparison.OrdinalIgnoreCase) ||
+                   p.Code.Contains(_catalogSearch, StringComparison.OrdinalIgnoreCase);
+        });
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        _canCreateProcedure = PermissionService.HasPermission(user, "tratamientos.create");
+        _canEditProcedure = PermissionService.HasPermission(user, "tratamientos.edit");
+        _canDeleteProcedure = PermissionService.HasPermission(user, "tratamientos.delete");
+        await ReloadCatalogAsync();
+    }
+
+    private void ClearCatalogFilters()
+    {
+        _catalogSearch = string.Empty;
+        _categoryFilter = string.Empty;
+        _statusFilter = "all";
+    }
+
+    private async Task ReloadCatalogAsync()
+    {
+        _catalogLoading = true;
+        _catalogLoadError = null;
+
+        var (items, error) = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var result = await ProcedureService.GetProceduresAsync();
+                return (result.Items, result.Error);
+            },
+            AuthService.IsTokenError);
+
+        _procedures = items;
+        _catalogLoadError = error;
+        _catalogLoading = false;
+    }
+
+    private void OpenCreateProcedureModal()
+    {
+        _isProcedureEdit = false;
+        _procedureFormError = null;
+        _procedureForm = new CreateTreatmentProcedureRequest { Category = Categories[0], DurationMinutes = 30 };
+        _showProcedureModal = true;
+    }
+
+    private void OpenEditProcedureModal(TreatmentProcedureListItem item)
+    {
+        _isProcedureEdit = true;
+        _procedureFormError = null;
+        _editingProcedureId = item.Id;
+        _procedureForm = new CreateTreatmentProcedureRequest
+        {
+            Code = item.Code,
+            Category = item.Category,
+            Name = item.Name,
+            DurationMinutes = item.DurationMinutes,
+            IsActive = item.IsActive
+        };
+        _showProcedureModal = true;
+    }
+
+    private void CloseProcedureModal()
+    {
+        _showProcedureModal = false;
+        _procedureFormError = null;
+    }
+
+    private async Task SaveProcedureAsync()
+    {
+        _procedureFormError = null;
+        _procedureSaving = true;
+
+        if (string.IsNullOrWhiteSpace(_procedureForm.Code) ||
+            string.IsNullOrWhiteSpace(_procedureForm.Name) ||
+            string.IsNullOrWhiteSpace(_procedureForm.Category))
+        {
+            _procedureFormError = "Código, nombre y categoría son obligatorios.";
+            _procedureSaving = false;
+            return;
+        }
+
+        if (_procedureForm.DurationMinutes <= 0)
+        {
+            _procedureFormError = "La duración debe ser mayor a 0.";
+            _procedureSaving = false;
+            return;
+        }
+
+        _procedureForm.DoctorPrices = [];
+        _procedureForm.Price = 0;
+
+        if (_isProcedureEdit)
+        {
+            var update = new UpdateTreatmentProcedureRequest
+            {
+                Code = _procedureForm.Code,
+                Category = _procedureForm.Category,
+                Name = _procedureForm.Name,
+                Price = 0,
+                DurationMinutes = _procedureForm.DurationMinutes,
+                IsActive = _procedureForm.IsActive,
+                DoctorPrices = []
+            };
+            var (success, error) = await ProcedureService.UpdateProcedureAsync(_editingProcedureId, update);
+            if (!success)
+            {
+                _procedureFormError = error;
+                _procedureSaving = false;
+                return;
+            }
+        }
+        else
+        {
+            var (success, error, _) = await ProcedureService.CreateProcedureAsync(_procedureForm);
+            if (!success)
+            {
+                _procedureFormError = error;
+                _procedureSaving = false;
+                return;
+            }
+        }
+
+        _procedureSaving = false;
+        _showProcedureModal = false;
+        await ReloadCatalogAsync();
+    }
+
+    private void OpenDeleteProcedureModal(TreatmentProcedureListItem item)
+    {
+        _procedureToDelete = item;
+        _procedureDeleteError = null;
+        _showProcedureDeleteModal = true;
+    }
+
+    private void CloseProcedureDeleteModal()
+    {
+        _showProcedureDeleteModal = false;
+        _procedureToDelete = null;
+    }
+
+    private async Task ConfirmDeleteProcedureAsync()
+    {
+        if (_procedureToDelete == null) return;
+        _procedureDeleting = true;
+        _procedureDeleteError = null;
+
+        var (success, error) = await ProcedureService.DeleteProcedureAsync(_procedureToDelete.Id);
+        if (!success)
+        {
+            _procedureDeleteError = error;
+            _procedureDeleting = false;
+            return;
+        }
+
+        _procedureDeleting = false;
+        CloseProcedureDeleteModal();
+        await ReloadCatalogAsync();
+    }
+
+    private static string FormatCategory(string category) =>
+        string.IsNullOrWhiteSpace(category)
+            ? category
+            : char.ToUpper(category[0]) + category[1..].ToLower();
+
+    private static string GetCategoryClass(string category) => category.ToUpperInvariant() switch
+    {
+        "PREVENTIVO" => "cat-preventivo",
+        "CIRUGÍA" or "CIRUGIA" => "cat-cirugia",
+        "ORTODONCIA" => "cat-orto",
+        "ESTÉTICA" or "ESTETICA" => "cat-estetica",
+        "ENDODONCIA" => "cat-endo",
+        "IMPLANTOLOGÍA" or "IMPLANTOLOGIA" => "cat-implante",
+        "DIAGNÓSTICO" or "DIAGNOSTICO" => "cat-diag",
+        _ => ""
+    };
+}
