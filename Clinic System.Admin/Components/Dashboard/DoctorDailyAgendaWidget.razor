@@ -1,0 +1,132 @@
+@using System.Text
+@inject WhatsAppMessageSettingsService WhatsAppSettings
+@inject IJSRuntime JS
+
+@if (Groups.Count == 0)
+{
+    <WidgetState Message="No hay médicos con citas activas hoy." />
+}
+else
+{
+    <div class="doctor-agenda-widget">
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="doctor-agenda-error">@_error</div>
+        }
+
+        @foreach (var group in Groups)
+        {
+            <article class="doctor-agenda-card">
+                <div class="doctor-agenda-head">
+                    <div>
+                        <strong>@group.DoctorName</strong>
+                        <span>@group.Appointments.Count cita(s)</span>
+                    </div>
+                    <button type="button"
+                            class="btn-outline btn-sm"
+                            disabled="@(_openingDoctorId == group.DoctorId)"
+                            @onclick="() => OpenWhatsAppAsync(group)">
+                        @(_openingDoctorId == group.DoctorId ? "Abriendo..." : "Enviar agenda WS")
+                    </button>
+                </div>
+
+                <div class="doctor-agenda-list">
+                    @foreach (var appt in group.Appointments.Take(4))
+                    {
+                        <div class="doctor-agenda-row">
+                            <span>@FormatTime(appt)</span>
+                            <strong>@appt.PatientFullName</strong>
+                            <em>@FormatStatus(appt.Status)</em>
+                        </div>
+                    }
+                    @if (group.Appointments.Count > 4)
+                    {
+                        <div class="doctor-agenda-more">+@(group.Appointments.Count - 4) más</div>
+                    }
+                </div>
+            </article>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<AppointmentAgendaItem> Items { get; set; } = [];
+
+    private int? _openingDoctorId;
+    private string? _error;
+
+    private List<DoctorAgendaGroup> Groups => Items
+        .Where(a => !string.IsNullOrWhiteSpace(a.DoctorName))
+        .GroupBy(a => new { a.DoctorId, a.DoctorName, a.DoctorPhone })
+        .Select(g => new DoctorAgendaGroup(
+            g.Key.DoctorId,
+            g.Key.DoctorName,
+            g.Key.DoctorPhone,
+            g.OrderBy(a => a.ParsedDate ?? DateTime.MaxValue).ToList()))
+        .OrderBy(g => g.DoctorName)
+        .ToList();
+
+    private async Task OpenWhatsAppAsync(DoctorAgendaGroup group)
+    {
+        _openingDoctorId = group.DoctorId;
+        _error = null;
+        try
+        {
+            if (!WhatsAppMessageSettingsService.TryNormalizePhone(
+                    group.DoctorPhone,
+                    WhatsAppSettings.Get().DefaultCountryCode,
+                    out var digits,
+                    out var phoneError))
+            {
+                _error = phoneError?.Replace("paciente", "médico", StringComparison.OrdinalIgnoreCase)
+                    ?? "El médico no tiene teléfono válido para WhatsApp.";
+                return;
+            }
+
+            var message = BuildAgendaMessage(group);
+            var url = $"https://wa.me/{digits}?text={Uri.EscapeDataString(message)}";
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        finally
+        {
+            _openingDoctorId = null;
+        }
+    }
+
+    private string BuildAgendaMessage(DoctorAgendaGroup group)
+    {
+        var date = group.Appointments
+            .Select(a => a.ParsedDate)
+            .FirstOrDefault(d => d.HasValue)?.Date ?? DateTime.Today;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Hola {group.DoctorName}, esta es su agenda de hoy ({date:dd/MM/yyyy}):");
+
+        foreach (var appt in group.Appointments)
+        {
+            sb.AppendLine($"- {FormatTime(appt)}: {appt.PatientFullName} ({FormatStatus(appt.Status)})");
+        }
+
+        return sb.ToString().Trim();
+    }
+
+    private static string FormatTime(AppointmentAgendaItem appt) =>
+        appt.ParsedDate?.ToString("hh:mm tt") ?? appt.AppointmentDate;
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "Pending" => "Pendiente",
+        "Confirmed" => "Confirmada",
+        "Rescheduled" => "Reagendada",
+        "Completed" => "Completada",
+        "Cancelled" => "Cancelada",
+        "NoShow" => "No asistió",
+        _ => status
+    };
+
+    private sealed record DoctorAgendaGroup(
+        int DoctorId,
+        string DoctorName,
+        string DoctorPhone,
+        List<AppointmentAgendaItem> Appointments);
+}

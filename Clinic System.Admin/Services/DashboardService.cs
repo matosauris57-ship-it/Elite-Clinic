@@ -44,6 +44,7 @@ public class DashboardService
             DashboardWidgetKeys.AppointmentsTodayKpi,
             DashboardWidgetKeys.WaitingCountKpi,
             DashboardWidgetKeys.TodayAppointments,
+            DashboardWidgetKeys.DoctorsDailyAgenda,
             DashboardWidgetKeys.WaitingQueue,
             DashboardWidgetKeys.UpcomingAppointments,
             DashboardWidgetKeys.SmartAlerts);

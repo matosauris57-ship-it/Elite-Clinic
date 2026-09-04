@@ -72,7 +72,8 @@ public class AppointmentWizardState
     public TimeSpan? SelectedTime { get; set; }
     public string Notes { get; set; } = string.Empty;
     public bool ReminderEnabled { get; set; } = true;
-    public string ReminderChannel { get; set; } = "WhatsApp";
+    public bool NotifyViaWhatsApp { get; set; } = true;
+    public bool NotifyViaEmail { get; set; } = true;
     public string Room { get; set; } = "Sala 1";
     public string QuotedPriceInput { get; set; } = string.Empty;
     public bool IsSuccess { get; set; }
@@ -145,4 +146,28 @@ public class NoShowAppointmentRequest
 {
     public int AppointmentId { get; set; }
     public int DoctorId { get; set; }
+}
+
+public class AttendanceConfirmationTokenResult
+{
+    public string Token { get; set; } = string.Empty;
+    public DateTimeOffset ExpiresAt { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public string DoctorName { get; set; } = string.Empty;
+    public DateTime AppointmentDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class AttendanceConfirmationDetails
+{
+    public int Id { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public string DoctorName { get; set; } = string.Empty;
+    public DateTime AppointmentDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class AttendanceConfirmationResponseResult
+{
+    public string Status { get; set; } = string.Empty;
 }

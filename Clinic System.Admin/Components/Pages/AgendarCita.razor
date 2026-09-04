@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject WhatsAppMessageSettingsService WhatsAppSettings
 @inject EmailMessageSettingsService EmailMessageSettings
+@inject AttendanceConfirmationService AttendanceService
 @inject IJSRuntime JS
 
 <PageTitle>Agendar Cita — DentalCare Admin</PageTitle>
@@ -34,13 +35,20 @@
             </div>
 
             <div class="success-actions">
-                <button class="btn-primary" @onclick="OpenWhatsAppConfirmation">
+                @if (_state.ReminderEnabled && (_state.NotifyViaWhatsApp || _state.NotifyViaEmail))
+                {
+                    <button class="btn-primary" @onclick="OpenConfirmationDispatch">
+                        <Icon Name="bell" Class="btn-svg" />
+                        Enviar confirmación
+                    </button>
+                }
+                <button class="btn-outline" @onclick="OpenAttendanceWhatsAppAsync">
                     <Icon Name="message-circle" Class="btn-svg" />
-                    Confirmación WhatsApp
+                    Enlace asistencia WhatsApp
                 </button>
-                <button class="btn-outline" @onclick="OpenEmailConfirmation">
+                <button class="btn-outline" @onclick="OpenAttendanceEmailAsync">
                     <Icon Name="mail" Class="btn-svg" />
-                    Confirmación correo
+                    Enlace asistencia correo
                 </button>
                 <button class="btn-outline" @onclick="ResetWizard">
                     <Icon Name="calendar-plus" Class="btn-svg" />
@@ -478,19 +486,31 @@ else
                             <div class="reminder-section">
                                 <div class="reminder-head">
                                     <Icon Name="bell" Class="reminder-icon" />
-                                    <span>Recordatorio automático</span>
+                                    <span>Enviar confirmación al paciente</span>
                                     <label class="ai-toggle small">
                                         <input type="checkbox" @bind="_state.ReminderEnabled" />
                                         <span class="ai-slider"></span>
                                     </label>
                                 </div>
+                                <p class="reminder-hint">Puede elegir WhatsApp, correo, o ambos.</p>
                                 <div class="reminder-channels">
-                                    @foreach (var ch in _reminderChannels)
-                                    {
-                                        <button type="button" class="channel-btn @(_state.ReminderChannel == ch ? "active" : "")"
-                                                @onclick="() => _state.ReminderChannel = ch">@ch</button>
-                                    }
+                                    <button type="button"
+                                            class="channel-btn @(_state.NotifyViaWhatsApp ? "active" : "")"
+                                            disabled="@(!_state.ReminderEnabled)"
+                                            @onclick="() => _state.NotifyViaWhatsApp = !_state.NotifyViaWhatsApp">
+                                        WhatsApp
+                                    </button>
+                                    <button type="button"
+                                            class="channel-btn @(_state.NotifyViaEmail ? "active" : "")"
+                                            disabled="@(!_state.ReminderEnabled)"
+                                            @onclick="() => _state.NotifyViaEmail = !_state.NotifyViaEmail">
+                                        Correo
+                                    </button>
                                 </div>
+                                @if (_state.ReminderEnabled && !_state.NotifyViaWhatsApp && !_state.NotifyViaEmail)
+                                {
+                                    <p class="reminder-hint reminder-hint-warn">Seleccione al menos un canal.</p>
+                                }
                             </div>
                         </div>
                         break;
@@ -592,7 +612,7 @@ else
     private readonly CreatePatientRequest _newPatient = new();
     private readonly System.Globalization.CultureInfo _culture = System.Globalization.CultureInfo.GetCultureInfo("es-ES");
     private readonly string[] _weekDays = ["L", "M", "X", "J", "V", "S", "D"];
-    private readonly string[] _reminderChannels = ["WhatsApp", "EMAIL", "SMS"];
+    private readonly string[] _reminderChannels = ["WhatsApp", "Correo"];
 
     private readonly List<(int Number, string Name, string Icon)> _steps =
     [
@@ -1127,6 +1147,105 @@ else
         }
 
         CloseEmailModal();
+    }
+
+    private void OpenConfirmationDispatch()
+    {
+        if (_state.NotifyViaWhatsApp)
+            OpenWhatsAppConfirmation();
+        if (_state.NotifyViaEmail)
+            OpenEmailConfirmation();
+    }
+
+    private async Task OpenAttendanceWhatsAppAsync()
+    {
+        if (_state.BookedAppointment == null)
+            return;
+
+        var (link, _, error) = await AttendanceService.CreatePublicLinkAsync(_state.BookedAppointment.Id, Navigation.BaseUri);
+        if (string.IsNullOrWhiteSpace(link))
+        {
+            _whatsAppError = error ?? "No se pudo generar el enlace de asistencia.";
+            _whatsAppUrl = null;
+            _whatsAppPreview = null;
+            _showWhatsAppModal = true;
+            return;
+        }
+
+        var phone = !string.IsNullOrWhiteSpace(_state.SelectedPatient?.Phone)
+            ? _state.SelectedPatient.Phone
+            : _state.SelectedPatient?.MobilePhone;
+        if (!WhatsAppMessageSettingsService.TryNormalizePhone(
+                phone,
+                WhatsAppSettings.Get().DefaultCountryCode,
+                out var digits,
+                out var phoneError))
+        {
+            _whatsAppError = phoneError;
+            _whatsAppUrl = null;
+            _whatsAppPreview = null;
+        }
+        else
+        {
+            _whatsAppError = null;
+            _whatsAppPreview = BuildAttendanceConfirmationMessage(link);
+            _whatsAppUrl = $"https://wa.me/{digits}?text={Uri.EscapeDataString(_whatsAppPreview)}";
+        }
+
+        _showWhatsAppModal = true;
+    }
+
+    private async Task OpenAttendanceEmailAsync()
+    {
+        if (_state.BookedAppointment == null)
+            return;
+
+        var (link, _, linkError) = await AttendanceService.CreatePublicLinkAsync(_state.BookedAppointment.Id, Navigation.BaseUri);
+        if (string.IsNullOrWhiteSpace(link))
+        {
+            _emailError = linkError ?? "No se pudo generar el enlace de asistencia.";
+            _emailTo = null;
+            _emailSubject = null;
+            _emailPreview = null;
+            _showEmailModal = true;
+            return;
+        }
+
+        var email = _state.SelectedPatient?.Email;
+        if (!ContactEmail.TryValidate(email, out var normalizedEmail, out var emailError) || string.IsNullOrWhiteSpace(normalizedEmail))
+        {
+            _emailError = emailError ?? "El paciente no tiene correo válido.";
+            _emailTo = null;
+            _emailSubject = null;
+            _emailPreview = null;
+        }
+        else
+        {
+            _emailError = null;
+            _emailTo = normalizedEmail;
+            _emailSubject = "Confirme su asistencia a la cita";
+            _emailPreview = BuildAttendanceConfirmationMessage(link);
+        }
+
+        _showEmailModal = true;
+    }
+
+    private string BuildAttendanceConfirmationMessage(string link)
+    {
+        var when = _state.SelectedDate.HasValue && _state.SelectedTime.HasValue
+            ? _state.SelectedDate.Value.Date.Add(_state.SelectedTime.Value)
+            : (DateTime?)null;
+
+        return $"""
+            Hola {_state.SelectedPatient?.FullName}, confirme si asistirá a su cita en {WhatsAppSettings.Get().ClinicName}:
+
+            Médico: {_state.SelectedDoctor?.FullName}
+            Fecha: {(when.HasValue ? when.Value.ToString("dd/MM/yyyy") : "Pendiente")}
+            Hora: {(when.HasValue ? when.Value.ToString("hh:mm tt") : "Pendiente")}
+
+            Confirme aquí:
+            {link}
+            """;
     }
 
     private void ResetWizard()

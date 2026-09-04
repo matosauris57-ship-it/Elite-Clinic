@@ -14,6 +14,7 @@ namespace Clinic_System.Core.Entities
         public virtual int? TreatmentProcedureId { get; set; }
         public virtual TreatmentProcedure? TreatmentProcedure { get; set; }
         public virtual string? ProcedureDetails { get; set; }
+        public virtual string? MedicalNotes { get; set; }
         public virtual int? ToothNumber { get; set; }
         public virtual ToothSurface? ToothSurface { get; set; }
         public virtual decimal Cost { get; set; }

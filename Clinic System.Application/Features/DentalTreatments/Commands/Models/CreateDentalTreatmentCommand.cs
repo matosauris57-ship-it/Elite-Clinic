@@ -10,5 +10,6 @@ namespace Clinic_System.Application.Features.DentalTreatments.Commands.Models
         public int? ToothNumber { get; set; }
         public ToothSurface? ToothSurface { get; set; }
         public string? ProcedureDetails { get; set; }
+        public string? MedicalNotes { get; set; }
     }
 }

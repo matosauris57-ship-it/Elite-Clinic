@@ -39,6 +39,7 @@ namespace Clinic_System.API
                 builder.Services.AddCustomRateLimiting(builder.Environment.IsDevelopment());
                 builder.Services.AddSignalRServices();
                 builder.Services.AddMessageBrokerServices(builder.Configuration);
+                builder.Services.AddDataProtection();
 
                 builder.Services.AddTransient<INotificationsService, NotificationsService>();
                 builder.Services.AddPersistenceDependencies();

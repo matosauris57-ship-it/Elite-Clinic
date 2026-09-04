@@ -7,6 +7,8 @@ namespace Clinic_System.Application.Features.DentalTreatments.Commands.Validator
             RuleFor(x => x.Id).GreaterThan(0);
             RuleFor(x => x.ProcedureName).NotEmpty().MaximumLength(200);
             RuleFor(x => x.Cost).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.ProcedureDetails).MaximumLength(2000);
+            RuleFor(x => x.MedicalNotes).MaximumLength(4000);
             RuleFor(x => x.TreatmentProcedureId).GreaterThan(0).When(x => x.TreatmentProcedureId.HasValue);
             RuleFor(x => x.ToothNumber!.Value)
                 .Must(FdiToothNumber.IsValid)

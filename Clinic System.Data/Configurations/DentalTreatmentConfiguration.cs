@@ -9,6 +9,7 @@ namespace Clinic_System.Data.Configurations
 
             builder.Property(t => t.ProcedureName).IsRequired().HasMaxLength(200);
             builder.Property(t => t.ProcedureDetails).HasMaxLength(2000);
+            builder.Property(t => t.MedicalNotes).HasMaxLength(4000);
             builder.Property(t => t.Cost).HasColumnType("decimal(18,2)");
             builder.HasCheckConstraint("CK_DentalTreatments_Cost", "[Cost] >= 0");
 

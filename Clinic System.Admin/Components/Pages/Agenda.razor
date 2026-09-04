@@ -7,6 +7,7 @@
 @inject NavigationManager Navigation
 @inject WhatsAppMessageSettingsService WhatsAppSettings
 @inject EmailMessageSettingsService EmailMessageSettings
+@inject AttendanceConfirmationService AttendanceService
 @inject IJSRuntime JS
 
 <PageTitle>Agenda — DentalCare Admin</PageTitle>
@@ -29,6 +30,15 @@
                 <Icon Name="calendar-plus" Class="btn-svg" />
                 Agendar nueva
             </a>
+            @if (SelectedDoctorForActions is not null)
+            {
+                <button class="btn-outline" disabled="@_saving" @onclick="SendDoctorDailyAgendaEmailAsync">
+                    Agenda correo
+                </button>
+                <button class="btn-outline" disabled="@_saving" @onclick="OpenDoctorDailyAgendaWhatsAppAsync">
+                    Agenda WhatsApp
+                </button>
+            }
         </div>
     </div>
 
@@ -292,6 +302,10 @@
                 {
                     <button class="btn-outline" @onclick="() => OpenWhatsAppReminder(_selectedAppointment)">Recordatorio WhatsApp</button>
                     <button class="btn-outline" @onclick="() => OpenEmailReminder(_selectedAppointment)">Recordatorio correo</button>
+                    <button class="btn-outline" @onclick="() => OpenAttendanceWhatsAppAsync(_selectedAppointment)">Enlace asistencia WS</button>
+                    <button class="btn-outline" @onclick="() => OpenAttendanceEmailAsync(_selectedAppointment)">Enlace asistencia correo</button>
+                    <button class="btn-outline" @onclick='() => OpenDoctorAppointmentWhatsApp(_selectedAppointment, "Recordatorio")'>WhatsApp doctor</button>
+                    <button class="btn-outline" @onclick='() => OpenDoctorAppointmentEmail(_selectedAppointment, "Recordatorio")'>Correo doctor</button>
                 }
                 <button class="btn-primary" @onclick="() => { CloseDetailModal(); OpenActionsMenu(_selectedAppointment!); }">Acciones</button>
             </div>
@@ -334,6 +348,10 @@
                 {
                     <button class="btn-outline" disabled="@_saving" @onclick="() => OpenWhatsAppReminder(_selectedAppointment)">Recordatorio WhatsApp</button>
                     <button class="btn-outline" disabled="@_saving" @onclick="() => OpenEmailReminder(_selectedAppointment)">Recordatorio correo</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick="() => OpenAttendanceWhatsAppAsync(_selectedAppointment)">Enlace asistencia WS</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick="() => OpenAttendanceEmailAsync(_selectedAppointment)">Enlace asistencia correo</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick='() => OpenDoctorAppointmentWhatsApp(_selectedAppointment, "Actualización")'>WhatsApp doctor</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick='() => OpenDoctorAppointmentEmail(_selectedAppointment, "Actualización")'>Correo doctor</button>
                 }
             </div>
         </div>
@@ -521,7 +539,7 @@
     <div class="modal-overlay" @onclick="CloseWhatsAppModal">
         <div class="modal-panel" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <h2>Recordatorio WhatsApp</h2>
+                <h2>@_whatsAppModalTitle</h2>
                 <button class="modal-close" @onclick="CloseWhatsAppModal">×</button>
             </div>
             @if (!string.IsNullOrEmpty(_whatsAppError))
@@ -546,7 +564,7 @@
     <div class="modal-overlay" @onclick="CloseEmailModal">
         <div class="modal-panel" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <h2>Recordatorio por correo</h2>
+                <h2>@_emailModalTitle</h2>
                 <button class="modal-close" @onclick="CloseEmailModal">×</button>
             </div>
             @if (!string.IsNullOrEmpty(_emailError))
@@ -611,10 +629,12 @@
     private bool _showCompleteModal;
     private bool _showNoShowModal;
     private bool _showWhatsAppModal;
+    private string _whatsAppModalTitle = "Recordatorio WhatsApp";
     private string? _whatsAppPreview;
     private string? _whatsAppUrl;
     private string? _whatsAppError;
     private bool _showEmailModal;
+    private string _emailModalTitle = "Recordatorio por correo";
     private bool _sendingEmail;
     private string? _emailPreview;
     private string? _emailTo;
@@ -633,6 +653,8 @@
     private ClinicSchedule _schedule = new();
 
     private int? _highlightId;
+    private DoctorListItem? SelectedDoctorForActions =>
+        _doctorFilter == 0 ? null : _doctors.FirstOrDefault(d => d.Id == _doctorFilter);
 
     protected override async Task OnInitializedAsync()
     {
@@ -1095,6 +1117,7 @@
         var (success, error) = await AgendaService.ConfirmAsync(_confirmForm);
         _saving = false;
         if (!success) { _modalError = error; return; }
+        await SendDoctorAppointmentChangeEmailAsync(_selectedAppointment!, "Cita confirmada");
         CloseWorkflowModals();
         await ReloadAgendaAsync();
     }
@@ -1120,6 +1143,7 @@
         });
         _saving = false;
         if (!success) { _modalError = error; return; }
+        await SendDoctorAppointmentChangeEmailAsync(_selectedAppointment!, "Cita cancelada");
         CloseWorkflowModals();
         await ReloadAgendaAsync();
     }
@@ -1190,6 +1214,9 @@
         });
         _saving = false;
         if (!success) { _modalError = error; return; }
+        _selectedAppointment.AppointmentDate = _rescheduleDate.Value.Date.Add(_rescheduleTime.Value).ToString("yyyy-MM-dd HH:mm");
+        _selectedAppointment.Status = "Rescheduled";
+        await SendDoctorAppointmentChangeEmailAsync(_selectedAppointment, "Cita reagendada");
         CloseWorkflowModals();
         await ReloadAgendaAsync();
     }
@@ -1217,6 +1244,7 @@
         var (success, error) = await AgendaService.CompleteAsync(_completeForm);
         _saving = false;
         if (!success) { _modalError = error; return; }
+        await SendDoctorAppointmentChangeEmailAsync(_selectedAppointment!, "Cita completada");
         CloseWorkflowModals();
         await ReloadAgendaAsync();
     }
@@ -1242,6 +1270,7 @@
         });
         _saving = false;
         if (!success) { _modalError = error; return; }
+        await SendDoctorAppointmentChangeEmailAsync(_selectedAppointment!, "Paciente no asistió");
         CloseWorkflowModals();
         await ReloadAgendaAsync();
     }
@@ -1274,6 +1303,7 @@
         _selectedAppointment = appt;
         _showDetailModal = false;
         _showActionsModal = false;
+        _whatsAppModalTitle = "Recordatorio WhatsApp";
         _whatsAppError = null;
         _whatsAppUrl = null;
         _whatsAppPreview = null;
@@ -1302,6 +1332,7 @@
     private void CloseWhatsAppModal()
     {
         _showWhatsAppModal = false;
+        _whatsAppModalTitle = "Recordatorio WhatsApp";
         _whatsAppError = null;
         _whatsAppUrl = null;
         _whatsAppPreview = null;
@@ -1321,6 +1352,7 @@
         _selectedAppointment = appt;
         _showDetailModal = false;
         _showActionsModal = false;
+        _emailModalTitle = "Recordatorio por correo";
         var result = EmailMessageSettings.TryCompose(EmailMessageKind.Reminder, new WhatsAppAppointmentContext
         {
             PatientName = appt.PatientFullName,
@@ -1336,9 +1368,244 @@
         _showEmailModal = true;
     }
 
+    private async Task OpenAttendanceWhatsAppAsync(AppointmentAgendaItem appt)
+    {
+        _selectedAppointment = appt;
+        _whatsAppModalTitle = "Enlace de asistencia por WhatsApp";
+        _whatsAppError = null;
+        _whatsAppUrl = null;
+        _whatsAppPreview = null;
+
+        var (link, _, linkError) = await AttendanceService.CreatePublicLinkAsync(appt.Id, Navigation.BaseUri);
+        if (string.IsNullOrWhiteSpace(link))
+        {
+            _whatsAppError = linkError ?? "No se pudo generar el enlace de asistencia.";
+        }
+        else if (!WhatsAppMessageSettingsService.TryNormalizePhone(
+                     appt.PatientPhone,
+                     WhatsAppSettings.Get().DefaultCountryCode,
+                     out var digits,
+                     out var phoneError))
+        {
+            _whatsAppError = phoneError;
+        }
+        else
+        {
+            _whatsAppPreview = BuildAttendanceConfirmationMessage(appt, link);
+            _whatsAppUrl = $"https://wa.me/{digits}?text={Uri.EscapeDataString(_whatsAppPreview)}";
+        }
+
+        _showDetailModal = false;
+        _showActionsModal = false;
+        _showWhatsAppModal = true;
+    }
+
+    private async Task OpenAttendanceEmailAsync(AppointmentAgendaItem appt)
+    {
+        _selectedAppointment = appt;
+        _emailModalTitle = "Enlace de asistencia por correo";
+        _emailError = null;
+        _emailTo = null;
+        _emailSubject = null;
+        _emailPreview = null;
+
+        var (link, _, linkError) = await AttendanceService.CreatePublicLinkAsync(appt.Id, Navigation.BaseUri);
+        if (string.IsNullOrWhiteSpace(link))
+        {
+            _emailError = linkError ?? "No se pudo generar el enlace de asistencia.";
+        }
+        else if (!ContactEmail.TryValidate(appt.PatientEmail, out var normalizedEmail, out var emailError) || string.IsNullOrWhiteSpace(normalizedEmail))
+        {
+            _emailError = emailError ?? "El paciente no tiene correo válido.";
+        }
+        else
+        {
+            _emailTo = normalizedEmail;
+            _emailSubject = "Confirme su asistencia a la cita";
+            _emailPreview = BuildAttendanceConfirmationMessage(appt, link);
+        }
+
+        _showDetailModal = false;
+        _showActionsModal = false;
+        _showEmailModal = true;
+    }
+
+    private string BuildAttendanceConfirmationMessage(AppointmentAgendaItem appt, string link)
+    {
+        var when = appt.ParsedDate;
+        return $"""
+            Hola {appt.PatientFullName}, confirme si asistirá a su cita en {WhatsAppSettings.Get().ClinicName}:
+
+            Médico: {appt.DoctorName}
+            Fecha: {(when.HasValue ? when.Value.ToString("dd/MM/yyyy") : appt.AppointmentDate)}
+            Hora: {(when.HasValue ? when.Value.ToString("hh:mm tt") : "Pendiente")}
+
+            Confirme aquí:
+            {link}
+            """;
+    }
+
+    private async Task OpenDoctorDailyAgendaWhatsAppAsync()
+    {
+        var doctor = SelectedDoctorForActions;
+        if (doctor == null)
+            return;
+
+        var appointments = await LoadDoctorDailyAppointmentsAsync(doctor.Id);
+        var message = BuildDoctorDailyAgendaMessage(doctor, appointments);
+        BuildDoctorWhatsAppModal(doctor, "Agenda diaria por WhatsApp", message);
+    }
+
+    private async Task SendDoctorDailyAgendaEmailAsync()
+    {
+        var doctor = SelectedDoctorForActions;
+        if (doctor == null)
+            return;
+
+        var appointments = await LoadDoctorDailyAppointmentsAsync(doctor.Id);
+        var message = BuildDoctorDailyAgendaMessage(doctor, appointments);
+        await SendDoctorEmailAsync(doctor, $"Agenda del día - {_selectedDate:dd/MM/yyyy}", message);
+    }
+
+    private void OpenDoctorAppointmentWhatsApp(AppointmentAgendaItem appt, string reason)
+    {
+        var doctor = GetDoctorForAppointment(appt);
+        if (doctor == null)
+        {
+            _actionMessage = "No se encontró el médico para crear el WhatsApp.";
+            return;
+        }
+
+        BuildDoctorWhatsAppModal(doctor, $"WhatsApp doctor - {reason}", BuildDoctorAppointmentChangeMessage(appt, reason));
+    }
+
+    private void OpenDoctorAppointmentEmail(AppointmentAgendaItem appt, string reason)
+    {
+        var doctor = GetDoctorForAppointment(appt);
+        if (doctor == null)
+        {
+            _actionMessage = "No se encontró el médico para enviar el correo.";
+            return;
+        }
+
+        _emailModalTitle = $"Correo doctor - {reason}";
+        _emailError = ValidateDoctorEmail(doctor);
+        _emailTo = doctor.Email;
+        _emailSubject = $"{reason} de cita - {appt.PatientFullName}";
+        _emailPreview = BuildDoctorAppointmentChangeMessage(appt, reason);
+        _showDetailModal = false;
+        _showActionsModal = false;
+        _showEmailModal = true;
+    }
+
+    private async Task<List<AppointmentAgendaItem>> LoadDoctorDailyAppointmentsAsync(int doctorId)
+    {
+        var (items, error) = await AgendaService.GetAgendaAsync(_selectedDate, doctorId);
+        if (!string.IsNullOrWhiteSpace(error))
+            _actionMessage = error;
+
+        return items
+            .OrderBy(a => a.ParsedDate ?? DateTime.MaxValue)
+            .ToList();
+    }
+
+    private void BuildDoctorWhatsAppModal(DoctorListItem doctor, string title, string message)
+    {
+        _whatsAppModalTitle = title;
+        _whatsAppPreview = message;
+        _whatsAppError = null;
+        _whatsAppUrl = null;
+
+        if (!WhatsAppMessageSettingsService.TryNormalizePhone(
+                doctor.Phone,
+                WhatsAppSettings.Get().DefaultCountryCode,
+                out var digits,
+                out var error))
+        {
+            _whatsAppError = error?.Replace("paciente", "médico", StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            _whatsAppUrl = $"https://wa.me/{digits}?text={Uri.EscapeDataString(message)}";
+        }
+
+        _showDetailModal = false;
+        _showActionsModal = false;
+        _showWhatsAppModal = true;
+    }
+
+    private async Task SendDoctorAppointmentChangeEmailAsync(AppointmentAgendaItem appt, string reason)
+    {
+        var doctor = GetDoctorForAppointment(appt);
+        if (doctor == null)
+            return;
+
+        await SendDoctorEmailAsync(
+            doctor,
+            $"{reason} de cita - {appt.PatientFullName}",
+            BuildDoctorAppointmentChangeMessage(appt, reason));
+    }
+
+    private async Task SendDoctorEmailAsync(DoctorListItem doctor, string subject, string body)
+    {
+        var emailError = ValidateDoctorEmail(doctor);
+        if (!string.IsNullOrWhiteSpace(emailError))
+        {
+            _actionMessage = emailError;
+            return;
+        }
+
+        _sendingEmail = true;
+        var (ok, error) = await BookingService.SendPatientEmailAsync(doctor.Email!, subject, body);
+        _sendingEmail = false;
+        _actionMessage = ok ? "Correo enviado al médico." : error ?? "No se pudo enviar el correo al médico.";
+    }
+
+    private DoctorListItem? GetDoctorForAppointment(AppointmentAgendaItem appt) =>
+        _doctors.FirstOrDefault(d => d.Id == appt.DoctorId);
+
+    private static string? ValidateDoctorEmail(DoctorListItem doctor) =>
+        string.IsNullOrWhiteSpace(doctor.Email)
+            ? "El médico no tiene correo configurado."
+            : null;
+
+    private string BuildDoctorDailyAgendaMessage(DoctorListItem doctor, IReadOnlyList<AppointmentAgendaItem> appointments)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Hola {doctor.FullName}, esta es su agenda del {_selectedDate:dd/MM/yyyy}:");
+        if (appointments.Count == 0)
+        {
+            sb.AppendLine("No tiene citas programadas para este día.");
+            return sb.ToString().Trim();
+        }
+
+        foreach (var appt in appointments)
+        {
+            var time = appt.ParsedDate?.ToString("hh:mm tt", _culture) ?? appt.AppointmentDate;
+            sb.AppendLine($"- {time}: {appt.PatientFullName} ({FormatStatus(appt.Status)})");
+        }
+
+        return sb.ToString().Trim();
+    }
+
+    private string BuildDoctorAppointmentChangeMessage(AppointmentAgendaItem appt, string reason)
+    {
+        var when = appt.ParsedDate?.ToString("dddd dd/MM/yyyy hh:mm tt", _culture) ?? appt.AppointmentDate;
+        return $"""
+            Hola {appt.DoctorName}, hay una actualización de cita.
+
+            Motivo: {reason}
+            Paciente: {appt.PatientFullName}
+            Fecha y hora: {when}
+            Estado actual: {FormatStatus(appt.Status)}
+            Teléfono paciente: {appt.PatientPhone}
+            """;
+    }
+
     private void CloseEmailModal()
     {
         _showEmailModal = false;
+        _emailModalTitle = "Recordatorio por correo";
         _sendingEmail = false;
         _emailError = null;
         _emailTo = null;

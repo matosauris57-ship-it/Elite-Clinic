@@ -202,6 +202,84 @@ public class PatientMaintenanceService
         }
     }
 
+    // ────────────── Emergency Contacts ──────────────
+
+    public async Task<(List<EmergencyContactItem> Contacts, string? Error)> GetEmergencyContactsAsync(int patientId)
+    {
+        try
+        {
+            using var response = await Client.GetAsync($"/api/patients/{patientId}/emergency-contacts");
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return ([], await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<List<EmergencyContactItem>>>(JsonOptions);
+            if (body?.Succeeded == true && body.Data != null)
+                return (body.Data, null);
+            return ([], null);
+        }
+        catch (Exception ex)
+        {
+            return ([], FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
+    public async Task<(bool Success, string? Error, int? Id)> CreateEmergencyContactAsync(int patientId, EmergencyContactForm form)
+    {
+        try
+        {
+            var response = await Client.PostAsJsonAsync($"/api/patients/{patientId}/emergency-contacts", form, JsonOptions);
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), null);
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<EmergencyContactItem>>(JsonOptions);
+            if (body?.Succeeded == true)
+                return (true, null, body.Data?.Id);
+            return (false, body?.Message ?? "No se pudo crear el contacto.", null);
+        }
+        catch (Exception ex)
+        {
+            return (false, FormatConnectionError(ex) ?? ex.Message, null);
+        }
+    }
+
+    public async Task<(bool Success, string? Error)> UpdateEmergencyContactAsync(int patientId, int contactId, EmergencyContactForm form)
+    {
+        try
+        {
+            var response = await Client.PutAsJsonAsync($"/api/patients/{patientId}/emergency-contacts/{contactId}", form, JsonOptions);
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(JsonOptions);
+            if (body?.Succeeded == true)
+                return (true, null);
+            return (false, body?.Message ?? "No se pudo actualizar el contacto.");
+        }
+        catch (Exception ex)
+        {
+            return (false, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
+    public async Task<(bool Success, string? Error)> DeleteEmergencyContactAsync(int patientId, int contactId)
+    {
+        try
+        {
+            using var response = await Client.DeleteAsync($"/api/patients/{patientId}/emergency-contacts/{contactId}");
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(JsonOptions);
+            if (body?.Succeeded == true)
+                return (true, null);
+            return (false, body?.Message ?? "No se pudo eliminar el contacto.");
+        }
+        catch (Exception ex)
+        {
+            return (false, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
     private string? FormatConnectionError(Exception ex) =>
         ApiConnectionMessages.IsConnectionFailure(ex)
             ? ApiConnectionMessages.ApiUnavailable(_apiSettings.ApiBaseUrl)

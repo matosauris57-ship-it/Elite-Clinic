@@ -32,6 +32,7 @@ namespace Clinic_System.Application.Features.DentalTreatments.Commands.Handlers
                 request.ToothSurface,
                 request.TreatmentProcedureId,
                 request.ProcedureDetails,
+                request.MedicalNotes,
                 CurrentUserId,
                 cancellationToken);
 
