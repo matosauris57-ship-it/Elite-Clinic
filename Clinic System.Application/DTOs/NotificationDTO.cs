@@ -7,5 +7,7 @@
         public string NotificationType { get; set; }
         public int? RelatedEntityId { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string? PatientName { get; set; }
+        public string? DoctorName { get; set; }
     }
 }

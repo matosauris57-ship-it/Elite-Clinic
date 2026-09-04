@@ -33,10 +33,12 @@
 
             var notificationDto = new NotificationDTO
             {
-                Title = "Patient Call",
-                Message = $"Patient '{patientName}' please proceed to Doctor '{doctorName}' clinic.",
-                NotificationType = "PatientCalled", 
-                RelatedEntityId = appointment.Id
+                Title = "Llamado a consulta",
+                Message = $"Paciente {patientName}, pase con el Dr(a). {doctorName}.",
+                NotificationType = "PatientCalled",
+                RelatedEntityId = appointment.Id,
+                PatientName = patientName,
+                DoctorName = doctorName
             };
 
             await notificationsService.SendToGroupAsync("WaitingRoomScreens", notificationDto);

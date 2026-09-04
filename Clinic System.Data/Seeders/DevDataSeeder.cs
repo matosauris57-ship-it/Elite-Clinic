@@ -207,6 +207,7 @@ namespace Clinic_System.Data.Seed
             [
                 "agendar-cita.view", "agendar-cita.create",
                 "agenda.view", "agenda.edit",
+                "sala-espera.view",
                 "pacientes.view", "enfermedades.view",
                 "campanas.view", "campanas.create", "campanas.edit"
             ], logger);

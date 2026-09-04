@@ -1,0 +1,260 @@
+@page "/sala-espera"
+@layout WaitingRoomLayout
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "sala-espera.view")]
+@implements IAsyncDisposable
+@inject WaitingRoomHubService Hub
+@inject ClinicProfileService ClinicProfile
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+
+<PageTitle>Sala de espera — @_clinic.Name</PageTitle>
+
+<div class="waiting-room @(_activeCall is not null ? "has-call" : null)">
+    <header class="wr-header">
+        <div class="wr-brand">
+            @if (!string.IsNullOrWhiteSpace(_clinic.DisplayLogoUrl))
+            {
+                <img class="wr-logo" src="@_clinic.DisplayLogoUrl" alt="" />
+            }
+            else
+            {
+                <div class="wr-logo-fallback">
+                    <Icon Name="tooth" Class="wr-logo-svg" StrokeWidth="1.5" />
+                </div>
+            }
+            <div>
+                <div class="wr-clinic-name">@_clinic.Name</div>
+                <div class="wr-clinic-sub">@(string.IsNullOrWhiteSpace(_clinic.Slogan) ? "Sala de espera" : _clinic.Slogan)</div>
+            </div>
+        </div>
+
+        <div class="wr-clock" aria-live="polite">
+            <div class="wr-time">@_clock.ToString("HH:mm")</div>
+            <div class="wr-date">@_clock.ToString("dddd d MMMM", _es)</div>
+        </div>
+
+        <div class="wr-status @_statusClass" title="@(_lastError ?? _statusLabel)">
+            <span class="wr-status-dot"></span>
+            @_statusLabel
+        </div>
+    </header>
+
+    <main class="wr-main">
+        @if (_activeCall is null)
+        {
+            <div class="wr-idle">
+                <p class="wr-idle-eyebrow">Pantalla de llamados</p>
+                <h1 class="wr-idle-title">Espere su llamado</h1>
+                <p class="wr-idle-text">Cuando le toque, su nombre aparecerá aquí en grande.</p>
+            </div>
+        }
+        else
+        {
+            <div class="wr-call" @key="@($"{_activeCall.RelatedEntityId}-{_activeCall.CreatedAt:O}")">
+                <p class="wr-call-label">Turno</p>
+                <h1 class="wr-patient">@DisplayPatientName</h1>
+                <p class="wr-doctor">
+                    Pase con <strong>@DisplayDoctorName</strong>
+                </p>
+                @if (!string.IsNullOrWhiteSpace(_activeCall.Message))
+                {
+                    <p class="wr-message">@_activeCall.Message</p>
+                }
+            </div>
+        }
+    </main>
+
+    <footer class="wr-footer">
+        <div class="wr-setup @(_setupCollapsed ? "is-collapsed" : null)">
+            <button type="button" class="wr-setup-toggle" @onclick="ToggleSetup">
+                @(_setupCollapsed ? "Mostrar guía TV" : "Ocultar guía TV")
+            </button>
+            @if (!_setupCollapsed)
+            {
+                <ol class="wr-setup-steps">
+                    <li>En este equipo (o el de la TV), inicia sesión en el Admin.</li>
+                    <li>Abre esta URL en el navegador de la TV: <strong>@Navigation.BaseUri.TrimEnd('/')/sala-espera</strong></li>
+                    <li>Pulsa <strong>Pantalla completa</strong> (o F11).</li>
+                    <li>Desde otro PC, en <strong>Agenda</strong>, elige una cita y pulsa <strong>Llamar paciente</strong>.</li>
+                    <li>API + Admin + TV deben estar en la misma red; no hace falta dominio ni pago.</li>
+                </ol>
+            }
+        </div>
+
+        <div class="wr-actions">
+            <label class="wr-check">
+                <input type="checkbox" @bind="_speakCalls" />
+                Voz
+            </label>
+            <button type="button" class="wr-btn" @onclick="ToggleFullscreenAsync">Pantalla completa</button>
+            <button type="button" class="wr-btn wr-btn-ghost" @onclick="ReconnectAsync" disabled="@_busy">Reconectar</button>
+            <a class="wr-btn wr-btn-ghost" href="/agenda">Ir a Agenda</a>
+        </div>
+    </footer>
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo _es = new("es-ES");
+    private ClinicProfile _clinic = new();
+    private WaitingRoomNotification? _activeCall;
+    private DateTime _clock = DateTime.Now;
+    private CancellationTokenSource? _lifetimeCts;
+    private CancellationTokenSource? _clearCallCts;
+    private bool _setupCollapsed;
+    private bool _speakCalls = true;
+    private bool _busy;
+    private string _statusLabel = "Conectando…";
+    private string _statusClass = "is-connecting";
+    private string? _lastError;
+
+    private string DisplayPatientName =>
+        string.IsNullOrWhiteSpace(_activeCall?.PatientName) ? "Paciente" : _activeCall!.PatientName!;
+
+    private string DisplayDoctorName =>
+        string.IsNullOrWhiteSpace(_activeCall?.DoctorName) ? "su médico" : $"Dr(a). {_activeCall!.DoctorName}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _clinic = ClinicProfile.Get();
+        ClinicProfile.Changed += OnClinicChanged;
+
+        Hub.StateChanged += OnHubStateChanged;
+        Hub.NotificationReceived += OnNotificationReceived;
+        RefreshStatusFromHub();
+
+        _lifetimeCts = new CancellationTokenSource();
+        _ = RunClockAsync(_lifetimeCts.Token);
+
+        await Hub.StartAsync(_lifetimeCts.Token);
+        RefreshStatusFromHub();
+    }
+
+    private async Task RunClockAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                _clock = DateTime.Now;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // page disposed
+        }
+    }
+
+    private void OnClinicChanged()
+    {
+        _clinic = ClinicProfile.Get();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnHubStateChanged()
+    {
+        RefreshStatusFromHub();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnNotificationReceived(WaitingRoomNotification notification)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            _activeCall = notification;
+            StateHasChanged();
+
+            if (_speakCalls)
+            {
+                var text = string.IsNullOrWhiteSpace(notification.Message)
+                    ? $"Paciente {DisplayPatientName}, pase con {DisplayDoctorName}."
+                    : notification.Message;
+                try
+                {
+                    await Js.InvokeVoidAsync("dentalCareWaitingRoom.speak", text);
+                }
+                catch
+                {
+                    // TTS opcional
+                }
+            }
+
+            _clearCallCts?.Cancel();
+            _clearCallCts?.Dispose();
+            _clearCallCts = new CancellationTokenSource();
+            var token = _clearCallCts.Token;
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(45), token);
+                if (!token.IsCancellationRequested)
+                {
+                    _activeCall = null;
+                    StateHasChanged();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // nuevo llamado o dispose
+            }
+        });
+    }
+
+    private void RefreshStatusFromHub()
+    {
+        _lastError = Hub.LastError;
+        (_statusLabel, _statusClass) = Hub.State switch
+        {
+            WaitingRoomConnectionState.Connected => ("En vivo", "is-online"),
+            WaitingRoomConnectionState.Connecting => ("Conectando…", "is-connecting"),
+            WaitingRoomConnectionState.Reconnecting => ("Reconectando…", "is-connecting"),
+            WaitingRoomConnectionState.Faulted => ("Error de conexión", "is-offline"),
+            _ => ("Desconectado", "is-offline")
+        };
+    }
+
+    private void ToggleSetup() => _setupCollapsed = !_setupCollapsed;
+
+    private async Task ToggleFullscreenAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("dentalCareWaitingRoom.toggleFullscreen");
+            _setupCollapsed = true;
+        }
+        catch
+        {
+            // ignore if browser blocks fullscreen without gesture
+        }
+    }
+
+    private async Task ReconnectAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Hub.StopAsync();
+            await Hub.StartAsync();
+            RefreshStatusFromHub();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        ClinicProfile.Changed -= OnClinicChanged;
+        Hub.StateChanged -= OnHubStateChanged;
+        Hub.NotificationReceived -= OnNotificationReceived;
+
+        _lifetimeCts?.Cancel();
+        _lifetimeCts?.Dispose();
+        _clearCallCts?.Cancel();
+        _clearCallCts?.Dispose();
+
+        await Hub.StopAsync();
+    }
+}
