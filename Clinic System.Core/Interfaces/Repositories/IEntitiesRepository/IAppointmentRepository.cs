@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Core.Interfaces.Repositories.IEntitiesRepository
+namespace Clinic_System.Core.Interfaces.Repositories.IEntitiesRepository
 {
     public interface IAppointmentRepository : IGenericRepository<Appointment>
     {

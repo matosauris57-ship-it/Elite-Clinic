@@ -1,4 +1,4 @@
-﻿using Clinic_System.Core.Finance;
+using Clinic_System.Core.Finance;
 
 namespace Clinic_System.Application.Mapping.Payments
 {

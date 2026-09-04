@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Patients.Commands.Handlers
+namespace Clinic_System.Application.Features.Patients.Commands.Handlers
 {
     public class UpdatePatientCommandHandler : AppRequestHandler<UpdatePatientCommand, UpdatePatientDTO>
     {

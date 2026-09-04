@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Patients.Commands.Models
+namespace Clinic_System.Application.Features.Patients.Commands.Models
 {
     public class UpdatePatientCommand : IRequest<Response<UpdatePatientDTO>>
     {

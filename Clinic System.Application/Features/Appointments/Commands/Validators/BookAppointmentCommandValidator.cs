@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Appointments.Commands.Validators
+namespace Clinic_System.Application.Features.Appointments.Commands.Validators
 {
     public class BookAppointmentCommandValidator : AbstractValidator<BookAppointmentCommand>
     {

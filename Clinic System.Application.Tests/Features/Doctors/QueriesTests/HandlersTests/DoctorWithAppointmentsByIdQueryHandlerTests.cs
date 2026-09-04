@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Tests.Features.Doctors.QueriesTests.HandlersTests
+namespace Clinic_System.Application.Tests.Features.Doctors.QueriesTests.HandlersTests
 {
     public class DoctorWithAppointmentsByIdQueryHandlerTests
     {

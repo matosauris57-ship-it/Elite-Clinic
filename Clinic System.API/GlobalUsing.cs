@@ -1,4 +1,4 @@
-﻿global using Clinic_System.Data.Context;
+global using Clinic_System.Data.Context;
 global using Clinic_System.Infrastructure.Identity;
 global using Microsoft.AspNetCore.Identity;
 global using Microsoft.EntityFrameworkCore;

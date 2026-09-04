@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Appointments.Commands.Models
+namespace Clinic_System.Application.Features.Appointments.Commands.Models
 {
     public class BookAppointmentCommand : IRequest<Response<AppointmentDTO>>
     {

@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Payment.Queries.Models
+namespace Clinic_System.Application.Features.Payment.Queries.Models
 {
     public class GetPaymentsListQuery : IRequest<Response<PagedResult<PaymentDetailsDTO>>>
     {

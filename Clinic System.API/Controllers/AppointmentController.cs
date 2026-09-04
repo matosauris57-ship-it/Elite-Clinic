@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.API.Controllers
+namespace Clinic_System.API.Controllers
 {
 [Route("api/appointments")]
     [ApiController]

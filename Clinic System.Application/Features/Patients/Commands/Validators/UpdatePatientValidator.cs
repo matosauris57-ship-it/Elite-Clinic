@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Patients.Commands.Validators
+namespace Clinic_System.Application.Features.Patients.Commands.Validators
 {
     public class UpdatePatientValidator : AbstractValidator<UpdatePatientCommand>
     {

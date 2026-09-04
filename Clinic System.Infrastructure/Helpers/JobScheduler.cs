@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Infrastructure.Helpers
+namespace Clinic_System.Infrastructure.Helpers
 {
     public static class JobScheduler
     {

@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Data.Repository.RepositoriesForEntities
+namespace Clinic_System.Data.Repository.RepositoriesForEntities
 {
     public class PatientRepository : GenericRepository<Patient>, IPatientRepository
     {

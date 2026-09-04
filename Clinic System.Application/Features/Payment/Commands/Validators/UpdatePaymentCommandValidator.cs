@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Payment.Commands.Validators
+namespace Clinic_System.Application.Features.Payment.Commands.Validators
 {
     public class UpdatePaymentCommandValidator : AbstractValidator<UpdatePaymentCommand>
     {

@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Tests.Service.Implemention
+namespace Clinic_System.Application.Tests.Service.Implemention
 {
     public class AppointmentServiceTests
     {

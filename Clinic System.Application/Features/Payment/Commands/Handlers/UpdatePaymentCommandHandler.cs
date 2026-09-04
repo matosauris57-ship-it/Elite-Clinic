@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Payment.Commands.Handlers
+namespace Clinic_System.Application.Features.Payment.Commands.Handlers
 {
     public class UpdatePaymentCommandHandler : ResponseHandler , IRequestHandler<UpdatePaymentCommand, Response<PaymentDTO>>
     {

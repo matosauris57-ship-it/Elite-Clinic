@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.DTOs.Payment
+namespace Clinic_System.Application.DTOs.Payment
 {
     public class DailyRevenueDTO
     {

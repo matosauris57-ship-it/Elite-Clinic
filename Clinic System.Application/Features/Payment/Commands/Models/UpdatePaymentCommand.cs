@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Payment.Commands.Models
+namespace Clinic_System.Application.Features.Payment.Commands.Models
 {
     public class UpdatePaymentCommand : IRequest<Response<PaymentDTO>>
     {

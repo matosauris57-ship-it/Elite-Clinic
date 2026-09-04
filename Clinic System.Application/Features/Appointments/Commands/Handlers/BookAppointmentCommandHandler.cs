@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Appointments.Commands.Handlers
+namespace Clinic_System.Application.Features.Appointments.Commands.Handlers
 {
     public class BookAppointmentCommandHandler : AppRequestHandler<BookAppointmentCommand, AppointmentDTO>
     {

@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Core.Entities
+namespace Clinic_System.Core.Entities
 {
     public class Doctor : Person
     {

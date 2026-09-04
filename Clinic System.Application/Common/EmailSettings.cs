@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Common
+namespace Clinic_System.Application.Common
 {
     public class EmailSettings
     {

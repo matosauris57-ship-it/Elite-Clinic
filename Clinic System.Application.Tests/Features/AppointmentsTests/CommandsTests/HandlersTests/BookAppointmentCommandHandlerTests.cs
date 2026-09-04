@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Tests.Features.AppointmentsTests.CommandsTests.HandlersTests
+namespace Clinic_System.Application.Tests.Features.AppointmentsTests.CommandsTests.HandlersTests
 {
     public class BookAppointmentCommandHandlerTests
     {

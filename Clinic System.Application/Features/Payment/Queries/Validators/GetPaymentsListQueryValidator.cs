@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Payment.Queries.Validators
+namespace Clinic_System.Application.Features.Payment.Queries.Validators
 {
     public class GetPaymentsListQueryValidator : AbstractValidator<GetPaymentsListQuery>
     {

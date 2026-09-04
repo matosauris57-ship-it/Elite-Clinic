@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Mapping.Patients
+namespace Clinic_System.Application.Mapping.Patients
 {
     public partial class PatientProfile
     {

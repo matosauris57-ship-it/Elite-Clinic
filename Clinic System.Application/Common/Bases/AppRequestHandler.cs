@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Common.Bases
+namespace Clinic_System.Application.Common.Bases
 {
     public abstract class AppRequestHandler<TRequest, TResponse> : ResponseHandler, IRequestHandler<TRequest, Response<TResponse>>
         where TRequest : IRequest<Response<TResponse>>

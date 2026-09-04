@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Tests.Features.Patients.CommandsTests.HandlersTests
+namespace Clinic_System.Application.Tests.Features.Patients.CommandsTests.HandlersTests
 {
     public class UpdatePatientCommandHandlerTests
     {

@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Features.Payment.Queries.Handlers
+namespace Clinic_System.Application.Features.Payment.Queries.Handlers
 {
     public class PaymentsListQueryHandler : ResponseHandler , IRequestHandler<GetPaymentsListQuery, Response<PagedResult<PaymentDetailsDTO>>>
     {

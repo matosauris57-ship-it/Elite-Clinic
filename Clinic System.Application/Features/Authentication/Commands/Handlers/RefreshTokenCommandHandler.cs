@@ -1,4 +1,4 @@
-﻿using Clinic_System.Core.Entities;
+using Clinic_System.Core.Entities;
 using Clinic_System.Core.Interfaces.UnitOfWork;
 using System.Data;
 

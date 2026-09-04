@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Tests.Features.AppointmentsTests.CommandsTests.ValidatorsTests
+namespace Clinic_System.Application.Tests.Features.AppointmentsTests.CommandsTests.ValidatorsTests
 {
     public class BookAppointmentCommandValidatorTests
     {

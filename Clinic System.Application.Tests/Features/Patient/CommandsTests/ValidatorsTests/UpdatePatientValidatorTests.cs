@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Application.Tests.Features.Patients.CommandsTests.ValidatorsTests
+namespace Clinic_System.Application.Tests.Features.Patients.CommandsTests.ValidatorsTests
 {
     public class UpdatePatientValidatorTests
     {

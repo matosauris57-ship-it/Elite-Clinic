@@ -1,4 +1,4 @@
-﻿using Clinic_System.Core.Authorization;
+using Clinic_System.Core.Authorization;
 
 namespace Clinic_System.Infrastructure.Services
 {

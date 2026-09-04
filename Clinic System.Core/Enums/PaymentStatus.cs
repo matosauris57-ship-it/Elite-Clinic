@@ -1,4 +1,4 @@
-﻿namespace Clinic_System.Core.Enums
+namespace Clinic_System.Core.Enums
 {
     public enum PaymentStatus 
     {
