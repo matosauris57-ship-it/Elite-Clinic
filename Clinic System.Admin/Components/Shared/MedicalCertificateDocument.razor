@@ -94,7 +94,14 @@
 
     <footer class="rx-signoff certificate-signoff">
         <div>
-            <p>______________________________</p>
+            @if (!string.IsNullOrWhiteSpace(Certificate.DoctorSignatureImageUrl))
+            {
+                <img class="doctor-signature-print" src="@Certificate.DoctorSignatureImageUrl" alt="Firma del médico" />
+            }
+            else
+            {
+                <p>______________________________</p>
+            }
             <p>@(Certificate.DoctorName ?? "Médico tratante")</p>
             <p>Firma y sello</p>
         </div>

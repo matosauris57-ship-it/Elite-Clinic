@@ -189,6 +189,10 @@ public class DoctorMaintenanceService
             "La dirección es obligatoria.",
         var e when e.Contains("Specialization is required", StringComparison.OrdinalIgnoreCase) =>
             "La especialización es obligatoria.",
+        var e when e.Contains("Signature image is too large", StringComparison.OrdinalIgnoreCase) =>
+            "La imagen de la firma es demasiado grande.",
+        var e when e.Contains("Signature image must", StringComparison.OrdinalIgnoreCase) =>
+            "La firma debe ser una imagen PNG, JPG o WebP.",
         var e when e.Contains("Username must start", StringComparison.OrdinalIgnoreCase) =>
             "El usuario debe empezar con letra e incluir al menos un número.",
         var e when e.Contains("Email is already", StringComparison.OrdinalIgnoreCase) =>

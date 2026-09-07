@@ -84,7 +84,14 @@
 
     <footer class="rx-signoff">
         <div>
-            <p>______________________________</p>
+            @if (!string.IsNullOrWhiteSpace(Prescription.DoctorSignatureImageUrl))
+            {
+                <img class="doctor-signature-print" src="@Prescription.DoctorSignatureImageUrl" alt="Firma del médico" />
+            }
+            else
+            {
+                <p>______________________________</p>
+            }
             <p>@(Prescription.DoctorName ?? "Médico tratante")</p>
             <p>Firma y sello</p>
         </div>

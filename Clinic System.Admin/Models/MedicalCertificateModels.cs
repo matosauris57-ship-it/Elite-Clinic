@@ -36,6 +36,7 @@ public class PatientMedicalCertificateDetail : PatientMedicalCertificateSummary
     public string? PatientPhone { get; set; }
     public DateTime? PatientDateOfBirth { get; set; }
     public string? DoctorSpecialization { get; set; }
+    public string? DoctorSignatureImageUrl { get; set; }
     public string Recommendation { get; set; } = string.Empty;
     public string? Observations { get; set; }
     public string? RecordedByUserId { get; set; }

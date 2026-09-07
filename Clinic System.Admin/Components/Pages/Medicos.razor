@@ -73,6 +73,7 @@
                         <th>Especialización</th>
                         <th>Teléfono</th>
                         <th>Género</th>
+                        <th>Firma</th>
                         <th>Estado</th>
                         <th>Registro</th>
                         <th class="col-actions">Acciones</th>
@@ -91,6 +92,16 @@
                             <td>@doctor.Specialization</td>
                             <td>@doctor.Phone</td>
                             <td>@FormatGender(doctor.Gender)</td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(doctor.SignatureImageUrl))
+                                {
+                                    <span class="signature-status has-signature">Cargada</span>
+                                }
+                                else
+                                {
+                                    <span class="signature-status">Sin firma</span>
+                                }
+                            </td>
                             <td>
                                 <span class="status-badge @(doctor.IsActive ? "status-active" : "status-inactive")">
                                     @(doctor.IsActive ? "Activo" : "Inactivo")
@@ -156,6 +167,14 @@
                             <input class="form-input" @bind="_editForm.Address" />
                         </div>
                     </div>
+                    <div class="doctor-signature-box">
+                        <div>
+                            <label>Firma del médico</label>
+                            <InputFile OnChange="OnEditSignatureSelected" accept="image/png,image/jpeg,image/webp" />
+                            <p class="rx-hint">Sube una foto recortada de la firma en PNG, JPG o WebP. Máximo 750 KB.</p>
+                        </div>
+                        <SignaturePreview ImageUrl="_editForm.SignatureImageUrl" OnClear="ClearEditSignature" />
+                    </div>
                 </div>
             }
             else
@@ -198,6 +217,18 @@
                                 <input class="form-input" @bind="_createForm.Address" placeholder="Calle, ciudad" />
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Firma para documentos</h3>
+                    <div class="doctor-signature-box">
+                        <div>
+                            <label>Firma del médico</label>
+                            <InputFile OnChange="OnCreateSignatureSelected" accept="image/png,image/jpeg,image/webp" />
+                            <p class="rx-hint">Opcional. Puedes subir una foto de la firma hecha en papel blanco.</p>
+                        </div>
+                        <SignaturePreview ImageUrl="_createForm.SignatureImageUrl" OnClear="ClearCreateSignature" />
                     </div>
                 </div>
 
@@ -398,7 +429,8 @@
             FullName = doctor.FullName,
             Phone = doctor.Phone,
             Address = doctor.Address,
-            Specialization = doctor.Specialization
+            Specialization = doctor.Specialization,
+            SignatureImageUrl = doctor.SignatureImageUrl
         };
         _showFormModal = true;
     }
@@ -502,6 +534,60 @@
         if (_createForm.Password != _createForm.ConfirmPassword) return "Las contraseñas no coinciden.";
         return null;
     }
+
+    private async Task OnCreateSignatureSelected(InputFileChangeEventArgs e)
+    {
+        var image = await ReadSignatureImageAsync(e.File);
+        if (image != null)
+            _createForm.SignatureImageUrl = image;
+    }
+
+    private async Task OnEditSignatureSelected(InputFileChangeEventArgs e)
+    {
+        var image = await ReadSignatureImageAsync(e.File);
+        if (image != null)
+        {
+            _editForm.SignatureImageUrl = image;
+            _editForm.ClearSignatureImage = false;
+        }
+    }
+
+    private void ClearCreateSignature() => _createForm.SignatureImageUrl = null;
+
+    private void ClearEditSignature()
+    {
+        _editForm.SignatureImageUrl = null;
+        _editForm.ClearSignatureImage = true;
+    }
+
+    private async Task<string?> ReadSignatureImageAsync(IBrowserFile file)
+    {
+        const long maxBytes = 750 * 1024;
+        _formError = null;
+
+        if (file.Size > maxBytes)
+        {
+            _formError = "La firma no puede superar 750 KB.";
+            return null;
+        }
+
+        if (!IsSupportedSignatureImage(file.ContentType))
+        {
+            _formError = "La firma debe ser una imagen PNG, JPG o WebP.";
+            return null;
+        }
+
+        await using var stream = file.OpenReadStream(maxBytes);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        return $"data:{file.ContentType};base64,{Convert.ToBase64String(buffer.ToArray())}";
+    }
+
+    private static bool IsSupportedSignatureImage(string contentType) =>
+        contentType.Equals("image/png", StringComparison.OrdinalIgnoreCase)
+        || contentType.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase)
+        || contentType.Equals("image/jpg", StringComparison.OrdinalIgnoreCase)
+        || contentType.Equals("image/webp", StringComparison.OrdinalIgnoreCase);
 
     private async Task ConfirmDisableAsync()
     {

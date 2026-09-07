@@ -10,6 +10,7 @@
         public string Phone { get; set; } = null!;
         public string CreatedAt { get; set; }
         public string Specialization { get; set; } = null!;
+        public string? SignatureImageUrl { get; set; }
         public string ApplicationUserId { get; set; } = null!;
         public bool IsActive { get; set; } = true;
     }

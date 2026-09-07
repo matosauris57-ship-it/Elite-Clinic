@@ -5345,6 +5345,58 @@ button.whatsapp-placeholder-chip:hover {
 }
 .rx-signoff p { margin: 0.15rem 0 0; font-size: 0.78rem; color: #3d5b61; }
 .rx-disclaimer { font-size: 0.7rem !important; }
+.doctor-signature-box {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr);
+    gap: 1rem;
+    align-items: start;
+    margin-top: 0.75rem;
+}
+.signature-preview-card {
+    display: grid;
+    gap: 0.55rem;
+    justify-items: center;
+    padding: 0.75rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+}
+.signature-preview-card img {
+    max-width: 220px;
+    max-height: 92px;
+    object-fit: contain;
+    mix-blend-mode: multiply;
+}
+.signature-preview-empty {
+    display: grid;
+    place-items: center;
+    min-height: 82px;
+    width: 100%;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+.signature-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+.signature-status.has-signature {
+    background: rgba(20, 184, 166, 0.12);
+    color: var(--accent-teal);
+}
+.doctor-signature-print {
+    display: block;
+    width: 210px;
+    max-height: 88px;
+    object-fit: contain;
+    margin-bottom: 0.2rem;
+    mix-blend-mode: multiply;
+}
 .medical-certificate-document .certificate-body {
     margin: 1.4rem 0 1rem;
     font-size: 0.95rem;
@@ -5389,6 +5441,7 @@ button.whatsapp-placeholder-chip:hover {
     .rx-history-card { flex-direction: column; }
     .certificate-editor-grid { grid-template-columns: 1fr; }
     .certificate-preview-card { position: static; }
+    .doctor-signature-box { grid-template-columns: 1fr; }
 }
 
 .symbol-config-page { max-width: 1180px; }

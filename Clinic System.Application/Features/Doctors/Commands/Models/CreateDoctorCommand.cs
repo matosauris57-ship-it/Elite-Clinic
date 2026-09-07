@@ -11,6 +11,7 @@
 
         // Professional Information
         public string Specialization { get; set; } = null!;
+        public string? SignatureImageUrl { get; set; }
 
         // Account Information
         public string UserName { get; set; } = null!;

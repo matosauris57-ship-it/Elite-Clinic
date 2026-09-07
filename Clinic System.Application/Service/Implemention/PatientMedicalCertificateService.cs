@@ -129,6 +129,7 @@ public class PatientMedicalCertificateService : IPatientMedicalCertificateServic
         DoctorId = certificate.DoctorId,
         DoctorName = certificate.Doctor?.FullName,
         DoctorSpecialization = certificate.Doctor?.Specialization,
+        DoctorSignatureImageUrl = certificate.Doctor?.SignatureImageUrl,
         IssuedAt = certificate.IssuedAt,
         CertificateType = certificate.CertificateType,
         Diagnosis = certificate.Diagnosis,

@@ -7,5 +7,7 @@
         public string? Phone { get; set; }
         public string? Address { get; set; }
         public string? Specialization { get; set; }
+        public string? SignatureImageUrl { get; set; }
+        public bool ClearSignatureImage { get; set; }
     }
 }

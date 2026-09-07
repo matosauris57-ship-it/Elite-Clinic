@@ -419,6 +419,9 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("nvarchar(20)")
                         .HasColumnName("PhoneNumber");
 
+                    b.Property<string>("SignatureImageUrl")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Specialization")
                         .IsRequired()
                         .HasMaxLength(100)
