@@ -55,6 +55,8 @@ else if (_profile != null)
                         continue;
                     if (tab.Key == "recetas" && !_canViewRecetas)
                         continue;
+                    if (tab.Key == "certificados" && !_canViewCertificados)
+                        continue;
                     if (tab.Key == "facturas" && !_canViewFacturas)
                         continue;
                     <button type="button"
@@ -646,6 +648,10 @@ else if (_profile != null)
         {
             <PatientPrescriptionsPanel PatientId="PatientId" CanEdit="_canEditRecetas" />
         }
+        else if (_tab == "certificados" && _canViewCertificados)
+        {
+            <PatientMedicalCertificatesPanel PatientId="PatientId" CanEdit="_canEditCertificados" PatientDiagnosis="@_history?.Diagnosis" />
+        }
         else if (_tab == "facturas" && _canViewFacturas)
         {
             <PatientInvoicesPanel PatientId="PatientId" />
@@ -665,6 +671,7 @@ else if (_profile != null)
         ("planes", "Planes", "clipboard-list"),
         ("tratamientos", "Tratamientos", "package"),
         ("recetas", "Recetas", "pill"),
+        ("certificados", "Certificados", "file-text"),
         ("facturas", "Facturas", "credit-card"),
         ("historial", "Historial", "clock")
     ];
@@ -703,6 +710,8 @@ else if (_profile != null)
     private bool _canEditTreatments;
     private bool _canViewRecetas;
     private bool _canEditRecetas;
+    private bool _canViewCertificados;
+    private bool _canEditCertificados;
     private bool _canViewFacturas;
     private bool _savingPlan;
     private bool _savingTreatment;
@@ -746,11 +755,21 @@ else if (_profile != null)
             || PermissionService.HasPermission(user, "historial.create")
             || PermissionService.HasPermission(user, "historial.edit")
             || isDoctor;
+        _canViewCertificados = PermissionService.HasPermission(user, "certificados.view")
+            || PermissionService.HasPermission(user, "historial.view")
+            || isDoctor;
+        _canEditCertificados = PermissionService.HasPermission(user, "certificados.create")
+            || PermissionService.HasPermission(user, "certificados.edit")
+            || PermissionService.HasPermission(user, "historial.create")
+            || PermissionService.HasPermission(user, "historial.edit")
+            || isDoctor;
         _canViewFacturas = PermissionService.HasPermission(user, "facturacion.view");
 
         if (_tab == "odontograma" && !_canViewOdontogram)
             _tab = "datos";
         if (_tab == "facturas" && !_canViewFacturas)
+            _tab = "datos";
+        if (_tab == "certificados" && !_canViewCertificados)
             _tab = "datos";
 
         await LoadAsync();
@@ -764,6 +783,8 @@ else if (_profile != null)
             if (tab == "odontograma" && !_canViewOdontogram)
                 return;
             if (tab == "recetas" && !_canViewRecetas)
+                return;
+            if (tab == "certificados" && !_canViewCertificados)
                 return;
             if (tab == "facturas" && !_canViewFacturas)
                 return;

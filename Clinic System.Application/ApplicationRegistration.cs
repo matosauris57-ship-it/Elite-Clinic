@@ -23,6 +23,7 @@ namespace Clinic_System.Application
             services.AddScoped<IToothChartService, ToothChartService>();
             services.AddScoped<IPeriodontalExamService, PeriodontalExamService>();
             services.AddScoped<IPatientPrescriptionService, PatientPrescriptionService>();
+            services.AddScoped<IPatientMedicalCertificateService, PatientMedicalCertificateService>();
             services.AddScoped<IDentalTreatmentService, DentalTreatmentService>();
             services.AddScoped<ITreatmentPlanService, TreatmentPlanService>();
             services.AddScoped<IInvoiceLineService, InvoiceLineService>();

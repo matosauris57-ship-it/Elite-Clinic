@@ -1,0 +1,64 @@
+@page "/pacientes/{PatientId:int}/certificados/{CertificateId:int}/imprimir"
+@layout PrintLayout
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "pacientes.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject PatientMedicalCertificateService Certificates
+@inject IJSRuntime JS
+
+<PageTitle>Certificado #@CertificateId</PageTitle>
+
+<div class="invoice-print-page">
+    <div class="invoice-print-toolbar no-print">
+        <a class="btn-outline" href="/pacientes/@PatientId?tab=certificados">Volver a la ficha</a>
+        <button class="btn-primary" disabled="@_loading" @onclick="PrintAsync">Generar PDF / Imprimir</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_loading || _certificate == null)
+    {
+        <AnimatedLoader Message="Cargando certificado..." />
+    }
+    else
+    {
+        <MedicalCertificateDocument Certificate="_certificate" />
+    }
+</div>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public int CertificateId { get; set; }
+
+    private PatientMedicalCertificateDetail? _certificate;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var (item, error) = await Certificates.GetAsync(CertificateId);
+        _certificate = item;
+        _error = error;
+        if (_certificate == null && string.IsNullOrWhiteSpace(_error))
+            _error = "No se encontró el certificado.";
+        else if (_certificate != null && _certificate.PatientId != PatientId)
+            _error = "El certificado no corresponde a este paciente.";
+        _loading = false;
+    }
+
+    private async Task PrintAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareUi.printPage");
+        }
+        catch
+        {
+        }
+    }
+}

@@ -1,0 +1,121 @@
+@using System.Globalization
+@inject ClinicProfileService ClinicProfile
+
+<article class="invoice-document medical-certificate-document">
+    <header class="invoice-letterhead">
+        <div class="invoice-brand">
+            @if (!string.IsNullOrWhiteSpace(Clinic.DisplayLogoUrl))
+            {
+                <img class="invoice-logo" src="@Clinic.DisplayLogoUrl" alt="@Clinic.Name" />
+            }
+            <div class="invoice-brand-copy">
+                <h1>@Clinic.Name</h1>
+                <p class="invoice-contact">
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Address)) { <span>@Clinic.Address</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Phone)) { <span>Tel. @Clinic.Phone</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Email)) { <span>@Clinic.Email</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.TaxId)) { <span>RNC @Clinic.TaxId</span> }
+                </p>
+            </div>
+        </div>
+        <aside class="invoice-meta">
+            <p class="invoice-kicker">Certificado N.º @Certificate.Id</p>
+            <p class="invoice-meta-line">@Certificate.IssuedAt.ToString("dd/MM/yyyy", Culture)</p>
+        </aside>
+    </header>
+
+    <section class="invoice-parties">
+        <p><span>Paciente</span> <strong>@Certificate.PatientName</strong>
+            @if (!string.IsNullOrWhiteSpace(Certificate.PatientNationalId))
+            {
+                <span class="invoice-party-extra">Céd. @Certificate.PatientNationalId</span>
+            }
+            @if (Certificate.PatientDateOfBirth.HasValue)
+            {
+                <span class="invoice-party-extra">@AgeLabel(Certificate.PatientDateOfBirth.Value)</span>
+            }
+        </p>
+        <p><span>Médico firmante</span> <strong>@(Certificate.DoctorName ?? "Médico tratante")</strong>
+            @if (!string.IsNullOrWhiteSpace(Certificate.DoctorSpecialization))
+            {
+                <span class="invoice-party-extra">@Certificate.DoctorSpecialization</span>
+            }
+        </p>
+    </section>
+
+    <section class="certificate-body">
+        <p class="certificate-title">@Certificate.CertificateType</p>
+        <p>
+            Por medio de la presente se certifica que <strong>@Certificate.PatientName</strong>
+            fue evaluado(a) en esta consulta en fecha
+            <strong>@Certificate.IssuedAt.ToString("dd/MM/yyyy", Culture)</strong>.
+        </p>
+        <dl class="certificate-detail-list">
+            <div>
+                <dt>Motivo / diagnóstico</dt>
+                <dd>@Certificate.Diagnosis</dd>
+            </div>
+            <div>
+                <dt>Recomendación</dt>
+                <dd>@Certificate.Recommendation</dd>
+            </div>
+            @if (Certificate.IncludesRest)
+            {
+                <div>
+                    <dt>Reposo indicado</dt>
+                    <dd>
+                        @Certificate.RestDays día(s)
+                        @if (Certificate.RestStartDate.HasValue && Certificate.RestEndDate.HasValue)
+                        {
+                            <span> del @Certificate.RestStartDate.Value.ToString("dd/MM/yyyy", Culture) al @Certificate.RestEndDate.Value.ToString("dd/MM/yyyy", Culture)</span>
+                        }
+                    </dd>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Certificate.Purpose))
+            {
+                <div>
+                    <dt>Finalidad</dt>
+                    <dd>@Certificate.Purpose</dd>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Certificate.Observations))
+            {
+                <div>
+                    <dt>Observaciones</dt>
+                    <dd>@Certificate.Observations</dd>
+                </div>
+            }
+        </dl>
+        <p class="certificate-validity">
+            Este certificado se emite a solicitud de la persona interesada para los fines correspondientes.
+        </p>
+    </section>
+
+    <footer class="rx-signoff certificate-signoff">
+        <div>
+            <p>______________________________</p>
+            <p>@(Certificate.DoctorName ?? "Médico tratante")</p>
+            <p>Firma y sello</p>
+        </div>
+        <p class="rx-disclaimer">Documento generado desde el expediente clínico del paciente. Verifique firma y sello para su validez externa.</p>
+    </footer>
+</article>
+
+@code {
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-DO");
+
+    [Parameter, EditorRequired]
+    public PatientMedicalCertificateDetail Certificate { get; set; } = new();
+
+    private ClinicProfile Clinic => ClinicProfile.Get();
+
+    private static string AgeLabel(DateTime birth)
+    {
+        var today = DateTime.Today;
+        var years = today.Year - birth.Year;
+        if (birth.Date > today.AddYears(-years))
+            years--;
+        return years >= 0 ? $"{years} años" : "";
+    }
+}

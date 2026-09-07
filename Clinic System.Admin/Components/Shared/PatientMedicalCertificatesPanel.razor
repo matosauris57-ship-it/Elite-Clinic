@@ -1,0 +1,428 @@
+@inject PatientMedicalCertificateService Certificates
+@inject DoctorMaintenanceService DoctorService
+@inject AuthService AuthService
+
+<section class="certificate-panel rx-panel">
+    <div class="clinical-section-heading">
+        <div>
+            <h3>Certificados médicos / odontológicos</h3>
+            <p>Genere certificados desde una plantilla clínica y guarde el historial en la ficha del paciente.</p>
+        </div>
+        @if (CanEdit)
+        {
+            <button class="btn-primary" type="button" @onclick="StartNewAsync">Nuevo certificado</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="wizard-success">@_message</div>
+    }
+
+    @if (_editing)
+    {
+        <div class="certificate-editor-grid">
+            <div class="rx-editor new-patient-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cert-date">Fecha de emisión</label>
+                        <input id="cert-date" class="form-input" type="date" @bind="_issuedDate" disabled="@(!CanEdit)" />
+                    </div>
+                    <div class="form-group">
+                        <label for="cert-doctor">Médico que firma</label>
+                        <select id="cert-doctor" class="form-input" @bind="_doctorId" disabled="@(!CanEdit)">
+                            <option value="0">Sin especificar</option>
+                            @foreach (var doctor in _doctors)
+                            {
+                                <option value="@doctor.Id">@doctor.FullName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cert-type">Tipo de certificado</label>
+                        <select id="cert-type" class="form-input" @bind="_certificateType" disabled="@(!CanEdit)">
+                            @foreach (var option in _options.CertificateTypes)
+                            {
+                                <option value="@option.Value">@option.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="cert-purpose">Finalidad (opcional)</label>
+                        <select id="cert-purpose" class="form-input" @bind="_purpose" disabled="@(!CanEdit)">
+                            <option value="">Sin especificar</option>
+                            @foreach (var option in _options.Purposes)
+                            {
+                                <option value="@option.Value">@option.Label</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="cert-dx">Motivo o diagnóstico</label>
+                    <input id="cert-dx" class="form-input" list="certificate-diagnoses" @bind="_diagnosis" disabled="@(!CanEdit)"
+                           placeholder="Ej. Gingivitis, extracción dental, control odontológico" />
+                    <datalist id="certificate-diagnoses">
+                        @foreach (var suggestion in DiagnosisSuggestions)
+                        {
+                            <option value="@suggestion"></option>
+                        }
+                    </datalist>
+                </div>
+
+                <div class="form-group">
+                    <label for="cert-recommendation">Recomendación</label>
+                    <textarea id="cert-recommendation" class="form-input" rows="3" @bind="_recommendation" disabled="@(!CanEdit)"
+                              placeholder="Ej. Guardar reposo domiciliario. Evitar esfuerzos físicos. Continuar tratamiento indicado."></textarea>
+                </div>
+
+                <label class="toggle-inline certificate-rest-toggle">
+                    <input type="checkbox" @bind="_includesRest" disabled="@(!CanEdit)" />
+                    <span>Incluye reposo médico</span>
+                </label>
+
+                @if (_includesRest)
+                {
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cert-rest-start">Fecha inicio</label>
+                            <input id="cert-rest-start" class="form-input" type="date" @bind="_restStartDate" disabled="@(!CanEdit)" />
+                        </div>
+                        <div class="form-group">
+                            <label for="cert-rest-end">Fecha fin</label>
+                            <input id="cert-rest-end" class="form-input" type="date" @bind="_restEndDate" disabled="@(!CanEdit)" />
+                        </div>
+                        <div class="form-group">
+                            <label for="cert-rest-days">Cantidad de días</label>
+                            <input id="cert-rest-days" class="form-input" type="number" min="1" max="365" @bind="_restDays" disabled="@(!CanEdit)" />
+                        </div>
+                    </div>
+                }
+
+                <div class="form-group">
+                    <label for="cert-observations">Observaciones</label>
+                    <textarea id="cert-observations" class="form-input" rows="3" @bind="_observations" disabled="@(!CanEdit)"
+                              placeholder="Ej. Paciente debe asistir a control en 7 días."></textarea>
+                </div>
+
+                <div class="modal-actions rx-actions">
+                    <button type="button" class="btn-outline" @onclick="CancelEdit">Cancelar</button>
+                    <button type="button" class="btn-primary" disabled="@(_saving || !CanEdit)" @onclick="SaveAsync">@(_saving ? "Guardando..." : "Guardar certificado")</button>
+                </div>
+            </div>
+
+            <aside class="certificate-preview-card">
+                <span class="rx-template-cat">Vista previa</span>
+                <h4>@CertificateTypeLabel</h4>
+                <p>Se certifica que el/la paciente seleccionado(a) fue evaluado(a) por el motivo:</p>
+                <strong>@(string.IsNullOrWhiteSpace(_diagnosis) ? "Motivo o diagnóstico pendiente" : _diagnosis)</strong>
+                <p>@(string.IsNullOrWhiteSpace(_recommendation) ? "La recomendación aparecerá aquí." : _recommendation)</p>
+                @if (_includesRest)
+                {
+                    <p class="certificate-rest-preview">Reposo: @RestPreview</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(_purpose))
+                {
+                    <p>Finalidad: @_purpose</p>
+                }
+            </aside>
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando certificados..." />
+    }
+    else if (_certificates.Count == 0 && !_editing)
+    {
+        <div class="maintenance-empty"><p>Este paciente no tiene certificados guardados.</p></div>
+    }
+    else if (!_editing)
+    {
+        <div class="rx-history">
+            @foreach (var certificate in _certificates)
+            {
+                <article class="rx-history-card certificate-history-card">
+                    <div>
+                        <strong>@certificate.IssuedAt.ToLocalTime().ToString("dd/MM/yyyy") - @certificate.CertificateType</strong>
+                        <p>@(certificate.DoctorName ?? "Sin médico") · @(string.IsNullOrWhiteSpace(certificate.Purpose) ? "Sin finalidad" : certificate.Purpose)</p>
+                        <p>@certificate.Diagnosis</p>
+                        @if (certificate.IncludesRest)
+                        {
+                            <p>Reposo: @certificate.RestDays día(s) (@FormatDate(certificate.RestStartDate) - @FormatDate(certificate.RestEndDate))</p>
+                        }
+                    </div>
+                    <div class="rx-history-actions">
+                        <a class="btn-outline" href="/pacientes/@PatientId/certificados/@certificate.Id/imprimir">Generar PDF / Imprimir</a>
+                        @if (CanEdit)
+                        {
+                            <button type="button" class="btn-outline" @onclick="() => EditAsync(certificate.Id)">Editar</button>
+                            <button type="button" class="btn-outline" @onclick="() => DeleteAsync(certificate.Id)">Anular</button>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public string? PatientDiagnosis { get; set; }
+
+    private readonly List<PatientMedicalCertificateSummary> _certificates = [];
+    private readonly List<DoctorListItem> _doctors = [];
+    private MedicalCertificateOptions _options = new();
+    private bool _loading = true;
+    private bool _editing;
+    private bool _saving;
+    private int? _editingId;
+    private int _doctorId;
+    private DateTime _issuedDate = DateTime.Today;
+    private string _certificateType = "Certificado Médico General";
+    private string? _diagnosis;
+    private string? _recommendation;
+    private bool _includesRest;
+    private DateTime? _restStartDate;
+    private DateTime? _restEndDate;
+    private int? _restDays;
+    private string? _observations;
+    private string? _purpose;
+    private string? _error;
+    private string? _message;
+
+    private IEnumerable<string> DiagnosisSuggestions
+    {
+        get
+        {
+            var suggestions = _options.DiagnosisSuggestions.ToList();
+            if (!string.IsNullOrWhiteSpace(PatientDiagnosis))
+                suggestions.Add(PatientDiagnosis);
+            return suggestions
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private string CertificateTypeLabel =>
+        string.IsNullOrWhiteSpace(_certificateType) ? "Certificado médico" : _certificateType;
+
+    private string RestPreview
+    {
+        get
+        {
+            var days = _restDays ?? CalculateRestDays();
+            var dateRange = _restStartDate.HasValue && _restEndDate.HasValue
+                ? $" del {_restStartDate.Value:dd/MM/yyyy} al {_restEndDate.Value:dd/MM/yyyy}"
+                : "";
+            return days.HasValue ? $"{days} día(s){dateRange}" : "pendiente de fechas";
+        }
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var certificatesTask = AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await Certificates.ListAsync(PatientId);
+                return (response.Items, response.Error);
+            },
+            AuthService.IsTokenError);
+        var optionsTask = AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await Certificates.GetOptionsAsync();
+                return (response.Item, response.Error);
+            },
+            AuthService.IsTokenError);
+        var doctorsTask = DoctorService.GetDoctorsAsync();
+
+        var certificates = await certificatesTask;
+        var options = await optionsTask;
+        var (doctors, _) = await doctorsTask;
+
+        _certificates.Clear();
+        _certificates.AddRange(certificates.Data);
+        _options = options.Data ?? DefaultOptions();
+        if (string.IsNullOrWhiteSpace(_certificateType) && _options.CertificateTypes.Count > 0)
+            _certificateType = _options.CertificateTypes[0].Value;
+        _doctors.Clear();
+        _doctors.AddRange(doctors.Where(d => d.IsActive));
+        _error = certificates.Error ?? options.Error;
+        _loading = false;
+    }
+
+    private Task StartNewAsync()
+    {
+        _editing = true;
+        _editingId = null;
+        _issuedDate = DateTime.Today;
+        _doctorId = 0;
+        _certificateType = _options.CertificateTypes.FirstOrDefault()?.Value ?? "Certificado Médico General";
+        _diagnosis = PatientDiagnosis;
+        _recommendation = null;
+        _includesRest = false;
+        _restStartDate = null;
+        _restEndDate = null;
+        _restDays = null;
+        _observations = null;
+        _purpose = null;
+        _message = null;
+        _error = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task EditAsync(int id)
+    {
+        _error = null;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await Certificates.GetAsync(id);
+                return (response.Item, response.Error);
+            },
+            AuthService.IsTokenError);
+        if (result.Data == null)
+        {
+            _error = result.Error ?? "No se pudo abrir el certificado.";
+            return;
+        }
+
+        _editing = true;
+        _editingId = id;
+        _issuedDate = result.Data.IssuedAt.Date;
+        _doctorId = result.Data.DoctorId ?? 0;
+        _certificateType = result.Data.CertificateType;
+        _diagnosis = result.Data.Diagnosis;
+        _recommendation = result.Data.Recommendation;
+        _includesRest = result.Data.IncludesRest;
+        _restStartDate = result.Data.RestStartDate;
+        _restEndDate = result.Data.RestEndDate;
+        _restDays = result.Data.RestDays;
+        _observations = result.Data.Observations;
+        _purpose = result.Data.Purpose;
+    }
+
+    private void CancelEdit()
+    {
+        _editing = false;
+        _editingId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_diagnosis))
+        {
+            _error = "Indique el motivo o diagnóstico.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_recommendation))
+        {
+            _error = "Indique la recomendación.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        _message = null;
+        var request = new SavePatientMedicalCertificateRequest
+        {
+            DoctorId = _doctorId == 0 ? null : _doctorId,
+            IssuedAt = _issuedDate,
+            CertificateType = _certificateType,
+            Diagnosis = _diagnosis,
+            Recommendation = _recommendation,
+            IncludesRest = _includesRest,
+            RestStartDate = _includesRest ? _restStartDate : null,
+            RestEndDate = _includesRest ? _restEndDate : null,
+            RestDays = _includesRest ? _restDays ?? CalculateRestDays() : null,
+            Observations = _observations,
+            Purpose = _purpose
+        };
+
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = _editingId.HasValue
+                    ? await Certificates.UpdateAsync(_editingId.Value, request)
+                    : await Certificates.CreateAsync(PatientId, request);
+                return (response.Item, response.Error);
+            },
+            AuthService.IsTokenError);
+
+        _saving = false;
+        if (result.Data == null)
+        {
+            _error = result.Error ?? "No se pudo guardar el certificado.";
+            return;
+        }
+
+        _message = "Certificado guardado. Puede generarlo como PDF o imprimirlo desde el historial.";
+        _editing = false;
+        _editingId = null;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        _error = null;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await Certificates.DeleteAsync(id);
+                return (response.Success, response.Error);
+            },
+            AuthService.IsTokenError);
+        if (!string.IsNullOrWhiteSpace(result.Error) || !result.Data)
+        {
+            _error = result.Error ?? "No se pudo anular el certificado.";
+            return;
+        }
+        _message = "Certificado anulado.";
+        await LoadAsync();
+    }
+
+    private int? CalculateRestDays()
+    {
+        if (!_restStartDate.HasValue || !_restEndDate.HasValue || _restEndDate.Value.Date < _restStartDate.Value.Date)
+            return null;
+        return (_restEndDate.Value.Date - _restStartDate.Value.Date).Days + 1;
+    }
+
+    private static string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd/MM/yyyy") : "--";
+
+    private static MedicalCertificateOptions DefaultOptions() => new()
+    {
+        CertificateTypes =
+        [
+            new() { Value = "Certificado Médico General", Label = "Certificado Médico General" },
+            new() { Value = "Reposo Médico", Label = "Reposo Médico" },
+            new() { Value = "Certificado Odontológico", Label = "Certificado Odontológico" },
+            new() { Value = "Certificado de Asistencia", Label = "Certificado de Asistencia" },
+            new() { Value = "Certificado de Aptitud", Label = "Certificado de Aptitud" },
+            new() { Value = "Otro", Label = "Otro" }
+        ],
+        Purposes =
+        [
+            new() { Value = "Laboral", Label = "Laboral" },
+            new() { Value = "Escolar", Label = "Escolar" },
+            new() { Value = "Personal", Label = "Personal" },
+            new() { Value = "Seguro Médico", Label = "Seguro Médico" },
+            new() { Value = "Otro", Label = "Otro" }
+        ],
+        DiagnosisSuggestions = ["Gingivitis", "Extracción dental", "Control odontológico", "Infección respiratoria"]
+    };
+}

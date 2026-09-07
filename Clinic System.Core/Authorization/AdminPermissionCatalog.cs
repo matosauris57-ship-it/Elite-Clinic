@@ -45,6 +45,7 @@ public static class AdminPermissionCatalog
         new("planes-tratamiento", "Planes de tratamiento", [Actions.View, Actions.Create, Actions.Edit]),
         new("historial", "Historial Clínico", [Actions.View, Actions.Create, Actions.Edit]),
         new("recetas", "Recetas", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
+        new("certificados", "Certificados médicos", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
         new("facturacion", "Facturación", [Actions.View, Actions.Create, Actions.Edit]),
         new("analitica", "Analítica", [Actions.View]),
         new("inventario", "Inventario", [Actions.View, Actions.Edit]),

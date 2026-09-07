@@ -5274,6 +5274,40 @@ button.whatsapp-placeholder-chip:hover {
 }
 .rx-history-card p { margin: 0.2rem 0 0; color: var(--text-muted); font-size: 0.78rem; }
 .rx-history-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.certificate-editor-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+    gap: 1rem;
+    align-items: start;
+}
+.certificate-preview-card {
+    position: sticky;
+    top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-sm);
+}
+.certificate-preview-card h4 { margin: 0.25rem 0 0.65rem; color: var(--text-primary); }
+.certificate-preview-card p { margin: 0.55rem 0 0; color: var(--text-muted); font-size: 0.84rem; line-height: 1.45; }
+.certificate-preview-card strong { display: block; color: var(--text-primary); }
+.toggle-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--text-primary);
+    font-weight: 700;
+}
+.certificate-rest-toggle { margin: 0.8rem 0; }
+.certificate-rest-preview {
+    padding: 0.5rem 0.65rem;
+    border-radius: var(--radius);
+    background: rgba(20, 184, 166, 0.12);
+    color: var(--accent-teal) !important;
+    font-weight: 700;
+}
+.certificate-history-card strong { color: var(--text-primary); }
 .rx-document .rx-symbol {
     margin: 0.75rem 0 0.35rem;
     font-size: 1.6rem;
@@ -5311,6 +5345,41 @@ button.whatsapp-placeholder-chip:hover {
 }
 .rx-signoff p { margin: 0.15rem 0 0; font-size: 0.78rem; color: #3d5b61; }
 .rx-disclaimer { font-size: 0.7rem !important; }
+.medical-certificate-document .certificate-body {
+    margin: 1.4rem 0 1rem;
+    font-size: 0.95rem;
+    line-height: 1.65;
+}
+.certificate-title {
+    margin: 0 0 1rem !important;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 800;
+    color: #0f3a40;
+}
+.certificate-detail-list {
+    display: grid;
+    gap: 0.8rem;
+    margin: 1rem 0;
+}
+.certificate-detail-list div {
+    padding: 0.75rem 0.85rem;
+    border: 1px solid #d7e5e7;
+    border-radius: 12px;
+    background: #f8fcfc;
+}
+.certificate-detail-list dt {
+    margin-bottom: 0.25rem;
+    color: #3d5b61;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.certificate-detail-list dd { margin: 0; white-space: pre-wrap; }
+.certificate-validity { margin-top: 1.2rem; color: #3d5b61; }
+.certificate-signoff { margin-top: 2rem; }
 
 @media print {
     .rx-document { border: none; }
@@ -5318,6 +5387,8 @@ button.whatsapp-placeholder-chip:hover {
 
 @media (max-width: 640px) {
     .rx-history-card { flex-direction: column; }
+    .certificate-editor-grid { grid-template-columns: 1fr; }
+    .certificate-preview-card { position: static; }
 }
 
 .symbol-config-page { max-width: 1180px; }

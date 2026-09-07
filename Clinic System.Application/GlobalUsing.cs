@@ -47,6 +47,7 @@ global using Clinic_System.Application.Features.ToothRecords.Queries.Models;
 global using Clinic_System.Application.Features.ToothChart.Models;
 global using Clinic_System.Application.Features.Periodontogram.Models;
 global using Clinic_System.Application.Features.PatientPrescriptions.Models;
+global using Clinic_System.Application.Features.PatientMedicalCertificates.Models;
 global using Clinic_System.Application.Features.DentalTreatments.Commands.Models;
 global using Clinic_System.Application.Features.DentalTreatments.Queries.Models;
 global using Clinic_System.Application.Features.TreatmentPlans.Commands.Models;

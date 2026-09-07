@@ -27,6 +27,7 @@ namespace Clinic_System.Data.Context
         public DbSet<PeriodontalSite> PeriodontalSites { get; set; }
         public DbSet<PatientPrescription> PatientPrescriptions { get; set; }
         public DbSet<PatientPrescriptionItem> PatientPrescriptionItems { get; set; }
+        public DbSet<PatientMedicalCertificate> PatientMedicalCertificates { get; set; }
         public DbSet<DashboardLayout> DashboardLayouts { get; set; }
         public DbSet<EmailCampaign> EmailCampaigns { get; set; }
         public DbSet<EmailCampaignRecipient> EmailCampaignRecipients { get; set; }
