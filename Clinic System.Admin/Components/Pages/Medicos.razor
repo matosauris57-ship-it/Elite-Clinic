@@ -168,9 +168,12 @@
                         </div>
                     </div>
                     <div class="doctor-signature-box">
-                        <div>
+                        <div class="signature-upload-card">
+                            <span class="signature-upload-kicker">Firma digitalizada</span>
                             <label>Firma del médico</label>
-                            <InputFile OnChange="OnEditSignatureSelected" accept="image/png,image/jpeg,image/webp" />
+                            <div class="signature-file-control">
+                                <InputFile OnChange="OnEditSignatureSelected" accept="image/png,image/jpeg,image/webp" />
+                            </div>
                             <p class="rx-hint">Sube una foto recortada de la firma en PNG, JPG o WebP. Máximo 750 KB.</p>
                         </div>
                         <SignaturePreview ImageUrl="_editForm.SignatureImageUrl" OnClear="ClearEditSignature" />
@@ -223,9 +226,12 @@
                 <div class="modal-section">
                     <h3>Firma para documentos</h3>
                     <div class="doctor-signature-box">
-                        <div>
+                        <div class="signature-upload-card">
+                            <span class="signature-upload-kicker">Opcional</span>
                             <label>Firma del médico</label>
-                            <InputFile OnChange="OnCreateSignatureSelected" accept="image/png,image/jpeg,image/webp" />
+                            <div class="signature-file-control">
+                                <InputFile OnChange="OnCreateSignatureSelected" accept="image/png,image/jpeg,image/webp" />
+                            </div>
                             <p class="rx-hint">Opcional. Puedes subir una foto de la firma hecha en papel blanco.</p>
                         </div>
                         <SignaturePreview ImageUrl="_createForm.SignatureImageUrl" OnClear="ClearCreateSignature" />

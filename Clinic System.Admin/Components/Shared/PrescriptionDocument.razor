@@ -24,6 +24,11 @@
         </aside>
     </header>
 
+    <section class="clinical-document-heading">
+        <span>Documento clínico</span>
+        <h2>Receta médica</h2>
+    </section>
+
     <section class="invoice-parties">
         <p><span>Paciente</span> <strong>@Prescription.PatientName</strong>
             @if (!string.IsNullOrWhiteSpace(Prescription.PatientNationalId))
@@ -83,7 +88,7 @@
     }
 
     <footer class="rx-signoff">
-        <div>
+        <div class="doctor-signature-block">
             @if (!string.IsNullOrWhiteSpace(Prescription.DoctorSignatureImageUrl))
             {
                 <img class="doctor-signature-print" src="@Prescription.DoctorSignatureImageUrl" alt="Firma del médico" />

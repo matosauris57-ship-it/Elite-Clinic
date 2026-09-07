@@ -3826,7 +3826,9 @@ a.btn-retry {
 
 .print-shell {
     min-height: 100vh;
-    background: var(--bg-primary);
+    background:
+        radial-gradient(circle at top left, rgba(20, 184, 166, 0.12), transparent 34rem),
+        var(--bg-primary);
 }
 
 .invoice-print-page {
@@ -3862,9 +3864,10 @@ a.btn-retry {
 .invoice-document {
     background: #fff;
     color: #163238;
-    padding: 0.75rem 0.9rem 0.85rem;
+    padding: 1.1rem 1.2rem 1.25rem;
     border: 1px solid #d7e4e7;
-    border-radius: 8px;
+    border-radius: 16px;
+    box-shadow: 0 18px 45px rgba(15, 58, 64, 0.12);
 }
 
 .invoice-letterhead {
@@ -3872,8 +3875,8 @@ a.btn-retry {
     grid-template-columns: minmax(0, 1.5fr) auto;
     gap: 0.75rem 1.25rem;
     align-items: center;
-    padding-bottom: 0.55rem;
-    border-bottom: 2px solid #1aa7b8;
+    padding: 0 0 0.75rem;
+    border-bottom: 1px solid #cde7eb;
 }
 
 .invoice-brand {
@@ -3902,6 +3905,10 @@ a.btn-retry {
 
 .invoice-meta {
     text-align: right;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #d7e4e7;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f4fbfc, #ffffff);
 }
 
 .invoice-kicker {
@@ -3952,8 +3959,11 @@ a.btn-retry {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.35rem 1rem;
-    padding: 0.45rem 0;
-    border-bottom: 1px solid #e4eef0;
+    margin: 0.75rem 0;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #e4eef0;
+    border-radius: 14px;
+    background: #f8fcfc;
 }
 
 .invoice-parties p {
@@ -5222,6 +5232,21 @@ button.whatsapp-placeholder-chip:hover {
     .timeline-event-head { flex-direction: column; gap: 0.2rem; }
 }
 
+.rx-panel {
+    padding: 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background:
+        linear-gradient(135deg, rgba(20, 184, 166, 0.08), transparent 18rem),
+        var(--bg-card);
+    box-shadow: var(--shadow-sm);
+}
+.rx-editor {
+    padding: 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: var(--surface-1);
+}
 .rx-subtitle { margin: 1rem 0 0.35rem; font-size: 0.95rem; }
 .rx-hint { margin: 0 0 0.75rem; color: var(--text-muted); font-size: 0.78rem; }
 .rx-template-grid {
@@ -5242,8 +5267,13 @@ button.whatsapp-placeholder-chip:hover {
     color: inherit;
     cursor: pointer;
     font: inherit;
+    transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
-.rx-template-card:hover { border-color: var(--accent-teal); }
+.rx-template-card:hover {
+    border-color: var(--accent-teal);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+}
 .rx-template-card:disabled { opacity: 0.6; cursor: not-allowed; }
 .rx-template-cat {
     color: var(--accent-teal);
@@ -5270,10 +5300,44 @@ button.whatsapp-placeholder-chip:hover {
     padding: 0.85rem 1rem;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
-    background: var(--surface-2);
+    background:
+        linear-gradient(90deg, rgba(20, 184, 166, 0.1), transparent 45%),
+        var(--surface-2);
 }
 .rx-history-card p { margin: 0.2rem 0 0; color: var(--text-muted); font-size: 0.78rem; }
 .rx-history-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.clinical-document-heading {
+    position: relative;
+    margin: 0.85rem 0 0.7rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0f3a40, #1aa7b8);
+    color: #fff;
+    overflow: hidden;
+}
+.clinical-document-heading::after {
+    content: "";
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    right: -54px;
+    top: -64px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.14);
+}
+.clinical-document-heading span {
+    display: block;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.82;
+}
+.clinical-document-heading h2 {
+    margin: 0.12rem 0 0;
+    font-size: 1.12rem;
+    line-height: 1.2;
+}
 .certificate-editor-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
@@ -5316,10 +5380,36 @@ button.whatsapp-placeholder-chip:hover {
     color: #0f3a40;
 }
 .rx-lines {
+    display: grid;
+    gap: 0.55rem;
     margin: 0 0 1rem;
-    padding-left: 1.2rem;
+    padding-left: 0;
+    list-style: none;
 }
-.rx-lines li { margin: 0 0 0.65rem; }
+.rx-lines li {
+    position: relative;
+    margin: 0;
+    padding: 0.62rem 0.75rem 0.62rem 2.05rem;
+    border: 1px solid #e4eef0;
+    border-left: 4px solid #1aa7b8;
+    border-radius: 12px;
+    background: #fbfefe;
+}
+.rx-lines li::before {
+    content: counter(list-item);
+    position: absolute;
+    left: 0.65rem;
+    top: 0.72rem;
+    display: grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: #e3f7f9;
+    color: #0f3a40;
+    font-size: 0.6rem;
+    font-weight: 800;
+}
 .rx-lines strong { display: block; }
 .rx-lines span, .rx-lines em { display: block; font-size: 0.85rem; color: #3d5b61; }
 .rx-lines em { font-style: italic; }
@@ -5352,28 +5442,85 @@ button.whatsapp-placeholder-chip:hover {
     align-items: start;
     margin-top: 0.75rem;
 }
-.signature-preview-card {
-    display: grid;
-    gap: 0.55rem;
-    justify-items: center;
-    padding: 0.75rem;
+.signature-upload-card {
+    min-height: 150px;
+    padding: 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background:
+        linear-gradient(135deg, rgba(20, 184, 166, 0.1), transparent),
+        var(--bg-card);
+}
+.signature-upload-kicker,
+.signature-preview-label {
+    display: inline-flex;
+    margin-bottom: 0.35rem;
+    color: var(--accent-teal);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.signature-file-control {
+    margin: 0.55rem 0;
+    padding: 0.7rem;
     border: 1px dashed var(--border);
     border-radius: var(--radius);
     background: var(--surface-2);
 }
-.signature-preview-card img {
+.signature-file-control input[type="file"] {
+    width: 100%;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.signature-file-control input[type="file"]::file-selector-button {
+    margin-right: 0.7rem;
+    padding: 0.45rem 0.75rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--accent-teal);
+    color: #fff;
+    cursor: pointer;
+    font-weight: 700;
+}
+.signature-preview-card {
+    display: grid;
+    gap: 0.65rem;
+    justify-items: center;
+    padding: 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-sm);
+}
+.signature-preview-surface {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    min-height: 110px;
+    padding: 0.8rem;
+    border-radius: 14px;
+    background:
+        linear-gradient(#eef7f8 1px, transparent 1px),
+        linear-gradient(90deg, #eef7f8 1px, transparent 1px),
+        #fff;
+    background-size: 18px 18px;
+}
+.signature-preview-surface img {
     max-width: 220px;
     max-height: 92px;
     object-fit: contain;
     mix-blend-mode: multiply;
 }
 .signature-preview-empty {
-    display: grid;
-    place-items: center;
-    min-height: 82px;
-    width: 100%;
     color: var(--text-muted);
     font-size: 0.8rem;
+    text-align: center;
+}
+.signature-preview-empty small {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.7rem;
 }
 .signature-status {
     display: inline-flex;
@@ -5396,6 +5543,13 @@ button.whatsapp-placeholder-chip:hover {
     object-fit: contain;
     margin-bottom: 0.2rem;
     mix-blend-mode: multiply;
+}
+.doctor-signature-block {
+    display: inline-grid;
+    justify-items: center;
+    min-width: 245px;
+    padding-top: 0.5rem;
+    border-top: 1px solid #d7e4e7;
 }
 .medical-certificate-document .certificate-body {
     margin: 1.4rem 0 1rem;

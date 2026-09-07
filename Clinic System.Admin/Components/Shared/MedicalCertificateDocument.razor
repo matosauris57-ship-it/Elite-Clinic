@@ -24,6 +24,11 @@
         </aside>
     </header>
 
+    <section class="clinical-document-heading">
+        <span>Documento clínico</span>
+        <h2>@Certificate.CertificateType</h2>
+    </section>
+
     <section class="invoice-parties">
         <p><span>Paciente</span> <strong>@Certificate.PatientName</strong>
             @if (!string.IsNullOrWhiteSpace(Certificate.PatientNationalId))
@@ -44,7 +49,6 @@
     </section>
 
     <section class="certificate-body">
-        <p class="certificate-title">@Certificate.CertificateType</p>
         <p>
             Por medio de la presente se certifica que <strong>@Certificate.PatientName</strong>
             fue evaluado(a) en esta consulta en fecha
@@ -93,7 +97,7 @@
     </section>
 
     <footer class="rx-signoff certificate-signoff">
-        <div>
+        <div class="doctor-signature-block">
             @if (!string.IsNullOrWhiteSpace(Certificate.DoctorSignatureImageUrl))
             {
                 <img class="doctor-signature-print" src="@Certificate.DoctorSignatureImageUrl" alt="Firma del médico" />
