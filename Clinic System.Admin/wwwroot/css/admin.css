@@ -4867,7 +4867,16 @@ button.whatsapp-placeholder-chip:hover {
     font-size: 0.68rem;
 }
 
-.periodontogram-module { margin-top: 0.35rem; }
+.periodontogram-module {
+    margin-top: 0.35rem;
+    padding: 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background:
+        radial-gradient(circle at top left, rgba(20, 184, 166, 0.1), transparent 22rem),
+        var(--bg-card);
+    box-shadow: var(--shadow-sm);
+}
 .perio-toolbar { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: flex-end; }
 .perio-compare-row { align-items: flex-end; margin: 0.75rem 0; }
 .periodontal-legend {
@@ -4877,6 +4886,12 @@ button.whatsapp-placeholder-chip:hover {
     margin: 0.75rem 0;
     color: var(--text-muted);
     font-size: 0.72rem;
+}
+.periodontal-legend span {
+    padding: 0.28rem 0.5rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    background: var(--surface-2);
 }
 .periodontal-legend b { color: var(--text-primary); margin-right: 0.2rem; }
 .periodontal-teeth-row { min-width: 680px; }
@@ -4890,6 +4905,31 @@ button.whatsapp-placeholder-chip:hover {
 .perio-tooth.pocket-elevated { outline: 2px solid #c62828; }
 .perio-tooth.is-missing { opacity: 0.55; }
 .perio-nav-buttons { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.perio-tooth-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 0.65rem 0 0.85rem;
+}
+.perio-tooth-summary span {
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: 0.76rem;
+}
+.perio-tooth-summary b { color: var(--text-primary); }
+.perio-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 0.25rem 0 0.85rem;
+    padding: 0.65rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+}
 .perio-surface-title { margin: 0.85rem 0 0.35rem; font-size: 0.82rem; }
 .perio-measure-wrap { overflow-x: auto; }
 .perio-measure-table { min-width: 420px; }
@@ -4898,8 +4938,45 @@ button.whatsapp-placeholder-chip:hover {
 .perio-mm.pocket-elevated { box-shadow: inset 0 0 0 2px #c62828; }
 .perio-cal { font-weight: 700; }
 .perio-flag { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; cursor: pointer; }
-.periodontal-history, .periodontal-compare { margin-top: 1rem; }
+.periodontal-history, .periodontal-compare {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: var(--surface-1);
+}
 .is-selected-row { background: var(--hover-surface); }
+.perio-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.7rem;
+    margin: 0.85rem 0;
+}
+.perio-summary-card {
+    padding: 0.85rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+}
+.perio-summary-card span {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.perio-summary-card strong {
+    display: block;
+    margin-top: 0.2rem;
+    color: var(--text-primary);
+    font-size: 1.35rem;
+}
+.perio-summary-card small { color: var(--text-muted); line-height: 1.35; }
+.perio-summary-card.risk-low { border-color: rgba(46, 125, 50, 0.35); background: rgba(46, 125, 50, 0.08); }
+.perio-summary-card.risk-medium { border-color: rgba(201, 162, 39, 0.45); background: rgba(201, 162, 39, 0.1); }
+.perio-summary-card.risk-high { border-color: rgba(198, 40, 40, 0.45); background: rgba(198, 40, 40, 0.1); }
+.perio-summary-card.risk-empty { border-style: dashed; }
 .perio-index-strip {
     display: flex;
     flex-wrap: wrap;
@@ -4911,14 +4988,28 @@ button.whatsapp-placeholder-chip:hover {
     background: var(--surface-2);
     font-size: 0.78rem;
 }
+.perio-index-strip span {
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    background: var(--surface-2);
+}
 .perio-index-strip b { color: var(--text-primary); margin-right: 0.25rem; }
-.perio-full-scroll { overflow-x: auto; }
+.perio-full-scroll {
+    overflow-x: auto;
+    padding: 0.75rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, var(--surface-1), var(--surface-2));
+}
 .perio-arch-caption { margin: 0.35rem 0 0.2rem; font-size: 0.72rem; color: var(--text-muted); }
 .perio-full-svg { width: 100%; min-width: 760px; height: auto; display: block; }
 .perio-cej { stroke: var(--text-muted); stroke-width: 1; }
 .perio-svg-hit { fill: transparent; }
 .perio-svg-hit.is-missing { fill: rgba(150, 150, 150, 0.12); }
 .perio-svg-tooth.is-selected .perio-svg-hit { stroke: var(--accent-teal, #1a7a7a); stroke-width: 2; fill: rgba(26, 122, 122, 0.06); }
+.perio-svg-tooth { cursor: pointer; }
+.perio-svg-tooth:hover .perio-svg-hit { stroke: var(--accent-teal, #1a7a7a); stroke-width: 1.5; fill: rgba(26, 122, 122, 0.05); }
 .perio-svg-num { font-size: 11px; font-weight: 700; text-anchor: middle; fill: var(--text-primary); }
 .perio-svg-imp, .perio-svg-flag, .perio-svg-s { font-size: 9px; font-weight: 700; text-anchor: middle; fill: var(--text-muted); }
 .perio-svg-s { fill: #c9a227; }
@@ -4930,6 +5021,11 @@ button.whatsapp-placeholder-chip:hover {
     .perio-toolbar { justify-content: stretch; }
     .perio-toolbar .btn-primary,
     .perio-toolbar .btn-outline { flex: 1; }
+    .perio-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+    .perio-summary-grid { grid-template-columns: 1fr; }
 }
 
 .surface-selector-card {

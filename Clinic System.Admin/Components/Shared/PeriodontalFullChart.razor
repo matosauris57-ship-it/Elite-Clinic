@@ -3,6 +3,31 @@
     @if (Exam != null)
     {
         var indices = PeriodontalChartFactory.LiveIndices(Exam);
+        var totalSites = TotalSites(Exam);
+        var completion = totalSites == 0 ? 0 : Math.Round(100m * indices.RecordedSiteCount / totalSites, 0);
+        var risk = RiskSummary(indices);
+        <div class="perio-summary-grid" aria-label="Resumen periodontal">
+            <article class="perio-summary-card @risk.CssClass">
+                <span>Riesgo periodontal</span>
+                <strong>@risk.Label</strong>
+                <small>@risk.Detail</small>
+            </article>
+            <article class="perio-summary-card">
+                <span>Completitud</span>
+                <strong>@($"{completion}%")</strong>
+                <small>@indices.RecordedSiteCount de @totalSites sitios medidos</small>
+            </article>
+            <article class="perio-summary-card">
+                <span>Inflamación</span>
+                <strong>@indices.BleedingPercent.ToString("0.0")%</strong>
+                <small>Sangrado al sondaje</small>
+            </article>
+            <article class="perio-summary-card">
+                <span>Biofilm</span>
+                <strong>@indices.PlaquePercent.ToString("0.0")%</strong>
+                <small>Índice de placa registrado</small>
+            </article>
+        </div>
         <div class="perio-index-strip" aria-label="Índices de la evaluación">
             <span><b>Sitios</b> @indices.RecordedSiteCount</span>
             <span><b>BOP</b> @indices.BleedingPercent.ToString("0.0")%</span>
@@ -33,4 +58,18 @@
     [Parameter] public PeriodontalExamDetail? Exam { get; set; }
     [Parameter] public int? SelectedTooth { get; set; }
     [Parameter] public EventCallback<int> SelectedToothChanged { get; set; }
+
+    private static int TotalSites(PeriodontalExamDetail exam) =>
+        exam.Teeth.Count(x => x.Status == PeriodontalToothStatus.Present) * 6;
+
+    private static (string Label, string Detail, string CssClass) RiskSummary(PeriodontalLiveIndices indices)
+    {
+        if (indices.SitesDeepGe6 > 0 || indices.BleedingPercent >= 30)
+            return ("Alto", "Hay bolsas profundas o sangrado elevado.", "risk-high");
+        if (indices.SitesDeepGe5 > 0 || indices.BleedingPercent >= 10)
+            return ("Moderado", "Requiere seguimiento y control periodontal.", "risk-medium");
+        if (indices.RecordedSiteCount == 0)
+            return ("Sin datos", "Registre sondaje para calcular riesgo.", "risk-empty");
+        return ("Bajo", "Sin alertas periodontales mayores.", "risk-low");
+    }
 }

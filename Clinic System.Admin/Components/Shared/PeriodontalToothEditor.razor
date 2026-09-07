@@ -19,6 +19,17 @@
             </div>
         </div>
 
+        @if (Tooth.Status != PeriodontalToothStatus.Missing)
+        {
+            var toothStats = GetToothStats(Tooth);
+            <div class="perio-tooth-summary">
+                <span><b>PD máx.</b> @(toothStats.MaxPd?.ToString() ?? "—") mm</span>
+                <span><b>CAL máx.</b> @(toothStats.MaxCal?.ToString() ?? "—") mm</span>
+                <span><b>BOP</b> @toothStats.BleedingSites sitio(s)</span>
+                <span><b>Placa</b> @toothStats.PlaqueSites sitio(s)</span>
+            </div>
+        }
+
         <div class="form-row">
             <div class="form-group">
                 <label for="perio-status">Estado de la pieza</label>
@@ -45,6 +56,16 @@
         }
         else
         {
+            @if (!ReadOnly)
+            {
+                <div class="perio-quick-actions" aria-label="Acciones rápidas de la pieza">
+                    <button type="button" class="btn-outline" @onclick="SetHealthyBaseline">Marcar sondaje 3 mm</button>
+                    <button type="button" class="btn-outline" @onclick="ClearToothMeasurements">Limpiar mediciones</button>
+                    <button type="button" class="btn-outline" @onclick="TogglePlaqueAll">Alternar placa</button>
+                    <button type="button" class="btn-outline" @onclick="ToggleBleedingAll">Alternar sangrado</button>
+                </div>
+            }
+
             @foreach (var surface in new[] { PeriodontalSurface.Facial, PeriodontalSurface.Lingual })
             {
                 <h4 class="perio-surface-title">@PeriodontalChartFactory.SurfaceCaption(surface, FdiToothNumber.IsUpper(Tooth.ToothNumber))</h4>
@@ -214,6 +235,16 @@
     private static string PocketClass(int? pd) =>
         $"pocket-{PeriodontalCalculations.GetPocketSeverity(pd).ToString().ToLowerInvariant()}";
 
+    private static (int? MaxPd, int? MaxCal, int BleedingSites, int PlaqueSites) GetToothStats(PeriodontalToothModel tooth)
+    {
+        var sites = tooth.Sites.ToList();
+        return (
+            sites.Max(x => x.ProbingDepthMm),
+            sites.Max(x => x.ClinicalAttachmentLevelMm),
+            sites.Count(x => x.Bleeding),
+            sites.Count(x => x.Plaque));
+    }
+
     private void OnStatusChanged(ChangeEventArgs e)
     {
         if (Tooth == null || !Enum.TryParse<PeriodontalToothStatus>(e.Value?.ToString(), out var status))
@@ -267,5 +298,52 @@
             site.RecessionMm = string.IsNullOrWhiteSpace(raw?.ToString()) ? null : parsed;
 
         site.ClinicalAttachmentLevelMm = PeriodontalCalculations.CalculateCal(site.ProbingDepthMm, site.RecessionMm);
+    }
+
+    private void SetHealthyBaseline()
+    {
+        if (Tooth == null || ReadOnly)
+            return;
+        PeriodontalChartFactory.EnsureSites(Tooth);
+        foreach (var site in Tooth.Sites)
+        {
+            site.ProbingDepthMm = 3;
+            site.RecessionMm ??= 0;
+            site.ClinicalAttachmentLevelMm = PeriodontalCalculations.CalculateCal(site.ProbingDepthMm, site.RecessionMm);
+        }
+    }
+
+    private void ClearToothMeasurements()
+    {
+        if (Tooth == null || ReadOnly)
+            return;
+        foreach (var site in Tooth.Sites)
+        {
+            site.ProbingDepthMm = null;
+            site.RecessionMm = null;
+            site.ClinicalAttachmentLevelMm = null;
+            site.Bleeding = false;
+            site.Plaque = false;
+            site.Suppuration = false;
+        }
+        Tooth.KeratinizedGingivaMm = null;
+    }
+
+    private void TogglePlaqueAll()
+    {
+        if (Tooth == null || ReadOnly)
+            return;
+        var target = Tooth.Sites.Any(x => !x.Plaque);
+        foreach (var site in Tooth.Sites)
+            site.Plaque = target;
+    }
+
+    private void ToggleBleedingAll()
+    {
+        if (Tooth == null || ReadOnly)
+            return;
+        var target = Tooth.Sites.Any(x => !x.Bleeding);
+        foreach (var site in Tooth.Sites)
+            site.Bleeding = target;
     }
 }
