@@ -86,6 +86,7 @@ public class AuthService
                 ExpiresAt = data.ExpiresAt,
                 UserName = data.UserName,
                 Email = data.Email,
+                DoctorId = data.Roles.Contains("Doctor", StringComparer.OrdinalIgnoreCase) ? data.Id : null,
                 Roles = data.Roles,
                 Permissions = data.Permissions
             }, TimeSpan.FromMinutes(2));

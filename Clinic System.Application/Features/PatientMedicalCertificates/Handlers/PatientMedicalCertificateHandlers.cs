@@ -121,6 +121,10 @@ public class CreatePatientMedicalCertificateCommandHandler : AppRequestHandler<C
         if (!await CanEditAsync())
             return Unauthorized<PatientMedicalCertificateDTO>("Solo personal clínico autorizado puede emitir certificados.");
 
+        var doctorError = ValidateDoctorAssignment(request.DoctorId, null);
+        if (doctorError != null)
+            return doctorError;
+
         var created = await service.CreateAsync(
             request.PatientId,
             ToUpsert(request, CurrentDoctorId),
@@ -140,6 +144,22 @@ public class CreatePatientMedicalCertificateCommandHandler : AppRequestHandler<C
             || _currentUserService.HasPermission(AdminPermissionCatalog.Build("certificados", AdminPermissionCatalog.Actions.Create))
             || _currentUserService.HasPermission(AdminPermissionCatalog.Build("certificados", AdminPermissionCatalog.Actions.Edit))
             || _currentUserService.HasPermission(AdminPermissionCatalog.Build("historial", AdminPermissionCatalog.Actions.Create));
+    }
+
+    private Response<PatientMedicalCertificateDTO>? ValidateDoctorAssignment(int? requestedDoctorId, int? existingDoctorId)
+    {
+        if (IsAdmin
+            || !CurrentDoctorId.HasValue
+            || _currentUserService.HasPermission(AdminPermissionCatalog.Build("medicos", AdminPermissionCatalog.Actions.View)))
+            return null;
+
+        if (existingDoctorId.HasValue && existingDoctorId.Value != CurrentDoctorId.Value)
+            return Unauthorized<PatientMedicalCertificateDTO>("No puede emitir o editar certificados firmados por otro médico.");
+
+        var targetDoctorId = requestedDoctorId ?? CurrentDoctorId.Value;
+        return targetDoctorId == CurrentDoctorId.Value
+            ? null
+            : Unauthorized<PatientMedicalCertificateDTO>("No puede seleccionar otro médico firmante para este certificado.");
     }
 
     private static PatientMedicalCertificateUpsertDTO ToUpsert(CreatePatientMedicalCertificateCommand request, int? currentDoctorId) => new()
@@ -179,6 +199,11 @@ public class UpdatePatientMedicalCertificateCommandHandler : AppRequestHandler<U
         if (!await CanEditAsync())
             return Unauthorized<PatientMedicalCertificateDTO>("Solo personal clínico autorizado puede editar certificados.");
 
+        var existing = await service.GetAsync(request.CertificateId, cancellationToken);
+        var doctorError = ValidateDoctorAssignment(request.DoctorId, existing.DoctorId);
+        if (doctorError != null)
+            return doctorError;
+
         var updated = await service.UpdateAsync(
             request.CertificateId,
             ToUpsert(request, CurrentDoctorId),
@@ -197,6 +222,22 @@ public class UpdatePatientMedicalCertificateCommandHandler : AppRequestHandler<U
             || roles.Contains(AdminPermissionCatalog.SystemRoles.Doctor, StringComparer.OrdinalIgnoreCase)
             || _currentUserService.HasPermission(AdminPermissionCatalog.Build("certificados", AdminPermissionCatalog.Actions.Edit))
             || _currentUserService.HasPermission(AdminPermissionCatalog.Build("historial", AdminPermissionCatalog.Actions.Edit));
+    }
+
+    private Response<PatientMedicalCertificateDTO>? ValidateDoctorAssignment(int? requestedDoctorId, int? existingDoctorId)
+    {
+        if (IsAdmin
+            || !CurrentDoctorId.HasValue
+            || _currentUserService.HasPermission(AdminPermissionCatalog.Build("medicos", AdminPermissionCatalog.Actions.View)))
+            return null;
+
+        if (existingDoctorId.HasValue && existingDoctorId.Value != CurrentDoctorId.Value)
+            return Unauthorized<PatientMedicalCertificateDTO>("No puede editar certificados firmados por otro médico.");
+
+        var targetDoctorId = requestedDoctorId ?? CurrentDoctorId.Value;
+        return targetDoctorId == CurrentDoctorId.Value
+            ? null
+            : Unauthorized<PatientMedicalCertificateDTO>("No puede seleccionar otro médico firmante para este certificado.");
     }
 
     private static PatientMedicalCertificateUpsertDTO ToUpsert(UpdatePatientMedicalCertificateCommand request, int? currentDoctorId) => new()

@@ -8,6 +8,7 @@ public class SessionBootstrapData
     public string ExpiresAt { get; set; } = string.Empty;
     public string UserName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
+    public int? DoctorId { get; set; }
     public List<string> Roles { get; set; } = [];
     public List<string> Permissions { get; set; } = [];
 }

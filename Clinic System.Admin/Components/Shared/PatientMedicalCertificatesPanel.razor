@@ -1,6 +1,8 @@
+@using System.Security.Claims
 @inject PatientMedicalCertificateService Certificates
 @inject DoctorMaintenanceService DoctorService
 @inject AuthService AuthService
+@inject AuthenticationStateProvider AuthStateProvider
 
 <section class="certificate-panel rx-panel">
     <div class="clinical-section-heading">
@@ -34,13 +36,20 @@
                     </div>
                     <div class="form-group">
                         <label for="cert-doctor">Médico que firma</label>
-                        <select id="cert-doctor" class="form-input" @bind="_doctorId" disabled="@(!CanEdit)">
-                            <option value="0">Sin especificar</option>
+                        <select id="cert-doctor" class="form-input" @bind="_doctorId" disabled="@(!CanSelectDoctor)">
+                            @if (CanSelectDoctor)
+                            {
+                                <option value="0">Sin especificar</option>
+                            }
                             @foreach (var doctor in _doctors)
                             {
                                 <option value="@doctor.Id">@doctor.FullName</option>
                             }
                         </select>
+                        @if (!CanSelectDoctor)
+                        {
+                            <small class="rx-hint">Su usuario de médico queda asignado automáticamente.</small>
+                        }
                     </div>
                 </div>
 
@@ -187,6 +196,9 @@
     private bool _saving;
     private int? _editingId;
     private int _doctorId;
+    private int? _currentDoctorId;
+    private bool _isDoctorUser;
+    private bool _canAssignAnyDoctor;
     private DateTime _issuedDate = DateTime.Today;
     private string _certificateType = "Certificado Médico General";
     private string? _diagnosis;
@@ -216,6 +228,8 @@
     private string CertificateTypeLabel =>
         string.IsNullOrWhiteSpace(_certificateType) ? "Certificado médico" : _certificateType;
 
+    private bool CanSelectDoctor => CanEdit && (!_isDoctorUser || _canAssignAnyDoctor);
+
     private string RestPreview
     {
         get
@@ -228,7 +242,15 @@
         }
     }
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _isDoctorUser = user.IsInRole("Doctor");
+        _currentDoctorId = TryGetDoctorId(user);
+        _canAssignAnyDoctor = user.IsInRole("Admin")
+            || user.HasClaim(PermissionService.ClaimType, "medicos.view");
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
@@ -261,6 +283,7 @@
             _certificateType = _options.CertificateTypes[0].Value;
         _doctors.Clear();
         _doctors.AddRange(doctors.Where(d => d.IsActive));
+        EnsureCurrentDoctorOption();
         _error = certificates.Error ?? options.Error;
         _loading = false;
     }
@@ -270,7 +293,7 @@
         _editing = true;
         _editingId = null;
         _issuedDate = DateTime.Today;
-        _doctorId = 0;
+        _doctorId = CanSelectDoctor ? 0 : _currentDoctorId ?? 0;
         _certificateType = _options.CertificateTypes.FirstOrDefault()?.Value ?? "Certificado Médico General";
         _diagnosis = PatientDiagnosis;
         _recommendation = null;
@@ -304,7 +327,13 @@
         _editing = true;
         _editingId = id;
         _issuedDate = result.Data.IssuedAt.Date;
-        _doctorId = result.Data.DoctorId ?? 0;
+        if (!CanSelectDoctor && result.Data.DoctorId.HasValue && result.Data.DoctorId != _currentDoctorId)
+        {
+            _error = "No puede editar un certificado firmado por otro médico.";
+            _editing = false;
+            return;
+        }
+        _doctorId = CanSelectDoctor ? result.Data.DoctorId ?? 0 : _currentDoctorId ?? result.Data.DoctorId ?? 0;
         _certificateType = result.Data.CertificateType;
         _diagnosis = result.Data.Diagnosis;
         _recommendation = result.Data.Recommendation;
@@ -403,6 +432,22 @@
     }
 
     private static string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd/MM/yyyy") : "--";
+
+    private void EnsureCurrentDoctorOption()
+    {
+        if (!CanSelectDoctor && _currentDoctorId.HasValue && _doctors.All(x => x.Id != _currentDoctorId.Value))
+        {
+            _doctors.Add(new DoctorListItem
+            {
+                Id = _currentDoctorId.Value,
+                FullName = $"Médico actual #{_currentDoctorId.Value}",
+                IsActive = true
+            });
+        }
+    }
+
+    private static int? TryGetDoctorId(ClaimsPrincipal user) =>
+        int.TryParse(user.FindFirst("DoctorId")?.Value, out var id) ? id : null;
 
     private static MedicalCertificateOptions DefaultOptions() => new()
     {
