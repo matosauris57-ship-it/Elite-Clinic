@@ -7,6 +7,7 @@
 @inject MedicalConditionMaintenanceService ConditionService
 @inject ToothChartService ToothChartService
 @inject ClinicalTreatmentMaintenanceService TreatmentService
+@inject InventoryMaintenanceService InventoryService
 @inject TreatmentPlanMaintenanceService PlanService
 @inject TreatmentProcedureMaintenanceService ProcedureService
 @inject AuthService AuthService
@@ -744,16 +745,49 @@ else if (_profile != null)
             @if (_treatmentToComplete != null)
             {
                 <div class="modal-overlay">
-                    <div class="modal-panel modal-panel-sm">
-                        <h3>Resultado clínico explícito</h3>
+                    <div class="modal-panel">
+                        <h3>Completar tratamiento</h3>
                         <p>@_treatmentToComplete.ProcedureName · pieza @(_treatmentToComplete.ToothNumber?.ToString() ?? "sin pieza")</p>
+                        <h4>Resultado clínico</h4>
                         <div class="form-group"><label>Superficie</label><select class="form-input" @bind="_completionResult.Surface">@foreach (var value in Enum.GetValues<ToothSurface>()) { <option value="@value">@SurfaceLabel(value)</option> }</select></div>
                         <div class="form-group"><label>Condición resultante</label><select class="form-input" @bind="_completionResult.Condition">@foreach (var value in Enum.GetValues<ToothCondition>()) { <option value="@value">@ConditionLabel(value)</option> }</select></div>
                         <div class="form-group"><label>Severidad</label><select class="form-input" @bind="_completionResult.Severity"><option value="">Sin especificar</option>@foreach (var value in Enum.GetValues<ToothSeverity>()) { <option value="@value">@SeverityLabel(value)</option> }</select></div>
                         <div class="form-group"><label>Notas</label><textarea class="form-input" rows="3" @bind="_completionResult.Notes"></textarea></div>
+
+                        <h4>Material utilizado</h4>
+                        @if (_consumeLoading)
+                        {
+                            <p class="billing-muted">Cargando materiales del BOM...</p>
+                        }
+                        else if (!_consumeLines.Any())
+                        {
+                            <p class="billing-muted">Sin BOM de inventario para este procedimiento (la factura no se ve afectada).</p>
+                        }
+                        else
+                        {
+                            <div class="data-table-wrap">
+                                <table class="data-table">
+                                    <thead><tr><th></th><th>Material</th><th>Cantidad</th><th>Stock</th></tr></thead>
+                                    <tbody>
+                                        @for (var i = 0; i < _consumeLines.Count; i++)
+                                        {
+                                            var idx = i;
+                                            <tr>
+                                                <td><input type="checkbox" @bind="_consumeLines[idx].IsIncluded" /></td>
+                                                <td>@_consumeLines[idx].Name <small>(@_consumeLines[idx].Unit)</small></td>
+                                                <td><input class="form-input" type="number" step="0.001" min="0" @bind="_consumeLines[idx].ActualQuantity" disabled="@(!_consumeLines[idx].IsIncluded)" /></td>
+                                                <td>@_consumeLines[idx].QuantityOnHand.ToString("0.###")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="billing-muted">Puedes modificar el consumo antes de confirmar.</p>
+                        }
+
                         <div class="modal-actions">
                             <button class="btn-outline" @onclick="CloseCompleteTreatment">Cancelar</button>
-                            <button class="btn-primary" disabled="@_savingTreatment" @onclick="CompleteTreatmentAsync">Confirmar resultado y completar</button>
+                            <button class="btn-primary" disabled="@_savingTreatment" @onclick="CompleteTreatmentAsync">Confirmar y completar</button>
                         </div>
                     </div>
                 </div>
@@ -814,6 +848,8 @@ else if (_profile != null)
     private CreateTreatmentPlanRequest _planForm = new();
     private DentalTreatmentClinicalResultRequest _completionResult = new();
     private DentalTreatmentListItem? _treatmentToComplete;
+    private List<MaterialConsumptionLineItem> _consumeLines = [];
+    private bool _consumeLoading;
     private int? _selectedTooth;
     private readonly List<int> _selectedTeeth = [];
     private List<BridgeUnitInput> _bridgeUnits = [];
@@ -1544,7 +1580,7 @@ else if (_profile != null)
         await FinishTreatmentOperationAsync(result, "Tratamiento cancelado.", false);
     }
 
-    private void OpenCompleteTreatment(DentalTreatmentListItem treatment)
+    private async Task OpenCompleteTreatment(DentalTreatmentListItem treatment)
     {
         _treatmentToComplete = treatment;
         _completionResult = new DentalTreatmentClinicalResultRequest
@@ -1552,9 +1588,18 @@ else if (_profile != null)
             Surface = treatment.ToothSurface ?? _selectedSurface,
             Condition = ToothCondition.Healthy
         };
+        _consumeLines = [];
+        _consumeLoading = true;
+        var (proposal, _) = await InventoryService.ProposeConsumptionAsync(treatment.Id);
+        _consumeLines = proposal?.AlreadyConsumed == true ? [] : (proposal?.Lines ?? []);
+        _consumeLoading = false;
     }
 
-    private void CloseCompleteTreatment() => _treatmentToComplete = null;
+    private void CloseCompleteTreatment()
+    {
+        _treatmentToComplete = null;
+        _consumeLines = [];
+    }
 
     private async Task CompleteTreatmentAsync()
     {
@@ -1562,12 +1607,27 @@ else if (_profile != null)
             return;
 
         _savingTreatment = true;
-        var result = await TreatmentService.CompleteTreatmentAsync(
-            _treatmentToComplete.Id,
-            new CompleteDentalTreatmentRequest { ClinicalResult = _completionResult });
+        var request = new CompleteDentalTreatmentRequest
+        {
+            ClinicalResult = _completionResult,
+            SkipMaterialConsumption = _consumeLines.Count == 0,
+            MaterialConsumption = _consumeLines.Count == 0
+                ? null
+                : _consumeLines.Select(l => new MaterialConsumptionLineRequest
+                {
+                    InventoryItemId = l.InventoryItemId,
+                    Quantity = l.ActualQuantity,
+                    IsIncluded = l.IsIncluded,
+                    ProposedQuantity = l.ProposedQuantity
+                }).ToList()
+        };
+        var result = await TreatmentService.CompleteTreatmentAsync(_treatmentToComplete.Id, request);
         _savingTreatment = false;
         if (result.Success)
+        {
             _treatmentToComplete = null;
+            _consumeLines = [];
+        }
         await FinishTreatmentOperationAsync(result, "Tratamiento completado.", true);
     }
 
