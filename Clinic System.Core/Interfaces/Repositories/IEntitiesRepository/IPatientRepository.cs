@@ -16,5 +16,6 @@ namespace Clinic_System.Core.Interfaces.Repositories.IEntitiesRepository
         Task<List<Patient>> GetForBirthdayEmailsAsync(int year, CancellationToken cancellationToken = default);
         Task<List<Patient>> GetEmailCampaignAudienceAsync(CancellationToken cancellationToken = default);
         Task<(int WithEmail, int OptedOut, int Invalid, int Eligible)> CountEmailCampaignAudienceAsync(CancellationToken cancellationToken = default);
+        Task<(HashSet<string> Phones, HashSet<string> NationalIds)> GetImportIdentityKeysAsync(CancellationToken cancellationToken = default);
     }
 }

@@ -1,4 +1,5 @@
 @page "/pacientes"
+@using Microsoft.AspNetCore.Components.Forms
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "pacientes.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject PatientMaintenanceService PatientService
@@ -6,6 +7,7 @@
 @inject PermissionService PermissionService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Pacientes — DentalCare Admin</PageTitle>
 
@@ -18,6 +20,9 @@
         @if (_canCreate)
         {
             <div class="command-actions">
+                <button class="btn-outline" @onclick="OpenImportModal">
+                    <Icon Name="upload" Class="btn-svg" /> Importar CSV
+                </button>
                 <button class="btn-primary" @onclick="OpenCreateModal">
                     <Icon Name="plus" Class="btn-svg" /> Nuevo paciente
                 </button>
@@ -215,17 +220,108 @@
     </div>
 }
 
+@if (_showImportModal)
+{
+    <div class="modal-overlay" @onclick="CloseImportModal">
+        <div class="modal-panel modal-panel-lg" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Importar pacientes (CSV)</h2>
+                <button class="modal-close" @onclick="CloseImportModal">×</button>
+            </div>
+
+            <p class="modal-confirm-text">
+                Suba un CSV con los pacientes. Primero se valida; luego puede confirmar solo las filas válidas.
+            </p>
+
+            <div class="patient-import-actions">
+                <button class="btn-outline" type="button" disabled="@_importBusy" @onclick="DownloadTemplateAsync">
+                    <Icon Name="download" Class="btn-svg" /> Descargar plantilla
+                </button>
+                <InputFile OnChange="OnImportFileSelected" accept=".csv,text/csv" disabled="@_importBusy" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(_importError))
+            {
+                <div class="wizard-error">@_importError</div>
+            }
+            @if (!string.IsNullOrEmpty(_importNotice))
+            {
+                <div class="wizard-success">@_importNotice</div>
+            }
+
+            @if (_importPreview != null)
+            {
+                <div class="billing-kpi-grid" style="margin: 0.75rem 0;">
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_importPreview.TotalRows</span><span class="agenda-kpi-label">Filas</span></div>
+                    <div class="agenda-kpi accent-green"><span class="agenda-kpi-value">@_importPreview.ValidCount</span><span class="agenda-kpi-label">Válidas</span></div>
+                    <div class="agenda-kpi accent-yellow"><span class="agenda-kpi-value">@_importPreview.ErrorCount</span><span class="agenda-kpi-label">Con error</span></div>
+                </div>
+
+                <div class="data-table-wrap patient-import-table">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Nombre</th>
+                                <th>Teléfono</th>
+                                <th>Cédula</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _importPreview.Rows.Take(100))
+                            {
+                                <tr class="@(row.IsValid ? null : "table-row-inactive")">
+                                    <td>@row.RowNumber</td>
+                                    <td>@Dash(row.FullName)</td>
+                                    <td>@Dash(row.Phone)</td>
+                                    <td>@Dash(row.NationalId)</td>
+                                    <td>
+                                        @if (row.IsValid)
+                                        {
+                                            <span class="status-badge status-active">OK</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="status-badge status-inactive" title="@row.Error">@row.Error</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (_importPreview.Rows.Count > 100)
+                {
+                    <p class="billing-muted">Mostrando las primeras 100 filas de @_importPreview.Rows.Count.</p>
+                }
+            }
+
+            <div class="modal-actions">
+                <button class="btn-outline" disabled="@_importBusy" @onclick="CloseImportModal">Cerrar</button>
+                <button class="btn-primary"
+                        disabled="@(_importBusy || _importPreview == null || _importPreview.ValidCount == 0)"
+                        @onclick="ConfirmImportAsync">
+                    @(_importBusy ? "Importando..." : $"Importar {_importPreview?.ValidCount ?? 0} válidos")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<PatientListItem> _patients = [];
     private string _search = "", _statusFilter = "all";
     private bool _loading = true;
     private string? _loadError, _formError, _disableError, _enableError;
     private bool _canCreate, _canEdit, _canDelete, _showFormModal, _isEdit, _saving;
-    private bool _showDisableModal, _showEnableModal;
+    private bool _showDisableModal, _showEnableModal, _showImportModal, _importBusy;
     private CreatePatientRequest _createForm = new();
     private UpdatePatientRequest _editForm = new();
     private int _editingId;
     private PatientListItem? _toDisable, _toEnable;
+    private PatientImportPreview? _importPreview;
+    private string? _importError, _importNotice;
 
     private IEnumerable<PatientListItem> FilteredPatients
     {
@@ -262,6 +358,134 @@
     }
 
     private void OpenCreateModal() { _isEdit = false; _createForm = new(); _formError = null; _showFormModal = true; }
+    private void OpenImportModal()
+    {
+        _showImportModal = true;
+        _importPreview = null;
+        _importError = null;
+        _importNotice = null;
+    }
+    private void CloseImportModal()
+    {
+        if (_importBusy) return;
+        _showImportModal = false;
+    }
+
+    private async Task DownloadTemplateAsync()
+    {
+        _importError = null;
+        var (bytes, error) = await PatientService.DownloadImportTemplateAsync();
+        if (error != null || bytes == null)
+        {
+            _importError = error ?? "No se pudo descargar la plantilla.";
+            return;
+        }
+
+        var base64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("dentalCareUi.downloadBytes", "plantilla-pacientes.csv", base64, "text/csv");
+    }
+
+    private async Task OnImportFileSelected(InputFileChangeEventArgs args)
+    {
+        _importBusy = true;
+        _importError = null;
+        _importNotice = null;
+        _importPreview = null;
+
+        try
+        {
+            var file = args.File;
+            if (file.Size <= 0)
+            {
+                _importError = "El archivo está vacío.";
+                return;
+            }
+
+            if (file.Size > 2 * 1024 * 1024)
+            {
+                _importError = "El archivo no puede superar 2 MB.";
+                return;
+            }
+
+            await using var stream = file.OpenReadStream(2 * 1024 * 1024);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            memory.Position = 0;
+
+            var (preview, error) = await PatientService.PreviewImportAsync(memory, file.Name);
+            if (error != null || preview == null)
+            {
+                _importError = error ?? "No se pudo validar el archivo.";
+                return;
+            }
+
+            _importPreview = preview;
+            if (preview.ValidCount == 0)
+                _importError = "No hay filas válidas para importar. Revise los errores.";
+        }
+        catch (Exception ex)
+        {
+            _importError = ex.Message;
+        }
+        finally
+        {
+            _importBusy = false;
+        }
+    }
+
+    private async Task ConfirmImportAsync()
+    {
+        if (_importPreview == null)
+            return;
+
+        var validRows = _importPreview.Rows.Where(r => r.IsValid).ToList();
+        if (validRows.Count == 0)
+        {
+            _importError = "No hay filas válidas para importar.";
+            return;
+        }
+
+        _importBusy = true;
+        _importError = null;
+        _importNotice = null;
+
+        var payload = new PatientImportConfirmPayload
+        {
+            Rows = validRows.Select(r => new PatientImportConfirmRow
+            {
+                RowNumber = r.RowNumber,
+                FullName = r.FullName,
+                Gender = r.Gender,
+                DateOfBirth = DateTime.TryParse(r.DateOfBirth, out var dob) ? dob : default,
+                Address = string.IsNullOrWhiteSpace(r.Address) ? "Sin dirección" : r.Address,
+                Phone = r.Phone,
+                NationalId = r.NationalId,
+                Email = r.Email,
+                MobilePhone = r.MobilePhone
+            }).ToList()
+        };
+
+        var (result, error) = await PatientService.ConfirmImportAsync(payload);
+        _importBusy = false;
+
+        if (error != null || result == null)
+        {
+            _importError = error ?? "No se pudo importar.";
+            return;
+        }
+
+        _importNotice = $"Importados {result.Imported} de {result.Requested}. Omitidos: {result.Skipped}.";
+        _importPreview = new PatientImportPreview
+        {
+            TotalRows = result.Rows.Count,
+            ValidCount = result.Imported,
+            ErrorCount = result.Skipped,
+            Rows = result.Rows
+        };
+
+        await ReloadAsync();
+    }
+
     private void OpenEditModal(PatientListItem p)
     {
         _isEdit = true; _editingId = p.Id;
