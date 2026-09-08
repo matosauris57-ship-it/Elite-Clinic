@@ -20,6 +20,7 @@ namespace Clinic_System.Infrastructure
             services.AddScoped<IIdentityNotificationService, IdentityNotificationService>();
             services.AddTransient<IEmailService, EmailService>();
             services.AddScoped<IPatientNotificationDispatchService, PatientNotificationDispatchService>();
+            services.AddScoped<ILowStockEmailAlertDispatchService, LowStockEmailAlertDispatchService>();
             services.AddScoped<IEmailCampaignService, EmailCampaignService>();
             services.AddScoped<ICurrentUserService, CurrentUserService>();
             services.AddScoped<IGoogleAuthService, GoogleAuthService>();

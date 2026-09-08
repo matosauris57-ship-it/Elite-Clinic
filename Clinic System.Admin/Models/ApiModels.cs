@@ -69,6 +69,7 @@ public class ClinicEmailSettingsRequest
     public string FromEmail { get; set; } = string.Empty;
     public string SmtpUser { get; set; } = string.Empty;
     public string SenderName { get; set; } = string.Empty;
+    public string PublicSiteUrl { get; set; } = string.Empty;
     public string? Password { get; set; }
     public bool PasswordConfigured { get; set; }
     public bool IsConfigured { get; set; }

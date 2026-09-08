@@ -8,6 +8,8 @@ namespace Clinic_System.Application.Common
         public string SmtpUser { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
         public string SenderName { get; set; } = string.Empty;
+        /// <summary>URL pública del Admin (p. ej. https://admin.clinica.com) para enlaces de campañas.</summary>
+        public string PublicSiteUrl { get; set; } = string.Empty;
 
         public string AuthUser =>
             string.IsNullOrWhiteSpace(SmtpUser) ? FromEmail : SmtpUser;
