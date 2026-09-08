@@ -5900,3 +5900,31 @@ button.whatsapp-placeholder-chip:hover {
     max-height: 320px;
     overflow: auto;
 }
+
+.patient-import-help {
+    margin: 0.25rem 0 0.85rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+}
+
+.patient-import-help-title {
+    margin: 0.65rem 0 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.patient-import-help ul {
+    margin: 0;
+    padding-left: 1.15rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.patient-import-help code {
+    font-size: 0.78rem;
+    color: var(--accent-teal);
+}

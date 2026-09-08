@@ -229,9 +229,30 @@
                 <button class="modal-close" @onclick="CloseImportModal">×</button>
             </div>
 
-            <p class="modal-confirm-text">
-                Suba un CSV con los pacientes. Primero se valida; luego puede confirmar solo las filas válidas.
-            </p>
+            <div class="patient-import-help">
+                <p class="modal-confirm-text" style="margin-top:0;">
+                    El archivo debe ser <strong>CSV</strong> (UTF-8). Puede guardar un Excel como “CSV delimitado por comas”.
+                    Primero se valida; luego solo se importan las filas válidas.
+                </p>
+                <p class="patient-import-help-title">Columnas obligatorias</p>
+                <ul>
+                    <li><code>FullName</code> o <code>Nombre</code> — nombre completo</li>
+                    <li><code>Gender</code> o <code>Genero</code> — <code>Male</code>/<code>Female</code> o <code>Masculino</code>/<code>Femenino</code></li>
+                    <li><code>DateOfBirth</code> o <code>FechaNacimiento</code> — preferible <code>yyyy-MM-dd</code> (también <code>dd/MM/yyyy</code>)</li>
+                    <li><code>Address</code> o <code>Direccion</code></li>
+                    <li><code>Phone</code> o <code>Telefono</code> — 10 a 15 dígitos, <code>+</code> opcional (ej. <code>+595981123456</code>)</li>
+                </ul>
+                <p class="patient-import-help-title">Columnas opcionales</p>
+                <ul>
+                    <li><code>NationalId</code> o <code>Cedula</code></li>
+                    <li><code>Email</code> o <code>Correo</code> — si lo incluye, debe ser un correo real</li>
+                    <li><code>MobilePhone</code> o <code>Celular</code></li>
+                </ul>
+                <p class="billing-muted" style="margin-bottom:0;">
+                    Teléfono y cédula no pueden repetirse. Máximo 1000 filas / 2 MB.
+                    Use la plantilla para no equivocarse con los encabezados.
+                </p>
+            </div>
 
             <div class="patient-import-actions">
                 <button class="btn-outline" type="button" disabled="@_importBusy" @onclick="DownloadTemplateAsync">
