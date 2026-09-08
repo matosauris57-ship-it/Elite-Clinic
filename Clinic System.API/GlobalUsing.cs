@@ -66,6 +66,7 @@ global using Clinic_System.Application.Features.MedicalConditions.Commands.Model
 global using Clinic_System.Application.Features.MedicalConditions.Queries.Models;
 global using Clinic_System.Application.Features.Inventory.Commands.Models;
 global using Clinic_System.Application.Features.Inventory.Queries.Models;
+global using Clinic_System.Application.Features.Reports.Queries.Models;
 global using Clinic_System.Infrastructure.Authentication.Models;
 global using System.Threading.RateLimiting;
 global using Microsoft.AspNetCore.RateLimiting;

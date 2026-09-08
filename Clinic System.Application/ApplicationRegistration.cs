@@ -30,6 +30,7 @@ namespace Clinic_System.Application
             services.AddScoped<IMedicalConditionService, MedicalConditionService>();
             services.AddScoped<IDashboardLayoutService, DashboardLayoutService>();
             services.AddScoped<IInventoryService, InventoryService>();
+            services.AddScoped<IClinicReportService, ClinicReportService>();
 
             return services;
         }

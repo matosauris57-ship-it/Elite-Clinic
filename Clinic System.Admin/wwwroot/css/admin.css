@@ -1573,6 +1573,17 @@ button.nav-item:focus-visible,
     color: var(--accent-teal);
 }
 
+.report-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.75rem 0 1rem;
+    padding: 0.35rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+}
+
 .search-field, .field-icon { position: relative; }
 .search-field {
     display: flex;
