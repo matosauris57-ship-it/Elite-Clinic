@@ -54,6 +54,7 @@ builder.Services.AddScoped<TreatmentPlanMaintenanceService>();
 builder.Services.AddScoped<AgendaMaintenanceService>();
 builder.Services.AddScoped<WaitingRoomHubService>();
 builder.Services.AddScoped<BillingMaintenanceService>();
+builder.Services.AddScoped<ReportMaintenanceService>();
 builder.Services.AddScoped<PermissionService>();
 builder.Services.AddScoped<AccessControlMaintenanceService>();
 builder.Services.AddSingleton<ClinicProfileService>();

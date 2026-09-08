@@ -44,6 +44,7 @@ namespace Clinic_System.Data.Repository.UnitOfWork
         IProcedureMaterialRepository ProcedureMaterialsRepo;
         IStockMovementRepository StockMovementsRepo;
         ITreatmentMaterialConsumptionRepository TreatmentMaterialConsumptionsRepo;
+        IClinicReportRepository ClinicReportsRepo;
 
         public IRefreshTokenRepository RefreshTokensRepository
         {
@@ -297,6 +298,15 @@ namespace Clinic_System.Data.Repository.UnitOfWork
             {
                 TreatmentMaterialConsumptionsRepo ??= new TreatmentMaterialConsumptionRepository(context);
                 return TreatmentMaterialConsumptionsRepo;
+            }
+        }
+
+        public IClinicReportRepository ClinicReportsRepository
+        {
+            get
+            {
+                ClinicReportsRepo ??= new ClinicReportRepository(context);
+                return ClinicReportsRepo;
             }
         }
 
