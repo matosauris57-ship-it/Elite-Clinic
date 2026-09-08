@@ -359,6 +359,76 @@ public class AppointmentBookingService
         }
     }
 
+    public async Task<(LowStockEmailAlertApiModel? Settings, string? Error)> GetLowStockAlertsAsync()
+    {
+        try
+        {
+            using var response = await Client.GetAsync("/api/clinic/low-stock-alerts");
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (null, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (null, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<LowStockEmailAlertApiModel>>(JsonOptions);
+            if (body?.Succeeded == true && body.Data != null)
+                return (body.Data, null);
+
+            return (null, body?.Message ?? "No se pudieron cargar las alertas de inventario.");
+        }
+        catch (Exception ex)
+        {
+            return (null, FormatConnectionError(ex) ?? $"Error de conexión: {ex.Message}");
+        }
+    }
+
+    public async Task<(bool Success, string? Error)> SaveLowStockAlertsAsync(LowStockEmailAlertApiModel settings)
+    {
+        try
+        {
+            using var response = await Client.PutAsJsonAsync("/api/clinic/low-stock-alerts", settings, JsonOptions);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (false, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                return (false, "No tiene permiso para cambiar las alertas de inventario.");
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<LowStockEmailAlertApiModel>>(JsonOptions);
+            if (body?.Succeeded == true)
+                return (true, null);
+
+            return (false, FormatApiErrors(body) ?? "No se pudieron guardar las alertas de inventario.");
+        }
+        catch (Exception ex)
+        {
+            return (false, FormatConnectionError(ex) ?? $"Error de conexión: {ex.Message}");
+        }
+    }
+
+    public async Task<(bool Success, string? Error)> DispatchLowStockAlertsNowAsync()
+    {
+        try
+        {
+            using var response = await Client.PostAsync("/api/clinic/low-stock-alerts/dispatch", null);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (false, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                return (false, "No tiene permiso para enviar alertas de inventario.");
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<string>>(JsonOptions);
+            if (body?.Succeeded == true)
+                return (true, body.Message ?? body.Data);
+
+            return (false, body?.Message ?? "No se pudo enviar la alerta.");
+        }
+        catch (Exception ex)
+        {
+            return (false, FormatConnectionError(ex) ?? $"Error de conexión: {ex.Message}");
+        }
+    }
+
     public static List<TimeSpan> GenerateAllSlots(TimeSpan start, TimeSpan end, int durationMinutes)
     {
         var slots = new List<TimeSpan>();

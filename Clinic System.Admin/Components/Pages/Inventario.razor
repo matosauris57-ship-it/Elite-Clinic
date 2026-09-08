@@ -14,16 +14,17 @@
             <h1>Inventario</h1>
             <p>Materiales y consumibles separados de la facturación. El descuento ocurre al completar tratamientos.</p>
         </div>
-        @if (_canEdit)
-        {
             <div class="command-actions">
-                <button class="btn-outline" @onclick="OpenBomModal">BOM por procedimiento</button>
-                <button class="btn-primary" @onclick="OpenCreateModal">
-                    <Icon Name="plus" Class="btn-svg" />
-                    Nuevo ítem
-                </button>
+                <a href="/configuracion/alertas-inventario" class="btn-outline">Alertas por correo</a>
+                @if (_canEdit)
+                {
+                    <button class="btn-outline" @onclick="OpenBomModal">BOM por procedimiento</button>
+                    <button class="btn-primary" @onclick="OpenCreateModal">
+                        <Icon Name="plus" Class="btn-svg" />
+                        Nuevo ítem
+                    </button>
+                }
             </div>
-        }
     </div>
 
     @if (!string.IsNullOrEmpty(_loadError))

@@ -3,6 +3,7 @@ using Clinic_System.Core.Validation;
 using ApiResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.ClinicOperatingHours>;
 using EmailSettingsResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.ClinicEmailSettings>;
 using NotificationSettingsResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.PatientNotificationSettings>;
+using LowStockAlertSettingsResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.LowStockEmailAlertSettings>;
 using SendEmailResponse = Clinic_System.Application.Common.Bases.Response<string>;
 using SymbolResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Core.Odontogram.OdontogramSymbolConfigDocument>;
 
@@ -18,6 +19,8 @@ namespace Clinic_System.API.Controllers
         private readonly IEmailSettingsProvider _emailSettings;
         private readonly IEmailService _emailService;
         private readonly IPatientNotificationSettingsService _patientNotifications;
+        private readonly ILowStockEmailAlertSettingsService _lowStockAlerts;
+        private readonly ILowStockEmailAlertDispatchService _lowStockDispatch;
 
         public ClinicController(
             IMediator mediator,
@@ -25,13 +28,17 @@ namespace Clinic_System.API.Controllers
             IOdontogramSymbolConfigService symbols,
             IEmailSettingsProvider emailSettings,
             IEmailService emailService,
-            IPatientNotificationSettingsService patientNotifications) : base(mediator)
+            IPatientNotificationSettingsService patientNotifications,
+            ILowStockEmailAlertSettingsService lowStockAlerts,
+            ILowStockEmailAlertDispatchService lowStockDispatch) : base(mediator)
         {
             _hours = hours;
             _symbols = symbols;
             _emailSettings = emailSettings;
             _emailService = emailService;
             _patientNotifications = patientNotifications;
+            _lowStockAlerts = lowStockAlerts;
+            _lowStockDispatch = lowStockDispatch;
         }
 
         [HttpGet("schedule")]
@@ -138,6 +145,47 @@ namespace Clinic_System.API.Controllers
 
             await _patientNotifications.SaveAsync(request, cancellationToken);
             return NewResult(OkNotifications(_patientNotifications.Get(), "Avisos automáticos guardados."));
+        }
+
+        [HttpGet("low-stock-alerts")]
+        [Authorize(Policy = "configuracion.view")]
+        public IActionResult GetLowStockAlerts()
+        {
+            return NewResult(OkLowStockAlerts(_lowStockAlerts.Get(), "Alertas de inventario bajo."));
+        }
+
+        [HttpPut("low-stock-alerts")]
+        [Authorize(Policy = "configuracion.view")]
+        public async Task<IActionResult> SaveLowStockAlerts([FromBody] LowStockEmailAlertSettings request, CancellationToken cancellationToken)
+        {
+            var error = LowStockEmailAlertSettings.Validate(request);
+            if (error != null)
+                return NewResult(FailLowStockAlerts(error));
+
+            // Conservar LastSentDate si el cliente no lo envía (solo config de destinatarios/hora).
+            var current = _lowStockAlerts.Get();
+            var normalized = request.Normalize();
+            if (normalized.LastSentDate == null)
+                normalized.LastSentDate = current.LastSentDate;
+
+            await _lowStockAlerts.SaveAsync(normalized, cancellationToken);
+            return NewResult(OkLowStockAlerts(_lowStockAlerts.Get(), "Alertas de inventario bajo guardadas."));
+        }
+
+        [HttpPost("low-stock-alerts/dispatch")]
+        [Authorize(Policy = "configuracion.view")]
+        public async Task<IActionResult> DispatchLowStockAlertsNow()
+        {
+            var (sent, _, _, message) = await _lowStockDispatch.DispatchNowAsync();
+            if (!sent)
+                return NewResult(FailSend(message ?? "No se envió la alerta."));
+            return NewResult(new SendEmailResponse
+            {
+                Succeeded = true,
+                StatusCode = HttpStatusCode.OK,
+                Data = message,
+                Message = message ?? "Alerta enviada."
+            });
         }
 
         [HttpGet("odontogram/symbol-config")]
@@ -295,6 +343,21 @@ namespace Clinic_System.API.Controllers
         };
 
         private static NotificationSettingsResponse FailNotifications(string message) => new()
+        {
+            Succeeded = false,
+            StatusCode = HttpStatusCode.BadRequest,
+            Message = message
+        };
+
+        private static LowStockAlertSettingsResponse OkLowStockAlerts(LowStockEmailAlertSettings data, string message) => new()
+        {
+            Succeeded = true,
+            StatusCode = HttpStatusCode.OK,
+            Data = data,
+            Message = message
+        };
+
+        private static LowStockAlertSettingsResponse FailLowStockAlerts(string message) => new()
         {
             Succeeded = false,
             StatusCode = HttpStatusCode.BadRequest,

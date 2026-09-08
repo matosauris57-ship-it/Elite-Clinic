@@ -140,3 +140,23 @@ public class LowStockAlert
     public int Count { get; set; }
     public List<InventoryItemListItem> Items { get; set; } = [];
 }
+
+public class LowStockEmailAlertApiModel
+{
+    public bool Enabled { get; set; }
+    public List<string> Recipients { get; set; } = [];
+    public TimeSpan SendTime { get; set; } = new(8, 0, 0);
+    public DateOnly? LastSentDate { get; set; }
+    public string Subject { get; set; } = "Alerta de inventario bajo - {clinica}";
+    public string IntroBody { get; set; } =
+        "Hay materiales con stock en o por debajo del mínimo configurado en {clinica}. Revise el inventario a la mayor brevedad.";
+
+    public string RecipientsText
+    {
+        get => string.Join(Environment.NewLine, Recipients);
+        set => Recipients = (value ?? string.Empty)
+            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+}
