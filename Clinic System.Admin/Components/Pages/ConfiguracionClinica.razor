@@ -137,6 +137,14 @@
                     <input class="form-input" type="password" autocomplete="new-password" disabled="@(!_canEdit || _saving)" @bind="_smtpPasswordInput" @bind:event="oninput" maxlength="120" placeholder="@(_hasStoredSmtpPassword ? "•••••••• (dejar vacío para no cambiar)" : "Contraseña o app password")" />
                 </div>
             </div>
+            <div class="form-group">
+                <label>URL pública del portal (Admin)</label>
+                <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_publicSiteUrl" @bind:event="oninput" maxlength="300" placeholder="https://tu-dominio-admin.com" />
+                <p class="billing-muted" style="margin-top:0.35rem;">
+                    Enlace base para que el paciente agende desde el correo de campaña (cualquier horario).
+                    Use la misma URL con la que abre el Admin en el navegador.
+                </p>
+            </div>
         </div>
 
         <div class="clinic-hours-card">
@@ -199,6 +207,7 @@
     private TimeOnly _closeTime = new(22, 0);
     private string _smtpPasswordInput = string.Empty;
     private bool _hasStoredSmtpPassword;
+    private string _publicSiteUrl = string.Empty;
     private readonly (int Value, string Label)[] _weekDays =
     [
         (1, "Lun"),
@@ -227,6 +236,23 @@
             _form.SlotDurationMinutes = schedule.SlotDurationMinutes;
             _form.WorkingDays = [.. schedule.WorkingDays];
             ApplyTimeTexts();
+        }
+
+        var (emailSettings, _) = await BookingService.GetClinicEmailSettingsAsync();
+        if (emailSettings != null)
+        {
+            _hasStoredSmtpPassword = emailSettings.PasswordConfigured || _hasStoredSmtpPassword;
+            _publicSiteUrl = emailSettings.PublicSiteUrl ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(emailSettings.Host))
+                _form.SmtpHost = emailSettings.Host;
+            if (emailSettings.Port is > 0 and < 65536)
+                _form.SmtpPort = emailSettings.Port;
+            if (!string.IsNullOrWhiteSpace(emailSettings.FromEmail))
+                _form.SmtpFromEmail = emailSettings.FromEmail;
+            if (!string.IsNullOrWhiteSpace(emailSettings.SmtpUser))
+                _form.SmtpUser = emailSettings.SmtpUser;
+            if (!string.IsNullOrWhiteSpace(emailSettings.SenderName))
+                _form.SmtpSenderName = emailSettings.SenderName;
         }
     }
 
@@ -391,6 +417,15 @@
             _smtpPasswordInput = string.Empty;
             ApplyTimeTexts();
 
+            if (!string.IsNullOrWhiteSpace(_publicSiteUrl)
+                && (!Uri.TryCreate(_publicSiteUrl.Trim(), UriKind.Absolute, out var siteUri)
+                    || siteUri.Scheme is not ("http" or "https")))
+            {
+                _saveError = "La URL pública debe comenzar con http:// o https://.";
+                _saving = false;
+                return;
+            }
+
             var (emailSaved, emailError) = await BookingService.SaveClinicEmailSettingsAsync(new ClinicEmailSettingsRequest
             {
                 Host = _form.SmtpHost,
@@ -398,7 +433,8 @@
                 FromEmail = _form.SmtpFromEmail,
                 SmtpUser = _form.SmtpUser,
                 SenderName = string.IsNullOrWhiteSpace(_form.SmtpSenderName) ? _form.Name : _form.SmtpSenderName,
-                Password = _form.SmtpPassword
+                Password = _form.SmtpPassword,
+                PublicSiteUrl = (_publicSiteUrl ?? string.Empty).Trim().TrimEnd('/')
             });
 
             if (!emailSaved)

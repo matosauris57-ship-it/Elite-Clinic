@@ -63,7 +63,8 @@ namespace Clinic_System.API.Services
                     FromEmail = settings.FromEmail,
                     SmtpUser = settings.SmtpUser,
                     Password = password,
-                    SenderName = settings.SenderName
+                    SenderName = settings.SenderName,
+                    PublicSiteUrl = settings.PublicSiteUrl
                 });
 
                 Directory.CreateDirectory(Path.GetDirectoryName(_jsonPath)!);
@@ -108,7 +109,8 @@ namespace Clinic_System.API.Services
                 FromEmail = First(stored.FromEmail, defaults.FromEmail),
                 SmtpUser = First(stored.SmtpUser, defaults.SmtpUser),
                 Password = First(stored.Password, defaults.Password),
-                SenderName = First(stored.SenderName, defaults.SenderName)
+                SenderName = First(stored.SenderName, defaults.SenderName),
+                PublicSiteUrl = First(stored.PublicSiteUrl, defaults.PublicSiteUrl)
             });
         }
 
@@ -128,7 +130,8 @@ namespace Clinic_System.API.Services
                 Password = settings.Password?.Trim() ?? string.Empty,
                 SenderName = string.IsNullOrWhiteSpace(settings.SenderName)
                     ? "Elite Clinic"
-                    : settings.SenderName.Trim()
+                    : settings.SenderName.Trim(),
+                PublicSiteUrl = NormalizeUrl(settings.PublicSiteUrl)
             };
         }
 
@@ -139,8 +142,16 @@ namespace Clinic_System.API.Services
             FromEmail = settings.FromEmail,
             SmtpUser = settings.SmtpUser,
             Password = settings.Password,
-            SenderName = settings.SenderName
+            SenderName = settings.SenderName,
+            PublicSiteUrl = settings.PublicSiteUrl
         };
+
+        private static string NormalizeUrl(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return string.Empty;
+            return url.Trim().TrimEnd('/');
+        }
 
         private static string First(string? preferred, string? fallback) =>
             string.IsNullOrWhiteSpace(preferred) ? fallback ?? string.Empty : preferred.Trim();

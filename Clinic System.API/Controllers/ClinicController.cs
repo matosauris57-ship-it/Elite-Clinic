@@ -93,7 +93,8 @@ namespace Clinic_System.API.Controllers
                 FromEmail = request.FromEmail,
                 SmtpUser = request.SmtpUser,
                 Password = request.Password ?? string.Empty,
-                SenderName = request.SenderName
+                SenderName = request.SenderName,
+                PublicSiteUrl = request.PublicSiteUrl
             }, keepExistingPassword: string.IsNullOrWhiteSpace(request.Password), cancellationToken);
 
             return NewResult(OkEmail(ToPublic(_emailSettings.Get()), "Configuración de correo guardada."));
@@ -267,12 +268,20 @@ namespace Clinic_System.API.Controllers
             FromEmail = settings.FromEmail,
             SmtpUser = settings.SmtpUser,
             SenderName = settings.SenderName,
+            PublicSiteUrl = settings.PublicSiteUrl,
             PasswordConfigured = !string.IsNullOrWhiteSpace(settings.Password),
             IsConfigured = _emailSettings.IsConfigured()
         };
 
         private static string? ValidateEmailSettings(ClinicEmailSettings request, bool allowEmptyPassword)
         {
+            if (!string.IsNullOrWhiteSpace(request.PublicSiteUrl)
+                && (!Uri.TryCreate(request.PublicSiteUrl.Trim(), UriKind.Absolute, out var siteUri)
+                    || siteUri.Scheme is not ("http" or "https")))
+            {
+                return "La URL pública debe comenzar con http:// o https://.";
+            }
+
             if (string.IsNullOrWhiteSpace(request.Host)
                 && string.IsNullOrWhiteSpace(request.FromEmail)
                 && string.IsNullOrWhiteSpace(request.Password)

@@ -262,6 +262,22 @@ public class AppointmentBookingService
         }
     }
 
+    public async Task<(ClinicEmailSettingsRequest? Data, string? Error)> GetClinicEmailSettingsAsync()
+    {
+        try
+        {
+            var body = await Client.GetFromJsonAsync<ApiResponse<ClinicEmailSettingsRequest>>("/api/clinic/email-settings", JsonOptions);
+            if (body?.Succeeded == true && body.Data != null)
+                return (body.Data, null);
+
+            return (null, FormatApiErrors(body) ?? "No se pudo cargar el SMTP.");
+        }
+        catch (Exception ex)
+        {
+            return (null, FormatConnectionError(ex) ?? $"Error de conexión: {ex.Message}");
+        }
+    }
+
     public async Task<(bool Success, string? Error)> SaveClinicEmailSettingsAsync(ClinicEmailSettingsRequest settings)
     {
         try
