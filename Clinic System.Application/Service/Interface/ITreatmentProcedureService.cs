@@ -9,6 +9,7 @@ namespace Clinic_System.Application.Service.Interface
             string category,
             string name,
             decimal price,
+            TreatmentPricingMode pricingMode,
             int durationMinutes,
             bool isActive,
             CancellationToken cancellationToken = default);
@@ -18,6 +19,7 @@ namespace Clinic_System.Application.Service.Interface
             string category,
             string name,
             decimal price,
+            TreatmentPricingMode pricingMode,
             int durationMinutes,
             bool isActive,
             CancellationToken cancellationToken = default);

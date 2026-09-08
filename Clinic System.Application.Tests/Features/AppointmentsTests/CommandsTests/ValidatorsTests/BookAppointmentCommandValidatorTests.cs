@@ -26,6 +26,8 @@ namespace Clinic_System.Application.Tests.Features.AppointmentsTests.CommandsTes
             // ربط الـ Repositories بالـ UnitOfWork
             _mockUnitOfWork.SetupGet(u => u.DoctorsRepository).Returns(_mockDoctorRepo.Object);
             _mockUnitOfWork.SetupGet(u => u.PatientsRepository).Returns(_mockPatientRepo.Object);
+            _mockUnitOfWork.SetupGet(u => u.TreatmentProceduresRepository)
+                .Returns(new Mock<ITreatmentProcedureRepository>().Object);
 
             // إنشاء الـ Validator الفعلي
             _validator = new BookAppointmentCommandValidator(_mockUnitOfWork.Object, _mockCurrentUserService.Object, mockHours.Object);
@@ -233,6 +235,67 @@ namespace Clinic_System.Application.Tests.Features.AppointmentsTests.CommandsTes
             var result = await _validator.TestValidateAsync(command);
 
             result.ShouldHaveValidationErrorFor(c => c.AppointmentDate);
+        }
+
+        [Fact]
+        public async Task QuotedAmount_WhenProcedureRequiresBookingPrice_ShouldRequireAmount()
+        {
+            var procedures = new Mock<ITreatmentProcedureRepository>();
+            procedures.Setup(r => r.GetByIdAsync(5, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new TreatmentProcedure
+                {
+                    Id = 5,
+                    PricingMode = TreatmentPricingMode.AtBooking
+                });
+            _mockUnitOfWork.SetupGet(u => u.TreatmentProceduresRepository).Returns(procedures.Object);
+
+            var command = new BookAppointmentCommand
+            {
+                DoctorId = 1,
+                PatientId = 1,
+                TreatmentProcedureId = 5,
+                AppointmentDate = DateTime.Today.AddDays(1),
+                AppointmentTime = new TimeSpan(13, 0, 0)
+            };
+            _mockDoctorRepo.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Doctor { Id = 1 });
+            _mockPatientRepo.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Patient { Id = 1 });
+
+            var result = await _validator.TestValidateAsync(command);
+
+            result.ShouldHaveValidationErrorFor(c => c)
+                .WithErrorMessage("Indique el precio del tratamiento al agendar esta cita.");
+        }
+
+        [Fact]
+        public async Task QuotedAmount_WhenProcedurePricedAtBilling_ShouldAllowMissingAmount()
+        {
+            var procedures = new Mock<ITreatmentProcedureRepository>();
+            procedures.Setup(r => r.GetByIdAsync(8, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new TreatmentProcedure
+                {
+                    Id = 8,
+                    PricingMode = TreatmentPricingMode.AtBilling
+                });
+            _mockUnitOfWork.SetupGet(u => u.TreatmentProceduresRepository).Returns(procedures.Object);
+
+            var command = new BookAppointmentCommand
+            {
+                DoctorId = 1,
+                PatientId = 1,
+                TreatmentProcedureId = 8,
+                AppointmentDate = DateTime.Today.AddDays(1),
+                AppointmentTime = new TimeSpan(13, 0, 0)
+            };
+            _mockDoctorRepo.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Doctor { Id = 1 });
+            _mockPatientRepo.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Patient { Id = 1 });
+
+            var result = await _validator.TestValidateAsync(command);
+
+            result.IsValid.Should().BeTrue();
         }
     }
 }

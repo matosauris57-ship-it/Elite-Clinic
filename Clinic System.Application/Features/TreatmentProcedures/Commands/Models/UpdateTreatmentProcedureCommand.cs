@@ -7,6 +7,8 @@ namespace Clinic_System.Application.Features.TreatmentProcedures.Commands.Models
         public string Category { get; set; } = null!;
         public string Name { get; set; } = null!;
         public decimal Price { get; set; }
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public TreatmentPricingMode PricingMode { get; set; } = TreatmentPricingMode.AtBooking;
         public int DurationMinutes { get; set; }
         public bool IsActive { get; set; } = true;
         public List<DoctorProcedurePriceInput> DoctorPrices { get; set; } = [];

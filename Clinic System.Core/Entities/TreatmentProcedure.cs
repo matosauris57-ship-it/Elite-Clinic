@@ -7,6 +7,7 @@ namespace Clinic_System.Core.Entities
         public virtual string Category { get; set; } = null!;
         public virtual string Name { get; set; } = null!;
         public virtual decimal Price { get; set; }
+        public virtual TreatmentPricingMode PricingMode { get; set; } = TreatmentPricingMode.AtBooking;
         public virtual int DurationMinutes { get; set; }
         public virtual bool IsActive { get; set; } = true;
         public virtual ICollection<DoctorProcedurePrice> DoctorPrices { get; set; } = new List<DoctorProcedurePrice>();

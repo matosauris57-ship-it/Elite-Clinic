@@ -13,8 +13,14 @@ namespace Clinic_System.Data.Configurations
             builder.Property(p => p.Category).IsRequired().HasMaxLength(80);
             builder.Property(p => p.Name).IsRequired().HasMaxLength(200);
             builder.Property(p => p.Price).HasColumnType("decimal(18,2)");
+            builder.Property(p => p.PricingMode)
+                .HasConversion<int>()
+                .HasDefaultValue(TreatmentPricingMode.AtBooking);
             builder.HasCheckConstraint("CK_TreatmentProcedures_Price", "[Price] >= 0");
             builder.HasCheckConstraint("CK_TreatmentProcedures_Duration", "[DurationMinutes] > 0");
+            builder.HasCheckConstraint(
+                "CK_TreatmentProcedures_PricingMode",
+                "[PricingMode] IN (0, 1, 2)");
         }
     }
 }
