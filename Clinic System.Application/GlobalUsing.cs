@@ -58,6 +58,9 @@ global using Clinic_System.Application.Features.TreatmentProcedures.Queries.Mode
 global using Clinic_System.Application.Features.MedicalConditions.Commands.Models;
 global using Clinic_System.Application.Features.MedicalConditions.Queries.Models;
 global using Clinic_System.Application.DTOs.MedicalConditions;
+global using Clinic_System.Application.DTOs.Inventory;
+global using Clinic_System.Application.Features.Inventory.Commands.Models;
+global using Clinic_System.Application.Features.Inventory.Queries.Models;
 global using Clinic_System.Application.DTOs.AccessControl;
 global using Clinic_System.Application.Features.AccessControl.Queries.Models;
 global using Clinic_System.Application.Features.AccessControl.Commands.Models;

@@ -24,6 +24,10 @@ namespace Clinic_System.Core.Interfaces.UnitOfWork
         IPatientPrescriptionRepository PatientPrescriptionsRepository { get; }
         IDashboardLayoutRepository DashboardLayoutsRepository { get; }
         IEmailCampaignRepository EmailCampaignsRepository { get; }
+        IInventoryItemRepository InventoryItemsRepository { get; }
+        IProcedureMaterialRepository ProcedureMaterialsRepository { get; }
+        IStockMovementRepository StockMovementsRepository { get; }
+        ITreatmentMaterialConsumptionRepository TreatmentMaterialConsumptionsRepository { get; }
         Task<int> SaveAsync(CancellationToken cancellationToken = default);
     }
 }

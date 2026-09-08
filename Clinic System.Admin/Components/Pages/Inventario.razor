@@ -1,0 +1,596 @@
+@page "/inventario"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "inventario.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject InventoryMaintenanceService InventoryService
+@inject TreatmentProcedureMaintenanceService ProcedureService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Inventario — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Inventario</h1>
+            <p>Materiales y consumibles separados de la facturación. El descuento ocurre al completar tratamientos.</p>
+        </div>
+        @if (_canEdit)
+        {
+            <div class="command-actions">
+                <button class="btn-outline" @onclick="OpenBomModal">BOM por procedimiento</button>
+                <button class="btn-primary" @onclick="OpenCreateModal">
+                    <Icon Name="plus" Class="btn-svg" />
+                    Nuevo ítem
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_loadError))
+    {
+        <ErrorBanner Message="@_loadError" OnRetry="ReloadAsync" />
+    }
+
+    <div class="agenda-kpi-row">
+        <div class="agenda-kpi">
+            <span class="agenda-kpi-value">@_items.Count</span>
+            <span class="agenda-kpi-label">Ítems</span>
+        </div>
+        <div class="agenda-kpi accent-yellow">
+            <span class="agenda-kpi-value">@_items.Count(i => i.IsLowStock)</span>
+            <span class="agenda-kpi-label">Stock bajo</span>
+        </div>
+    </div>
+
+    <div class="maintenance-toolbar">
+        <div class="search-field maintenance-search">
+            <Icon Name="search" Class="field-icon" />
+            <input type="text" placeholder="Buscar por SKU, nombre o categoría..." @bind="_search" @bind:event="oninput" />
+        </div>
+        <label class="checkbox-label"><input type="checkbox" @bind="_lowStockOnly" @bind:after="ReloadAsync" /> Solo stock bajo</label>
+        <span class="maintenance-count">@FilteredItems.Count() ítem(s)</span>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando inventario..." />
+    }
+    else if (!FilteredItems.Any() && string.IsNullOrEmpty(_loadError))
+    {
+        <div class="maintenance-empty"><p>No hay ítems de inventario.</p></div>
+    }
+    else
+    {
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th>Stock</th>
+                        <th>Mínimo</th>
+                        <th>Unidad</th>
+                        <th>Estado</th>
+                        <th class="col-actions">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in FilteredItems)
+                    {
+                        <tr class="@(item.IsActive ? null : "table-row-inactive")">
+                            <td>@item.Sku</td>
+                            <td>@item.Name</td>
+                            <td>@item.Category</td>
+                            <td>
+                                <span class="@(item.IsLowStock ? "status-badge status-inactive" : null)">
+                                    @item.QuantityOnHand.ToString("0.###")
+                                </span>
+                            </td>
+                            <td>@item.MinimumStock.ToString("0.###")</td>
+                            <td>@item.Unit</td>
+                            <td>
+                                <span class="status-badge @(item.IsActive ? "status-active" : "status-inactive")">
+                                    @(item.IsActive ? "Activo" : "Inactivo")
+                                </span>
+                            </td>
+                            <td class="col-actions">
+                                <button class="btn-table" @onclick="() => OpenMovementsModal(item)">Kardex</button>
+                                @if (_canEdit)
+                                {
+                                    <button class="btn-table" @onclick="() => OpenEntryModal(item)">Entrada</button>
+                                    <button class="btn-table" @onclick="() => OpenEditModal(item)">Editar</button>
+                                    <button class="btn-table btn-table-danger" @onclick="() => OpenDeleteModal(item)">Eliminar</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_showFormModal)
+{
+    <div class="modal-overlay" @onclick="CloseFormModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@(_isEdit ? "Editar ítem" : "Nuevo ítem")</h2>
+                <button class="modal-close" @onclick="CloseFormModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_formError)) { <div class="wizard-error">@_formError</div> }
+            <div class="new-patient-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>SKU</label>
+                        <input class="form-input" @bind="_form.Sku" placeholder="resina-a2" />
+                    </div>
+                    <div class="form-group">
+                        <label>Nombre</label>
+                        <input class="form-input" @bind="_form.Name" placeholder="Resina A2" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Categoría</label>
+                        <input class="form-input" @bind="_form.Category" placeholder="MATERIALES" />
+                    </div>
+                    <div class="form-group">
+                        <label>Unidad</label>
+                        <select class="form-input" @bind="_form.Unit">
+                            <option value="u">u (unidad)</option>
+                            <option value="ml">ml</option>
+                            <option value="g">g</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Stock mínimo</label>
+                        <input class="form-input" type="number" step="0.001" min="0" @bind="_form.MinimumStock" />
+                    </div>
+                    @if (!_isEdit)
+                    {
+                        <div class="form-group">
+                            <label>Cantidad inicial</label>
+                            <input class="form-input" type="number" step="0.001" min="0" @bind="_form.InitialQuantity" />
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="form-group checkbox-label">
+                            <label><input type="checkbox" @bind="_form.IsActive" /> Activo</label>
+                        </div>
+                    }
+                </div>
+                @if (!_isEdit)
+                {
+                    <div class="form-group checkbox-label">
+                        <label><input type="checkbox" @bind="_form.IsActive" /> Activo</label>
+                    </div>
+                }
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseFormModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Guardando..." : "Guardar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showEntryModal && _entryItem != null)
+{
+    <div class="modal-overlay" @onclick="CloseEntryModal">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Entrada — @_entryItem.Name</h2>
+                <button class="modal-close" @onclick="CloseEntryModal">×</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_formError)) { <div class="wizard-error">@_formError</div> }
+            <div class="new-patient-form">
+                <div class="form-group">
+                    <label>Cantidad</label>
+                    <input class="form-input" type="number" step="0.001" min="0.001" @bind="_entry.Quantity" />
+                </div>
+                <div class="form-group">
+                    <label>Motivo</label>
+                    <input class="form-input" @bind="_entry.Reason" placeholder="Compra / recepción" />
+                </div>
+                <div class="form-group">
+                    <label>Notas</label>
+                    <input class="form-input" @bind="_entry.Notes" />
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseEntryModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="SaveEntryAsync">@(_saving ? "Guardando..." : "Registrar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showMovementsModal && _movementsItem != null)
+{
+    <div class="modal-overlay" @onclick="CloseMovementsModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Kardex — @_movementsItem.Name</h2>
+                <button class="modal-close" @onclick="CloseMovementsModal">×</button>
+            </div>
+            @if (_movementsLoading)
+            {
+                <AnimatedLoader Message="Cargando movimientos..." />
+            }
+            else if (!_movements.Any())
+            {
+                <p class="modal-confirm-text">Sin movimientos todavía.</p>
+            }
+            else
+            {
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Tipo</th>
+                                <th>Cant.</th>
+                                <th>Antes</th>
+                                <th>Después</th>
+                                <th>Motivo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var m in _movements)
+                            {
+                                <tr>
+                                    <td>@m.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>@m.Type</td>
+                                    <td>@m.Quantity.ToString("0.###")</td>
+                                    <td>@m.QuantityBefore.ToString("0.###")</td>
+                                    <td>@m.QuantityAfter.ToString("0.###")</td>
+                                    <td>@(m.Reason ?? "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseMovementsModal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showBomModal)
+{
+    <div class="modal-overlay" @onclick="CloseBomModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>BOM por procedimiento</h2>
+                <button class="modal-close" @onclick="CloseBomModal">×</button>
+            </div>
+            <p class="modal-confirm-text">Define qué materiales propone el sistema al marcar un procedimiento como realizado. No afecta la factura.</p>
+            @if (!string.IsNullOrEmpty(_formError)) { <div class="wizard-error">@_formError</div> }
+            <div class="new-patient-form">
+                <div class="form-group">
+                    <label>Procedimiento</label>
+                    <select class="form-input" @bind="_bomProcedureId" @bind:after="LoadBomAsync">
+                        <option value="0">Seleccionar...</option>
+                        @foreach (var p in _procedures)
+                        {
+                            <option value="@p.Id">@p.Name</option>
+                        }
+                    </select>
+                </div>
+                @if (_bomProcedureId > 0)
+                {
+                    <div class="data-table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Material</th>
+                                    <th>Cantidad</th>
+                                    <th>Opcional</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var i = 0; i < _bomLines.Count; i++)
+                                {
+                                    var idx = i;
+                                    <tr>
+                                        <td>
+                                            <select class="form-input" @bind="_bomLines[idx].InventoryItemId">
+                                                @foreach (var item in _items.Where(x => x.IsActive))
+                                                {
+                                                    <option value="@item.Id">@item.Name (@item.Unit)</option>
+                                                }
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input class="form-input" type="number" step="0.001" min="0.001" @bind="_bomLines[idx].DefaultQuantity" />
+                                        </td>
+                                        <td>
+                                            <input type="checkbox" @bind="_bomLines[idx].IsOptional" />
+                                        </td>
+                                        <td>
+                                            <button class="btn-table btn-table-danger" @onclick="() => RemoveBomLine(idx)">Quitar</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <button class="btn-outline" @onclick="AddBomLine">Agregar material</button>
+                }
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseBomModal">Cancelar</button>
+                <button class="btn-primary" disabled="@(_saving || _bomProcedureId <= 0)" @onclick="SaveBomAsync">@(_saving ? "Guardando..." : "Guardar BOM")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showDeleteModal && _toDelete != null)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Eliminar ítem</h2>
+                <button class="modal-close" @onclick="CloseDeleteModal">×</button>
+            </div>
+            <p class="modal-confirm-text">¿Eliminar <strong>@_toDelete.Name</strong> del inventario?</p>
+            @if (!string.IsNullOrEmpty(_deleteError)) { <div class="wizard-error">@_deleteError</div> }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseDeleteModal">Cancelar</button>
+                <button class="btn-danger" disabled="@_saving" @onclick="ConfirmDeleteAsync">@(_saving ? "Eliminando..." : "Eliminar")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<InventoryItemListItem> _items = [];
+    private List<TreatmentProcedureListItem> _procedures = [];
+    private string _search = string.Empty;
+    private bool _lowStockOnly;
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _canEdit;
+    private bool _saving;
+
+    private bool _showFormModal;
+    private bool _isEdit;
+    private CreateInventoryItemRequest _form = new();
+    private int _editId;
+    private string? _formError;
+
+    private bool _showEntryModal;
+    private InventoryItemListItem? _entryItem;
+    private StockEntryRequest _entry = new();
+
+    private bool _showMovementsModal;
+    private InventoryItemListItem? _movementsItem;
+    private List<StockMovementListItem> _movements = [];
+    private bool _movementsLoading;
+
+    private bool _showBomModal;
+    private int _bomProcedureId;
+    private List<ProcedureMaterialRequest> _bomLines = [];
+
+    private bool _showDeleteModal;
+    private InventoryItemListItem? _toDelete;
+    private string? _deleteError;
+
+    private IEnumerable<InventoryItemListItem> FilteredItems =>
+        _items.Where(i =>
+            string.IsNullOrWhiteSpace(_search)
+            || i.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || i.Sku.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || i.Category.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canEdit = PermissionService.HasPermission(auth.User, "inventario.edit");
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        var (items, error) = await InventoryService.GetItemsAsync(lowStockOnly: _lowStockOnly);
+        _items = items;
+        _loadError = error;
+        _loading = false;
+    }
+
+    private void OpenCreateModal()
+    {
+        _isEdit = false;
+        _form = new CreateInventoryItemRequest();
+        _formError = null;
+        _showFormModal = true;
+    }
+
+    private void OpenEditModal(InventoryItemListItem item)
+    {
+        _isEdit = true;
+        _editId = item.Id;
+        _form = new CreateInventoryItemRequest
+        {
+            Sku = item.Sku,
+            Name = item.Name,
+            Category = item.Category,
+            Unit = item.Unit,
+            MinimumStock = item.MinimumStock,
+            IsActive = item.IsActive
+        };
+        _formError = null;
+        _showFormModal = true;
+    }
+
+    private void CloseFormModal() => _showFormModal = false;
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Sku) || string.IsNullOrWhiteSpace(_form.Name))
+        {
+            _formError = "SKU y nombre son obligatorios.";
+            return;
+        }
+
+        _saving = true;
+        _formError = null;
+        if (_isEdit)
+        {
+            var (ok, err) = await InventoryService.UpdateAsync(_editId, new UpdateInventoryItemRequest
+            {
+                Sku = _form.Sku,
+                Name = _form.Name,
+                Category = _form.Category,
+                Unit = _form.Unit,
+                MinimumStock = _form.MinimumStock,
+                IsActive = _form.IsActive
+            });
+            _saving = false;
+            if (!ok) { _formError = err; return; }
+        }
+        else
+        {
+            var (ok, err, _) = await InventoryService.CreateAsync(_form);
+            _saving = false;
+            if (!ok) { _formError = err; return; }
+        }
+
+        CloseFormModal();
+        await ReloadAsync();
+    }
+
+    private void OpenEntryModal(InventoryItemListItem item)
+    {
+        _entryItem = item;
+        _entry = new StockEntryRequest { Quantity = 1, Reason = "Compra / recepción" };
+        _formError = null;
+        _showEntryModal = true;
+    }
+
+    private void CloseEntryModal() => _showEntryModal = false;
+
+    private async Task SaveEntryAsync()
+    {
+        if (_entryItem == null) return;
+        if (_entry.Quantity <= 0)
+        {
+            _formError = "La cantidad debe ser mayor que cero.";
+            return;
+        }
+
+        _saving = true;
+        _formError = null;
+        var (ok, err) = await InventoryService.RegisterEntryAsync(_entryItem.Id, _entry);
+        _saving = false;
+        if (!ok) { _formError = err; return; }
+        CloseEntryModal();
+        await ReloadAsync();
+    }
+
+    private async Task OpenMovementsModal(InventoryItemListItem item)
+    {
+        _movementsItem = item;
+        _showMovementsModal = true;
+        _movementsLoading = true;
+        var (items, _) = await InventoryService.GetMovementsAsync(item.Id);
+        _movements = items;
+        _movementsLoading = false;
+    }
+
+    private void CloseMovementsModal() => _showMovementsModal = false;
+
+    private async Task OpenBomModal()
+    {
+        _formError = null;
+        _bomProcedureId = 0;
+        _bomLines = [];
+        var (procedures, _) = await ProcedureService.GetProceduresAsync(activeOnly: true);
+        _procedures = procedures;
+        _showBomModal = true;
+    }
+
+    private void CloseBomModal() => _showBomModal = false;
+
+    private async Task LoadBomAsync()
+    {
+        if (_bomProcedureId <= 0)
+        {
+            _bomLines = [];
+            return;
+        }
+
+        var (bom, err) = await InventoryService.GetBomAsync(_bomProcedureId);
+        if (err != null) { _formError = err; return; }
+        _bomLines = bom.Select(b => new ProcedureMaterialRequest
+        {
+            InventoryItemId = b.InventoryItemId,
+            DefaultQuantity = b.DefaultQuantity,
+            IsOptional = b.IsOptional,
+            SortOrder = b.SortOrder
+        }).ToList();
+    }
+
+    private void AddBomLine()
+    {
+        var first = _items.FirstOrDefault(i => i.IsActive);
+        if (first == null) return;
+        _bomLines.Add(new ProcedureMaterialRequest
+        {
+            InventoryItemId = first.Id,
+            DefaultQuantity = 1,
+            SortOrder = _bomLines.Count + 1
+        });
+    }
+
+    private void RemoveBomLine(int index)
+    {
+        if (index >= 0 && index < _bomLines.Count)
+            _bomLines.RemoveAt(index);
+    }
+
+    private async Task SaveBomAsync()
+    {
+        if (_bomProcedureId <= 0) return;
+        _saving = true;
+        _formError = null;
+        var (ok, err) = await InventoryService.ReplaceBomAsync(_bomProcedureId, new ReplaceProcedureBomRequest
+        {
+            Materials = _bomLines
+        });
+        _saving = false;
+        if (!ok) { _formError = err; return; }
+        CloseBomModal();
+    }
+
+    private void OpenDeleteModal(InventoryItemListItem item)
+    {
+        _toDelete = item;
+        _deleteError = null;
+        _showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal() => _showDeleteModal = false;
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_toDelete == null) return;
+        _saving = true;
+        var (ok, err) = await InventoryService.DeleteAsync(_toDelete.Id);
+        _saving = false;
+        if (!ok) { _deleteError = err; return; }
+        CloseDeleteModal();
+        await ReloadAsync();
+    }
+}

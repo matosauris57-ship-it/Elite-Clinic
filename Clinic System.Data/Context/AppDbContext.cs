@@ -31,6 +31,11 @@ namespace Clinic_System.Data.Context
         public DbSet<EmailCampaign> EmailCampaigns { get; set; }
         public DbSet<EmailCampaignRecipient> EmailCampaignRecipients { get; set; }
         public DbSet<EmergencyContact> EmergencyContacts { get; set; }
+        public DbSet<InventoryItem> InventoryItems { get; set; }
+        public DbSet<ProcedureMaterial> ProcedureMaterials { get; set; }
+        public DbSet<StockMovement> StockMovements { get; set; }
+        public DbSet<TreatmentMaterialConsumption> TreatmentMaterialConsumptions { get; set; }
+        public DbSet<TreatmentMaterialConsumptionLine> TreatmentMaterialConsumptionLines { get; set; }
 
         public AppDbContext()
         {

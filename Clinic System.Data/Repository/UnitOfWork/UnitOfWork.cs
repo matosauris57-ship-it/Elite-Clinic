@@ -40,6 +40,10 @@ namespace Clinic_System.Data.Repository.UnitOfWork
         IPatientPrescriptionRepository PatientPrescriptionsRepo;
         IDashboardLayoutRepository DashboardLayoutsRepo;
         IEmailCampaignRepository EmailCampaignsRepo;
+        IInventoryItemRepository InventoryItemsRepo;
+        IProcedureMaterialRepository ProcedureMaterialsRepo;
+        IStockMovementRepository StockMovementsRepo;
+        ITreatmentMaterialConsumptionRepository TreatmentMaterialConsumptionsRepo;
 
         public IRefreshTokenRepository RefreshTokensRepository
         {
@@ -257,6 +261,42 @@ namespace Clinic_System.Data.Repository.UnitOfWork
             {
                 EmailCampaignsRepo ??= new EmailCampaignRepository(context);
                 return EmailCampaignsRepo;
+            }
+        }
+
+        public IInventoryItemRepository InventoryItemsRepository
+        {
+            get
+            {
+                InventoryItemsRepo ??= new InventoryItemRepository(context);
+                return InventoryItemsRepo;
+            }
+        }
+
+        public IProcedureMaterialRepository ProcedureMaterialsRepository
+        {
+            get
+            {
+                ProcedureMaterialsRepo ??= new ProcedureMaterialRepository(context);
+                return ProcedureMaterialsRepo;
+            }
+        }
+
+        public IStockMovementRepository StockMovementsRepository
+        {
+            get
+            {
+                StockMovementsRepo ??= new StockMovementRepository(context);
+                return StockMovementsRepo;
+            }
+        }
+
+        public ITreatmentMaterialConsumptionRepository TreatmentMaterialConsumptionsRepository
+        {
+            get
+            {
+                TreatmentMaterialConsumptionsRepo ??= new TreatmentMaterialConsumptionRepository(context);
+                return TreatmentMaterialConsumptionsRepo;
             }
         }
 

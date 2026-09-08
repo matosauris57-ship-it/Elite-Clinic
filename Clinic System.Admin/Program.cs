@@ -48,6 +48,7 @@ builder.Services.AddScoped<ToothChartService>();
         builder.Services.AddScoped<PatientPrescriptionService>();
 builder.Services.AddScoped<TreatmentProcedureMaintenanceService>();
 builder.Services.AddScoped<ClinicalTreatmentMaintenanceService>();
+builder.Services.AddScoped<InventoryMaintenanceService>();
 builder.Services.AddScoped<TreatmentPlanMaintenanceService>();
 builder.Services.AddScoped<AgendaMaintenanceService>();
 builder.Services.AddScoped<WaitingRoomHubService>();

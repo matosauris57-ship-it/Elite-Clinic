@@ -1,5 +1,4 @@
 @page "/analitica"
-@page "/inventario"
 @page "/reportes"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "admin.panel")]
 @rendermode InteractiveServer
@@ -33,7 +32,6 @@
             "historial" => ("Historial Clínico", "clipboard-list"),
             "facturacion" => ("Facturación", "credit-card"),
             "analitica" => ("Analítica", "bar-chart-2"),
-            "inventario" => ("Inventario", "package"),
             "reportes" => ("Reportes", "file-bar-chart"),
             _ => ("Próximamente", "construction")
         };
@@ -44,7 +42,6 @@
             "historial" => "historial.view",
             "facturacion" => "facturacion.view",
             "analitica" => "analitica.view",
-            "inventario" => "inventario.view",
             "reportes" => "reportes.view",
             _ => null
         };
