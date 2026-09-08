@@ -25,6 +25,7 @@ namespace Clinic_System.Application.Features.TreatmentProcedures.Commands.Handle
                 request.Category,
                 request.Name,
                 request.Price,
+                request.PricingMode,
                 request.DurationMinutes,
                 request.IsActive,
                 cancellationToken);

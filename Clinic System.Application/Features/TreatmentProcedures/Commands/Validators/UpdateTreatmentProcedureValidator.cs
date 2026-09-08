@@ -8,7 +8,12 @@ namespace Clinic_System.Application.Features.TreatmentProcedures.Commands.Valida
             RuleFor(x => x.Code).NotEmpty().MaximumLength(80);
             RuleFor(x => x.Category).NotEmpty().MaximumLength(80);
             RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+            RuleFor(x => x.PricingMode).IsInEnum();
             RuleFor(x => x.Price).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.Price)
+                .GreaterThan(0)
+                .When(x => x.PricingMode == TreatmentPricingMode.Fixed)
+                .WithMessage("Indique un precio fijo mayor a cero.");
             RuleFor(x => x.DurationMinutes).GreaterThan(0);
             RuleFor(x => x.DoctorPrices)
                 .Must(prices => prices.Select(p => p.DoctorId).Distinct().Count() == prices.Count)

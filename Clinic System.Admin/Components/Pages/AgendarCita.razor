@@ -266,7 +266,7 @@ else
                         <div class="step-content">
                             <div class="step-head">
                                 <h2>Tipo de tratamiento</h2>
-                                <p>Elige el procedimiento. El precio se indica aquí, para esta cita.</p>
+                                <p>Elige el procedimiento. Según el catálogo, el precio puede ser fijo, pedirse aquí o dejarse para facturar.</p>
                             </div>
                             <div class="treatment-toolbar">
                                 <div class="search-field treatment-search">
@@ -325,13 +325,24 @@ else
                                     <div class="treatment-quote-copy">
                                         <span class="treatment-quote-kicker">Precio de esta cita</span>
                                         <strong>@_state.SelectedTreatment.Name</strong>
-                                        <p>Ingresa el monto a cobrar. No está predefinido en el catálogo.</p>
+                                        <p>@GetSelectedTreatmentPriceHint()</p>
                                     </div>
-                                    <label class="treatment-quote-field">
-                                        <span>RD$</span>
-                                        <input class="form-input" type="text" inputmode="decimal" autocomplete="off"
-                                               placeholder="0.00" @bind="_state.QuotedPriceInput" @bind:event="oninput" />
-                                    </label>
+                                    @if (_state.SelectedTreatment.RequiresPriceAtBilling)
+                                    {
+                                        <div class="treatment-quote-pending">
+                                            Se ingresará al facturar
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <label class="treatment-quote-field">
+                                            <span>RD$</span>
+                                            <input class="form-input" type="text" inputmode="decimal" autocomplete="off"
+                                                   placeholder="0.00"
+                                                   disabled="@_state.SelectedTreatment.IsFixedPrice"
+                                                   @bind="_state.QuotedPriceInput" @bind:event="oninput" />
+                                        </label>
+                                    }
                                 </div>
                             }
                         </div>
@@ -752,7 +763,13 @@ else
             Id = p.Id,
             Category = p.Category,
             Name = p.Name,
-            DurationMinutes = p.DurationMinutes
+            DurationMinutes = p.DurationMinutes,
+            Price = p.Price,
+            PriceRaw = p.PriceRaw,
+            PriceRangeDisplay = p.PriceRangeDisplay,
+            PricingMode = p.PricingMode,
+            PricingModeDisplay = p.PricingModeDisplay,
+            DoctorPrices = p.DoctorPrices
         }).ToList();
 
         _catalogLoadError = error;
@@ -765,11 +782,30 @@ else
     {
         var changed = _state.SelectedTreatment?.Id != treatment.Id;
         _state.SelectedTreatment = treatment;
-        if (changed)
+        if (!changed)
+            return;
+
+        if (treatment.IsFixedPrice && treatment.Price > 0)
+            _state.QuotedPriceInput = string.IsNullOrWhiteSpace(treatment.PriceRaw)
+                ? Money.ToInput(treatment.Price)
+                : treatment.PriceRaw;
+        else
             _state.QuotedPriceInput = string.Empty;
     }
 
     private void SelectDoctor(DoctorListItem doctor) => _state.SelectedDoctor = doctor;
+
+    private string GetSelectedTreatmentPriceHint()
+    {
+        var treatment = _state.SelectedTreatment;
+        if (treatment == null)
+            return string.Empty;
+        if (treatment.IsFixedPrice)
+            return "Este procedimiento tiene precio fijo en el catálogo.";
+        if (treatment.RequiresPriceAtBilling)
+            return "El monto se pedirá al facturar; no es necesario indicarlo ahora.";
+        return "Ingrese el monto a cobrar para esta cita.";
+    }
 
     private static string FormatCategory(string category) =>
         string.IsNullOrWhiteSpace(category) ? "General" : category.Replace('_', ' ');
@@ -780,9 +816,22 @@ else
         return Money.TryParse(_state.QuotedPriceInput, out amount) && amount > 0;
     }
 
-    private string FormatSelectedTreatmentPrice() =>
-        TryGetQuotedAmount(out var amount) ? Money.Format(amount) : "Pendiente";
+    private bool HasRequiredQuoteForSelectedTreatment()
+    {
+        var treatment = _state.SelectedTreatment;
+        if (treatment == null)
+            return false;
+        if (treatment.RequiresPriceAtBilling)
+            return true;
+        return TryGetQuotedAmount(out _);
+    }
 
+    private string FormatSelectedTreatmentPrice()
+    {
+        if (_state.SelectedTreatment?.RequiresPriceAtBilling == true)
+            return "Al facturar";
+        return TryGetQuotedAmount(out var amount) ? Money.Format(amount) : "Pendiente";
+    }
     private async Task ApplyScheduleAsync()
     {
         var (schedule, _) = await BookingService.GetClinicScheduleAsync();
@@ -936,12 +985,12 @@ else
     private bool CanGoNext() => _state.CurrentStep switch
     {
         1 => _state.SelectedPatient != null,
-        2 => _state.SelectedTreatment != null && TryGetQuotedAmount(out _),
+        2 => _state.SelectedTreatment != null && HasRequiredQuoteForSelectedTreatment(),
         3 => _state.SelectedDoctor != null,
         4 => _state.SelectedDate.HasValue && _state.SelectedTime.HasValue,
         5 => _state.SelectedPatient != null && _state.SelectedTreatment != null &&
              _state.SelectedDoctor != null && _state.SelectedDate.HasValue && _state.SelectedTime.HasValue &&
-             TryGetQuotedAmount(out _),
+             HasRequiredQuoteForSelectedTreatment(),
         _ => false
     };
 
@@ -971,7 +1020,7 @@ else
             return;
         }
 
-        if (!TryGetQuotedAmount(out _))
+        if (_state.SelectedTreatment?.RequiresPriceAtBilling != true && !TryGetQuotedAmount(out _))
         {
             _error = "Indique el precio del tratamiento en el paso 2.";
             await ShowBookingErrorAsync();
@@ -1001,7 +1050,9 @@ else
                 AppointmentDate = _state.SelectedDate.Value.Date,
                 AppointmentTime = _state.SelectedTime.Value,
                 TreatmentProcedureId = _state.SelectedTreatment?.Id,
-                QuotedAmount = TryGetQuotedAmount(out var quoted) ? quoted : null
+                QuotedAmount = _state.SelectedTreatment?.RequiresPriceAtBilling == true
+                    ? null
+                    : (TryGetQuotedAmount(out var quoted) ? quoted : null)
             };
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));

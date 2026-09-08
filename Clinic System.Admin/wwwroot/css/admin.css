@@ -1791,6 +1791,18 @@ button.nav-item:focus-visible,
 .treatment-quote-copy strong { display: block; font-size: 1rem; }
 .treatment-quote-copy p { margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--text-muted); }
 
+.treatment-quote-pending {
+    justify-self: end;
+    padding: 0.7rem 1rem;
+    border-radius: 10px;
+    border: 1px dashed rgba(38, 198, 218, 0.45);
+    background: rgba(15, 23, 42, 0.35);
+    color: var(--accent-teal);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-align: center;
+}
+
 .treatment-quote-field {
     display: flex;
     align-items: center;
@@ -5816,6 +5828,14 @@ button.whatsapp-placeholder-chip:hover {
 .tx-procedure-meta {
     margin-top: auto;
     margin-bottom: 0.75rem;
+}
+
+.tx-price {
+    display: inline-flex;
+    align-items: center;
+    font-weight: 700;
+    color: var(--accent-green);
+    font-size: 0.88rem;
 }
 
 .tx-duration {
