@@ -107,27 +107,72 @@ namespace Clinic_System.API.Controllers
         }
 
         [HttpPost]
+        [Authorize(Policy = "pacientes.create")]
         public async Task<IActionResult> CreatePatientAdmin([FromBody] CreatePatientCommand command)
         {
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-[HttpPut("{id:int}")]
 
-        public async Task<IActionResult> UpdatePatient(int id, [FromBody] UpdatePatientCommand command)
-
+        [HttpPost("import/preview")]
+        [Authorize(Policy = "pacientes.create")]
+        [RequestSizeLimit(PatientCsvImport.MaxCsvBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = PatientCsvImport.MaxCsvBytes)]
+        public async Task<IActionResult> PreviewPatientImport(IFormFile? file, CancellationToken cancellationToken)
         {
+            if (file == null || file.Length == 0)
+                return NewResult(new Clinic_System.Application.Common.Bases.Response<PatientImportPreviewDTO>
+                {
+                    Succeeded = false,
+                    StatusCode = HttpStatusCode.BadRequest,
+                    Message = "Suba un archivo CSV."
+                });
 
+            if (file.Length > PatientCsvImport.MaxCsvBytes)
+                return NewResult(new Clinic_System.Application.Common.Bases.Response<PatientImportPreviewDTO>
+                {
+                    Succeeded = false,
+                    StatusCode = HttpStatusCode.BadRequest,
+                    Message = "El archivo no puede superar 2 MB."
+                });
+
+            await using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream);
+            var csv = await reader.ReadToEndAsync(cancellationToken);
+
+            var response = await mediator.Send(new PreviewPatientImportCommand { CsvContent = csv }, cancellationToken);
+            return NewResult(response);
+        }
+
+        [HttpGet("import/template")]
+        [Authorize(Policy = "pacientes.create")]
+        public IActionResult DownloadPatientImportTemplate()
+        {
+            var csv = PatientCsvImport.BuildTemplateCsv();
+            var bytes = System.Text.Encoding.UTF8.GetPreamble()
+                .Concat(System.Text.Encoding.UTF8.GetBytes(csv))
+                .ToArray();
+            return File(bytes, "text/csv", "plantilla-pacientes.csv");
+        }
+
+        [HttpPost("import")]
+        [Authorize(Policy = "pacientes.create")]
+        public async Task<IActionResult> ConfirmPatientImport(
+            [FromBody] ConfirmPatientImportCommand command,
+            CancellationToken cancellationToken)
+        {
+            var response = await mediator.Send(command, cancellationToken);
+            return NewResult(response);
+        }
+
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> UpdatePatient(int id, [FromBody] UpdatePatientCommand command)
+        {
             if (id != command.Id)
-
                 return BadRequest("Mismatched Patient ID");
 
-
-
             var response = await mediator.Send(command);
-
             return NewResult(response);
-
         }
 [HttpDelete("{id:int}")]
         public async Task<IActionResult> SoftDeletePatient(int id)
