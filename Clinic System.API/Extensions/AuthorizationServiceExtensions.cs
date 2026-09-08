@@ -61,6 +61,19 @@ public static class AuthorizationServiceExtensions
                 AdminPermissionCatalog.Build("recetas", AdminPermissionCatalog.Actions.Edit),
                 AdminPermissionCatalog.SystemRoles.Doctor);
 
+            RegisterCompositePolicy(options, "certificados.view+doctor+patient",
+                AdminPermissionCatalog.Build("certificados", AdminPermissionCatalog.Actions.View),
+                AdminPermissionCatalog.SystemRoles.Doctor,
+                AdminPermissionCatalog.SystemRoles.Patient);
+
+            RegisterCompositePolicy(options, "certificados.create+doctor",
+                AdminPermissionCatalog.Build("certificados", AdminPermissionCatalog.Actions.Create),
+                AdminPermissionCatalog.SystemRoles.Doctor);
+
+            RegisterCompositePolicy(options, "certificados.edit+doctor",
+                AdminPermissionCatalog.Build("certificados", AdminPermissionCatalog.Actions.Edit),
+                AdminPermissionCatalog.SystemRoles.Doctor);
+
             RegisterCompositePolicy(options, "planes-tratamiento.view+doctor+patient",
                 AdminPermissionCatalog.Build("planes-tratamiento", AdminPermissionCatalog.Actions.View),
                 AdminPermissionCatalog.SystemRoles.Doctor,

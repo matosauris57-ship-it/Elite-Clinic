@@ -38,6 +38,8 @@
             var oldSpecialization = doctor.Specialization.Trim().ToLower();
 
             mapper.Map(request, doctor);
+            if (request.ClearSignatureImage)
+                doctor.SignatureImageUrl = null;
 
             await doctorService.UpdateDoctor(doctor, cancellationToken);
 

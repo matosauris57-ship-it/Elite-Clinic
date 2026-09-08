@@ -44,8 +44,9 @@ builder.Services.AddScoped<DoctorMaintenanceService>();
 builder.Services.AddScoped<MedicalConditionMaintenanceService>();
 builder.Services.AddScoped<PatientMaintenanceService>();
 builder.Services.AddScoped<ToothChartService>();
-        builder.Services.AddScoped<PeriodontalExamService>();
-        builder.Services.AddScoped<PatientPrescriptionService>();
+builder.Services.AddScoped<PeriodontalExamService>();
+builder.Services.AddScoped<PatientPrescriptionService>();
+builder.Services.AddScoped<PatientMedicalCertificateService>();
 builder.Services.AddScoped<TreatmentProcedureMaintenanceService>();
 builder.Services.AddScoped<ClinicalTreatmentMaintenanceService>();
 builder.Services.AddScoped<TreatmentPlanMaintenanceService>();
@@ -133,6 +134,8 @@ app.MapGet("/auth/complete", async (string key, IMemoryCache cache, HttpContext 
     };
     foreach (var role in data.Roles)
         claims.Add(new Claim(ClaimTypes.Role, role));
+    if (data.DoctorId.HasValue)
+        claims.Add(new Claim("DoctorId", data.DoctorId.Value.ToString()));
     foreach (var permission in data.Permissions)
         claims.Add(new Claim(PermissionService.ClaimType, permission));
 

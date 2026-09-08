@@ -423,6 +423,9 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("nvarchar(20)")
                         .HasColumnName("PhoneNumber");
 
+                    b.Property<string>("SignatureImageUrl")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Specialization")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -923,6 +926,83 @@ namespace Clinic_System.Data.Migrations
                     b.HasIndex("MedicalConditionId");
 
                     b.ToTable("PatientMedicalConditions", (string)null);
+                });
+
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientMedicalCertificate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CertificateType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Diagnosis")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("DoctorId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IncludesRest")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Observations")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("Recommendation")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("RecordedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("RestDays")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("RestEndDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("RestStartDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DoctorId");
+
+                    b.HasIndex("PatientId", "IssuedAt");
+
+                    b.ToTable("PatientMedicalCertificates", (string)null);
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.PatientPrescription", b =>
@@ -2112,6 +2192,24 @@ namespace Clinic_System.Data.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientMedicalCertificate", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Doctor", "Doctor")
+                        .WithMany()
+                        .HasForeignKey("DoctorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("MedicalCertificates")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Doctor");
+
+                    b.Navigation("Patient");
+                });
+
             modelBuilder.Entity("Clinic_System.Core.Entities.PatientPrescription", b =>
                 {
                     b.HasOne("Clinic_System.Core.Entities.Doctor", "Doctor")
@@ -2378,6 +2476,8 @@ namespace Clinic_System.Data.Migrations
                     b.Navigation("EmergencyContacts");
 
                     b.Navigation("MedicalConditions");
+
+                    b.Navigation("MedicalCertificates");
 
                     b.Navigation("PatientPrescriptions");
 

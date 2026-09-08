@@ -22,6 +22,7 @@ public class TokenStorage
     public DateTime? ExpiresAtUtc { get; private set; }
     public string? UserName { get; private set; }
     public string? Email { get; private set; }
+    public int? DoctorId { get; private set; }
     public IReadOnlyList<string> Roles => _roles;
     public IReadOnlyList<string> Permissions => _permissions;
     private List<string> _roles = [];
@@ -66,6 +67,7 @@ public class TokenStorage
             ExpiresAt = data.ExpiresAt,
             UserName = data.UserName,
             Email = data.Email,
+            DoctorId = data.Roles.Contains("Doctor", StringComparer.OrdinalIgnoreCase) ? data.Id : null,
             Roles = data.Roles,
             Permissions = data.Permissions
         });
@@ -196,6 +198,7 @@ public class TokenStorage
         ExpiresAt = ExpiresAtUtc?.ToString("o", CultureInfo.InvariantCulture) ?? string.Empty,
         UserName = UserName ?? string.Empty,
         Email = Email ?? string.Empty,
+        DoctorId = DoctorId,
         Roles = _roles.ToList(),
         Permissions = _permissions.ToList()
     };
@@ -214,6 +217,7 @@ public class TokenStorage
         ExpiresAtUtc = null;
         UserName = null;
         Email = null;
+        DoctorId = null;
         _roles = [];
         _permissions = [];
         _cachedSessionId = null;
@@ -265,6 +269,7 @@ public class TokenStorage
         AccessToken = token;
         UserName = user.FindFirst(ClaimTypes.Name)?.Value;
         Email = user.FindFirst(ClaimTypes.Email)?.Value;
+        DoctorId = TryParseInt(user.FindFirst("DoctorId")?.Value);
         _roles = user.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
         _permissions = user.FindAll(PermissionService.ClaimType).Select(c => c.Value).ToList();
         var sessionId = user.FindFirst(SessionClaimType)?.Value;
@@ -310,6 +315,9 @@ public class TokenStorage
 
         if (string.IsNullOrWhiteSpace(Email) && !string.IsNullOrWhiteSpace(data.Email))
             Email = data.Email;
+
+        if (!DoctorId.HasValue && data.DoctorId.HasValue)
+            DoctorId = data.DoctorId;
 
         if (_roles.Count == 0 && data.Roles.Count > 0)
             _roles = data.Roles;
@@ -357,6 +365,7 @@ public class TokenStorage
         ExpiresAtUtc = ParseExpiresAt(data.ExpiresAt);
         UserName = data.UserName;
         Email = data.Email;
+        DoctorId = data.DoctorId;
         _roles = data.Roles;
         _permissions = data.Permissions;
         if (!string.IsNullOrWhiteSpace(data.SessionId))
@@ -376,4 +385,7 @@ public class TokenStorage
 
         return null;
     }
+
+    private static int? TryParseInt(string? value) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : null;
 }

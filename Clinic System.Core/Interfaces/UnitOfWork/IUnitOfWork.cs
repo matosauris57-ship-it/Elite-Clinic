@@ -22,6 +22,7 @@ namespace Clinic_System.Core.Interfaces.UnitOfWork
         IPatientMedicalConditionRepository PatientMedicalConditionsRepository { get; }
         IPeriodontalExamRepository PeriodontalExamsRepository { get; }
         IPatientPrescriptionRepository PatientPrescriptionsRepository { get; }
+        IPatientMedicalCertificateRepository PatientMedicalCertificatesRepository { get; }
         IDashboardLayoutRepository DashboardLayoutsRepository { get; }
         IEmailCampaignRepository EmailCampaignsRepository { get; }
         Task<int> SaveAsync(CancellationToken cancellationToken = default);

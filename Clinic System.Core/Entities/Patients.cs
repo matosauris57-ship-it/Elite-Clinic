@@ -22,5 +22,6 @@ namespace Clinic_System.Core.Entities
         public virtual ICollection<PeriodontalExam> PeriodontalExams { get; set; } = new List<PeriodontalExam>();
         public virtual ICollection<PatientPrescription> PatientPrescriptions { get; set; } = new List<PatientPrescription>();
         public virtual ICollection<EmergencyContact> EmergencyContacts { get; set; } = new List<EmergencyContact>();
+        public virtual ICollection<PatientMedicalCertificate> MedicalCertificates { get; set; } = new List<PatientMedicalCertificate>();
     }
 }

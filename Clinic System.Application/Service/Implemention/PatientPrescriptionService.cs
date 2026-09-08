@@ -145,6 +145,7 @@ public class PatientPrescriptionService : IPatientPrescriptionService
             DoctorId = prescription.DoctorId,
             DoctorName = prescription.Doctor?.FullName,
             DoctorSpecialization = prescription.Doctor?.Specialization,
+            DoctorSignatureImageUrl = prescription.Doctor?.SignatureImageUrl,
             IssuedAt = prescription.IssuedAt,
             Diagnosis = prescription.Diagnosis,
             Notes = prescription.Notes,

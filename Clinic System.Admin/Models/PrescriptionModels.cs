@@ -40,6 +40,7 @@ public class PatientPrescriptionDetail : PatientPrescriptionSummary
     public string? PatientPhone { get; set; }
     public DateTime? PatientDateOfBirth { get; set; }
     public string? DoctorSpecialization { get; set; }
+    public string? DoctorSignatureImageUrl { get; set; }
     public string? Allergies { get; set; }
     public string? CurrentMedication { get; set; }
     public string? Notes { get; set; }

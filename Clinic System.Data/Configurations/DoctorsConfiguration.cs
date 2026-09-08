@@ -54,6 +54,10 @@ namespace Clinic_System.Data.Configurations
                 .HasColumnName("Specialization");
             // Specialization: التخصص الطبي (مثل: قلب، عظام، أطفال)
 
+            builder.Property(d => d.SignatureImageUrl)
+                .HasColumnType("nvarchar(max)")
+                .HasColumnName("SignatureImageUrl");
+
             // Index على Specialization للبحث السريع
             builder.HasIndex(d => d.Specialization)
                 .HasDatabaseName("IX_Doctors_Specialization");

@@ -28,6 +28,11 @@
             RuleFor(x => x.Specialization)
                 .NotEmpty().WithMessage("Specialization is required");
 
+            RuleFor(x => x.SignatureImageUrl)
+                .MaximumLength(1_500_000).WithMessage("Signature image is too large")
+                .Must(BeValidSignatureDataUrl).WithMessage("Signature image must be a PNG, JPG or WebP data URL")
+                .When(x => !string.IsNullOrWhiteSpace(x.SignatureImageUrl));
+
             // Phone (Format Only)
             RuleFor(x => x.Phone)
                 .NotEmpty().WithMessage("Phone number is required")
@@ -97,6 +102,17 @@
                     return !existingDoctors.Any() && !existingPatiants.Any();
                 })
                 .WithMessage("Phone number is already exists");
+        }
+
+        private static bool BeValidSignatureDataUrl(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return true;
+
+            return value.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase)
+                || value.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase)
+                || value.StartsWith("data:image/jpg;base64,", StringComparison.OrdinalIgnoreCase)
+                || value.StartsWith("data:image/webp;base64,", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

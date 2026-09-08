@@ -1,0 +1,22 @@
+<div class="signature-preview-card">
+    <span class="signature-preview-label">Vista previa</span>
+    @if (!string.IsNullOrWhiteSpace(ImageUrl))
+    {
+        <div class="signature-preview-surface">
+            <img src="@ImageUrl" alt="Firma del médico" />
+        </div>
+        <button type="button" class="btn-outline" @onclick="OnClear">Quitar firma</button>
+    }
+    else
+    {
+        <div class="signature-preview-surface signature-preview-empty">
+            <span>Sin firma cargada</span>
+            <small>Se usará línea manual en documentos</small>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? ImageUrl { get; set; }
+    [Parameter] public EventCallback OnClear { get; set; }
+}

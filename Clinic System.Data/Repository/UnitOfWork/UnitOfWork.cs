@@ -38,6 +38,7 @@ namespace Clinic_System.Data.Repository.UnitOfWork
         IPatientMedicalConditionRepository PatientMedicalConditionsRepo;
         IPeriodontalExamRepository PeriodontalExamsRepo;
         IPatientPrescriptionRepository PatientPrescriptionsRepo;
+        IPatientMedicalCertificateRepository PatientMedicalCertificatesRepo;
         IDashboardLayoutRepository DashboardLayoutsRepo;
         IEmailCampaignRepository EmailCampaignsRepo;
 
@@ -239,6 +240,15 @@ namespace Clinic_System.Data.Repository.UnitOfWork
             {
                 PatientPrescriptionsRepo ??= new PatientPrescriptionRepository(context);
                 return PatientPrescriptionsRepo;
+            }
+        }
+
+        public IPatientMedicalCertificateRepository PatientMedicalCertificatesRepository
+        {
+            get
+            {
+                PatientMedicalCertificatesRepo ??= new PatientMedicalCertificateRepository(context);
+                return PatientMedicalCertificatesRepo;
             }
         }
 
