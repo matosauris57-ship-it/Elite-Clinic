@@ -2,6 +2,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "tratamientos.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject ClinicalTreatmentMaintenanceService ClinicalService
+@inject InventoryMaintenanceService InventoryService
 @inject AuthService AuthService
 @inject PermissionService PermissionService
 @inject AuthenticationStateProvider AuthStateProvider
@@ -249,6 +250,74 @@
     </div>
 }
 
+@if (_showConsumeModal && _completing != null)
+{
+    <div class="modal-overlay" @onclick="CloseConsumeModal">
+        <div class="modal-panel" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Material utilizado</h2>
+                <button class="modal-close" @onclick="CloseConsumeModal">×</button>
+            </div>
+            <p class="modal-confirm-text">
+                <strong>@_completing.ProcedureName</strong> — realizada.
+                Revisa el consumo propuesto (no afecta la factura).
+            </p>
+            @if (!string.IsNullOrEmpty(_consumeError)) { <div class="wizard-error">@_consumeError</div> }
+            @if (_consumeLoading)
+            {
+                <AnimatedLoader Message="Cargando materiales..." />
+            }
+            else if (!_consumeLines.Any())
+            {
+                <p class="modal-confirm-text">Este procedimiento no tiene BOM de materiales. Se completará sin descontar inventario.</p>
+            }
+            else
+            {
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Material</th>
+                                <th>Cantidad</th>
+                                <th>Stock</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < _consumeLines.Count; i++)
+                            {
+                                var idx = i;
+                                var line = _consumeLines[idx];
+                                <tr>
+                                    <td><input type="checkbox" @bind="_consumeLines[idx].IsIncluded" /></td>
+                                    <td>@line.Name <small>(@line.Unit)</small></td>
+                                    <td>
+                                        <input class="form-input" type="number" step="0.001" min="0"
+                                               @bind="_consumeLines[idx].ActualQuantity"
+                                               disabled="@(!_consumeLines[idx].IsIncluded)" />
+                                    </td>
+                                    <td>
+                                        <span class="@(line.InsufficientStock ? "status-badge status-inactive" : null)">
+                                            @line.QuantityOnHand.ToString("0.###")
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="modal-confirm-text">Puedes modificar cantidades o desmarcar materiales no usados.</p>
+            }
+            <div class="modal-actions">
+                <button class="btn-outline" @onclick="CloseConsumeModal">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="ConfirmCompleteAsync">
+                    @(_saving ? "Completando..." : "Confirmar y completar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<DentalTreatmentListItem> _items = [];
     private DentalTreatmentsAdminPage _page = new();
@@ -275,6 +344,12 @@
     private bool _showDeleteModal;
     private DentalTreatmentListItem? _deleting;
     private string? _deleteError;
+
+    private bool _showConsumeModal;
+    private DentalTreatmentListItem? _completing;
+    private List<MaterialConsumptionLineItem> _consumeLines = [];
+    private bool _consumeLoading;
+    private string? _consumeError;
 
     private int TotalPages => Math.Max(1, _page.TotalPages);
     private bool HasActiveFilters =>
@@ -468,8 +543,82 @@
 
     private async Task CompleteAsync(DentalTreatmentListItem item)
     {
+        _completing = item;
+        _consumeLines = [];
+        _consumeError = null;
+        _showConsumeModal = true;
+        _consumeLoading = true;
+
+        var (proposal, error) = await InventoryService.ProposeConsumptionAsync(item.Id);
+        _consumeLoading = false;
+        if (error != null)
+        {
+            _showConsumeModal = false;
+            await CompleteWithoutPromptAsync(item, skipMaterials: true);
+            return;
+        }
+
+        if (proposal?.AlreadyConsumed == true)
+        {
+            _showConsumeModal = false;
+            await CompleteWithoutPromptAsync(item, skipMaterials: true);
+            return;
+        }
+
+        _consumeLines = proposal?.Lines ?? [];
+        if (_consumeLines.Count == 0)
+        {
+            _showConsumeModal = false;
+            await CompleteWithoutPromptAsync(item, skipMaterials: true);
+        }
+    }
+
+    private void CloseConsumeModal()
+    {
+        _showConsumeModal = false;
+        _completing = null;
+        _consumeLines = [];
+        _consumeError = null;
+    }
+
+    private async Task ConfirmCompleteAsync()
+    {
+        if (_completing == null) return;
+
         _saving = true;
-        var (success, error) = await ClinicalService.CompleteTreatmentAsync(item.Id);
+        _consumeError = null;
+        var request = new CompleteDentalTreatmentRequest
+        {
+            SkipMaterialConsumption = _consumeLines.Count == 0,
+            MaterialConsumption = _consumeLines.Count == 0
+                ? null
+                : _consumeLines.Select(l => new MaterialConsumptionLineRequest
+                {
+                    InventoryItemId = l.InventoryItemId,
+                    Quantity = l.ActualQuantity,
+                    IsIncluded = l.IsIncluded,
+                    ProposedQuantity = l.ProposedQuantity
+                }).ToList()
+        };
+
+        var (success, error) = await ClinicalService.CompleteTreatmentAsync(_completing.Id, request);
+        _saving = false;
+        if (!success)
+        {
+            _consumeError = error;
+            return;
+        }
+
+        CloseConsumeModal();
+        await ReloadAsync();
+    }
+
+    private async Task CompleteWithoutPromptAsync(DentalTreatmentListItem item, bool skipMaterials)
+    {
+        _saving = true;
+        var (success, error) = await ClinicalService.CompleteTreatmentAsync(
+            item.Id,
+            new CompleteDentalTreatmentRequest { SkipMaterialConsumption = skipMaterials });
         _saving = false;
         if (!success)
             _loadError = error;

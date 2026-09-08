@@ -1,0 +1,162 @@
+@page "/agendar-campana"
+@layout LoginLayout
+@rendermode InteractiveServer
+@inject CampaignBookingService BookingService
+
+<PageTitle>Agendar cita — DentalCare</PageTitle>
+
+<div class="login-card attendance-card">
+    <div class="login-brand">
+        <div class="login-logo">
+            <Icon Name="calendar" Class="login-logo-svg" StrokeWidth="1.6" />
+        </div>
+        <h1>Agendar cita</h1>
+        <p>Elija el día y la hora que más le convenga. No está limitado al horario habitual de turnos.</p>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Compact="true" Message="Validando enlace..." />
+    }
+    else if (!string.IsNullOrWhiteSpace(_error) && _context == null)
+    {
+        <div class="login-error">@_error</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_success))
+    {
+        <div class="wizard-success">@_success</div>
+        @if (_result != null)
+        {
+            <div class="attendance-summary">
+                <div><span>Paciente</span><strong>@_result.PatientName</strong></div>
+                <div><span>Médico</span><strong>@_result.DoctorName</strong></div>
+                <div><span>Fecha</span><strong>@_result.AppointmentDate.ToString("dd/MM/yyyy")</strong></div>
+                <div><span>Hora</span><strong>@_result.AppointmentDate.ToString("hh:mm tt")</strong></div>
+            </div>
+        }
+        <p class="attendance-muted">Puede cerrar esta ventana. La clínica confirmará su cita.</p>
+    }
+    else if (_context != null)
+    {
+        <div class="attendance-summary">
+            <div><span>Paciente</span><strong>@_context.PatientName</strong></div>
+            <div><span>Campaña</span><strong>@_context.CampaignName</strong></div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_context.Note))
+        {
+            <p class="attendance-muted">@_context.Note</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="login-error">@_error</div>
+        }
+
+        <div class="new-patient-form">
+            <div class="form-group">
+                <label>Médico</label>
+                <select class="form-input" @bind="_doctorId" @bind:after="LoadOccupiedAsync">
+                    <option value="0">Seleccione...</option>
+                    @foreach (var doctor in _context.Doctors)
+                    {
+                        <option value="@doctor.Id">@doctor.FullName@(string.IsNullOrWhiteSpace(doctor.Specialization) ? "" : $" — {doctor.Specialization}")</option>
+                    }
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Fecha</label>
+                    <input class="form-input" type="date" min="@DateTime.Today.ToString("yyyy-MM-dd")" @bind="_date" @bind:after="LoadOccupiedAsync" />
+                </div>
+                <div class="form-group">
+                    <label>Hora (cualquier horario)</label>
+                    <input class="form-input" type="time" @bind="_time" />
+                </div>
+            </div>
+            @if (_occupied.Count > 0)
+            {
+                <p class="attendance-muted">Horarios ya ocupados ese día: @string.Join(", ", _occupied)</p>
+            }
+        </div>
+
+        <div class="attendance-actions">
+            <button class="btn-primary" disabled="@_saving" @onclick="BookAsync">
+                @(_saving ? "Agendando..." : "Confirmar cita")
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "token")] public string? Token { get; set; }
+
+    private CampaignBookingContext? _context;
+    private CampaignBookingResult? _result;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _success;
+    private int _doctorId;
+    private DateTime _date = DateTime.Today.AddDays(1);
+    private TimeOnly _time = new(9, 0);
+    private List<string> _occupied = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Token))
+        {
+            _error = "Falta el enlace de la campaña.";
+            _loading = false;
+            return;
+        }
+
+        var (context, error) = await BookingService.GetContextAsync(Token);
+        _context = context;
+        _error = error;
+        _loading = false;
+    }
+
+    private async Task LoadOccupiedAsync()
+    {
+        _occupied = [];
+        if (string.IsNullOrWhiteSpace(Token) || _doctorId <= 0)
+            return;
+
+        var (occupied, _) = await BookingService.GetOccupiedAsync(Token, _doctorId, _date.Date);
+        _occupied = occupied;
+    }
+
+    private async Task BookAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Token))
+            return;
+
+        if (_doctorId <= 0)
+        {
+            _error = "Seleccione un médico.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        var (result, error) = await BookingService.BookAsync(new CampaignBookFormRequest
+        {
+            Token = Token,
+            DoctorId = _doctorId,
+            AppointmentDate = _date.Date,
+            AppointmentTime = _time.ToTimeSpan()
+        });
+        _saving = false;
+
+        if (error != null || result == null)
+        {
+            _error = error ?? "No se pudo agendar.";
+            await LoadOccupiedAsync();
+            return;
+        }
+
+        _result = result;
+        _success = "¡Listo! Su cita quedó registrada.";
+    }
+}

@@ -63,6 +63,7 @@
                 {
                     <text> Configure el SMTP en <a href="/configuracion/clinica">Datos de la clínica</a> antes de iniciar.</text>
                 }
+                <text> Cada correo incluye un enlace para agendar en cualquier horario (configure la URL pública del portal en Datos de la clínica).</text>
             </p>
         </div>
     }
@@ -108,7 +109,10 @@
                           @bind="_form.Body"
                           @bind:event="oninput"
                           @onfocus="() => _activeField = CampaignField.Body"></textarea>
-                <span class="form-hint">El sistema añade un pie indicando que es un aviso de la clínica.</span>
+                <span class="form-hint">
+                    El sistema añade un pie con los datos de la clínica y, si configuró la URL pública,
+                    un enlace para que el paciente agende en cualquier horario ({enlace_cita}).
+                </span>
             </div>
             <div class="whatsapp-preview-label">Vista previa</div>
             <div class="whatsapp-preview">@PreviewBody</div>
@@ -218,7 +222,7 @@
 </div>
 
 @code {
-    private static readonly string[] Placeholders = ["{nombre}", "{clinica}"];
+    private static readonly string[] Placeholders = ["{nombre}", "{clinica}", "{enlace_cita}"];
 
     private enum CampaignField { Subject, Body }
 
@@ -249,13 +253,22 @@
     {
         get
         {
+            var sampleLink = "https://tu-portal/agendar-campana?token=…";
             var body = (_form.Body ?? string.Empty)
                 .Replace("{nombre}", "Aurileidy Matos", StringComparison.OrdinalIgnoreCase)
                 .Replace("{clinica}", ClinicName, StringComparison.OrdinalIgnoreCase)
+                .Replace("{enlace_cita}", sampleLink, StringComparison.OrdinalIgnoreCase)
                 .Trim();
             if (string.IsNullOrWhiteSpace(body))
                 return "Escriba el mensaje para ver la vista previa.";
-            return body + "\n\n—\n" + ClinicName + "\nEste aviso se envía solo a pacientes de la clínica.";
+            var footer = "\n\n—\n" + ClinicName;
+            if (!body.Contains(sampleLink, StringComparison.OrdinalIgnoreCase))
+            {
+                footer += "\n\nPara agendar su cita en el horario que más le convenga (cualquier día y hora disponible):\n"
+                    + sampleLink;
+            }
+            footer += "\nEste aviso se envía solo a pacientes de la clínica.";
+            return body + footer;
         }
     }
 

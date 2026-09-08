@@ -3,6 +3,7 @@ using Clinic_System.Core.Enums;
 using Clinic_System.Core.Validation;
 using Hangfire;
 using MailKit.Net.Smtp;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Clinic_System.Infrastructure.Services.Email;
 
@@ -11,17 +12,20 @@ public class EmailCampaignService : IEmailCampaignService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _emailService;
     private readonly IEmailSettingsProvider _emailSettings;
+    private readonly IDataProtectionProvider _dataProtection;
     private readonly ILogger<EmailCampaignService> _logger;
 
     public EmailCampaignService(
         IUnitOfWork unitOfWork,
         IEmailService emailService,
         IEmailSettingsProvider emailSettings,
+        IDataProtectionProvider dataProtection,
         ILogger<EmailCampaignService> logger)
     {
         _unitOfWork = unitOfWork;
         _emailService = emailService;
         _emailSettings = emailSettings;
+        _dataProtection = dataProtection;
         _logger = logger;
     }
 
@@ -245,10 +249,23 @@ public class EmailCampaignService : IEmailCampaignService
 
             try
             {
-                var subject = EmailCampaignLimits.Apply(campaign.Subject, clinic, recipient.PatientName);
+                var bookingToken = ProtectCampaignBookingToken(
+                    campaign.Id, recipient.Id, recipient.PatientId);
+                var bookingUrl = EmailCampaignLimits.BuildBookingUrl(
+                    _emailSettings.Get().PublicSiteUrl, bookingToken);
+
+                if (string.IsNullOrWhiteSpace(bookingUrl))
+                {
+                    _logger.LogWarning(
+                        "Campaña {CampaignId}: sin PublicSiteUrl; el correo no incluirá enlace de agendado.",
+                        campaign.Id);
+                }
+
+                var subject = EmailCampaignLimits.Apply(campaign.Subject, clinic, recipient.PatientName, bookingUrl);
                 var body = EmailCampaignLimits.AppendFooter(
-                    EmailCampaignLimits.Apply(campaign.Body, clinic, recipient.PatientName),
-                    clinic);
+                    EmailCampaignLimits.Apply(campaign.Body, clinic, recipient.PatientName, bookingUrl),
+                    clinic,
+                    bookingUrl);
                 await _emailService.SendEmailAsync(to, subject, body);
                 recipient.Status = EmailCampaignRecipientStatus.Sent;
                 recipient.SentAt = DateTime.Now;
@@ -285,6 +302,20 @@ public class EmailCampaignService : IEmailCampaignService
             return;
         campaign.Status = EmailCampaignStatus.Completed;
         campaign.CompletedAt ??= DateTime.Now;
+    }
+
+    private static readonly System.Text.Json.JsonSerializerOptions BookingTokenJson =
+        new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    private string ProtectCampaignBookingToken(int campaignId, int recipientId, int patientId)
+    {
+        var protector = _dataProtection
+            .CreateProtector("EliteClinic.CampaignBooking.v1")
+            .ToTimeLimitedDataProtector();
+        var payload = System.Text.Json.JsonSerializer.Serialize(
+            new { campaignId, recipientId, patientId },
+            BookingTokenJson);
+        return protector.Protect(payload, EmailCampaignLimits.BookingTokenLifetime);
     }
 
     private static string? ValidateContent(CreateEmailCampaignDTO request)

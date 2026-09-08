@@ -76,7 +76,7 @@ public class DentalWorkflowTransitionTests
         var service = new DentalTreatmentService(unitOfWork.Object);
 
         await service.CreateAsync(
-            7, "Limpieza", 100, null, null, null, null, null, "user-1", CancellationToken.None);
+            7, "Limpieza", 100, null, null, null, null, null, null, "user-1", CancellationToken.None);
 
         events.Verify(x => x.AddAsync(
             It.Is<DentalClinicalEvent>(e =>

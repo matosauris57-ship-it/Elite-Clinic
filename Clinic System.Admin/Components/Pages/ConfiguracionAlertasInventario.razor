@@ -1,0 +1,175 @@
+@page "/configuracion/alertas-inventario"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AppointmentBookingService BookingService
+
+<PageTitle>Alertas de inventario — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/configuracion" class="back-link-inline">← Configuración</a>
+            <h1>Alertas de inventario bajo</h1>
+            <p>Envío automático de correo a los destinatarios configurados cuando haya materiales bajo el stock mínimo.</p>
+        </div>
+        <div class="command-actions">
+            <a href="/inventario" class="btn-outline">Ir a inventario</a>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando configuración..." />
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_saveMessage))
+        {
+            <div class="wizard-success">@_saveMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(_saveError))
+        {
+            <div class="wizard-error">@_saveError</div>
+        }
+
+        <form class="new-patient-form whatsapp-settings-form" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+            <div class="clinic-hours-card">
+                <h2>Correo automático</h2>
+                <p class="billing-muted">
+                    Requiere SMTP en <a href="/configuracion/clinica">Datos de la clínica</a>.
+                    El sistema revisa el inventario cada 15 minutos y envía como máximo un aviso por día
+                    a partir de la hora indicada, solo si hay ítems en stock bajo.
+                </p>
+
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="_form.Enabled" />
+                    Activar alertas de inventario bajo por correo
+                </label>
+
+                <div class="form-group">
+                    <label>Hora de envío</label>
+                    <input class="form-input" type="time" @bind="_sendTime" />
+                </div>
+
+                <div class="form-group">
+                    <label>Correos destinatarios</label>
+                    <textarea class="form-input" rows="5" @bind="_recipientsText"
+                              placeholder="uno@clinica.com&#10;otro@clinica.com"></textarea>
+                    <span class="billing-muted">Uno por línea, o separados por coma. Máximo 20.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Asunto</label>
+                    <input class="form-input" @bind="_form.Subject" maxlength="200" />
+                    <span class="billing-muted">Placeholders: {clinica}, {cantidad}</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Introducción del mensaje</label>
+                    <textarea class="form-input" rows="4" @bind="_form.IntroBody" maxlength="2000"></textarea>
+                </div>
+
+                @if (_form.LastSentDate.HasValue)
+                {
+                    <p class="billing-muted">Último envío automático: @_form.LastSentDate.Value.ToString("dd/MM/yyyy")</p>
+                }
+            </div>
+
+            <div class="modal-actions" style="justify-content: flex-start; gap: 0.75rem; margin-top: 1rem;">
+                <button class="btn-primary" type="submit" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar configuración")</button>
+                <button class="btn-outline" type="button" disabled="@(_saving || _dispatching)" @onclick="DispatchNowAsync">
+                    @(_dispatching ? "Enviando..." : "Enviar ahora")
+                </button>
+            </div>
+        </form>
+    }
+</div>
+
+@code {
+    private LowStockEmailAlertApiModel _form = new();
+    private string _recipientsText = string.Empty;
+    private TimeOnly _sendTime = new(8, 0);
+    private bool _loading = true;
+    private bool _saving;
+    private bool _dispatching;
+    private string? _saveMessage;
+    private string? _saveError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (settings, error) = await BookingService.GetLowStockAlertsAsync();
+        if (settings != null)
+        {
+            _form = settings;
+            _recipientsText = settings.RecipientsText;
+            _sendTime = TimeOnly.FromTimeSpan(settings.SendTime);
+        }
+        else
+            _saveError = error;
+        _loading = false;
+    }
+
+    private void ApplyFormInputs()
+    {
+        _form.RecipientsText = _recipientsText;
+        _form.SendTime = _sendTime.ToTimeSpan();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _saveMessage = null;
+        _saveError = null;
+        ApplyFormInputs();
+
+        var (ok, error) = await BookingService.SaveLowStockAlertsAsync(_form);
+        _saving = false;
+        if (!ok)
+        {
+            _saveError = error;
+            return;
+        }
+
+        var (reloaded, _) = await BookingService.GetLowStockAlertsAsync();
+        if (reloaded != null)
+        {
+            _form = reloaded;
+            _recipientsText = reloaded.RecipientsText;
+            _sendTime = TimeOnly.FromTimeSpan(reloaded.SendTime);
+        }
+        _saveMessage = "Configuración de alertas guardada.";
+    }
+
+    private async Task DispatchNowAsync()
+    {
+        _dispatching = true;
+        _saveMessage = null;
+        _saveError = null;
+
+        ApplyFormInputs();
+        var (saved, saveError) = await BookingService.SaveLowStockAlertsAsync(_form);
+        if (!saved)
+        {
+            _dispatching = false;
+            _saveError = saveError;
+            return;
+        }
+
+        var (ok, message) = await BookingService.DispatchLowStockAlertsNowAsync();
+        _dispatching = false;
+        if (!ok)
+        {
+            _saveError = message;
+            return;
+        }
+
+        _saveMessage = message ?? "Alerta enviada.";
+        var (reloaded, _) = await BookingService.GetLowStockAlertsAsync();
+        if (reloaded != null)
+        {
+            _form = reloaded;
+            _recipientsText = reloaded.RecipientsText;
+            _sendTime = TimeOnly.FromTimeSpan(reloaded.SendTime);
+        }
+    }
+}

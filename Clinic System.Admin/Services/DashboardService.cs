@@ -13,6 +13,7 @@ public class DashboardService
     private readonly BillingMaintenanceService _billing;
     private readonly ClinicalTreatmentMaintenanceService _treatments;
     private readonly DashboardLayoutApiService _layoutApi;
+    private readonly InventoryMaintenanceService _inventory;
     private readonly ApiSettings _apiSettings;
 
     public DashboardService(
@@ -20,12 +21,14 @@ public class DashboardService
         BillingMaintenanceService billing,
         ClinicalTreatmentMaintenanceService treatments,
         DashboardLayoutApiService layoutApi,
+        InventoryMaintenanceService inventory,
         IOptions<ApiSettings> apiSettings)
     {
         _agenda = agenda;
         _billing = billing;
         _treatments = treatments;
         _layoutApi = layoutApi;
+        _inventory = inventory;
         _apiSettings = apiSettings.Value;
     }
 
@@ -71,6 +74,7 @@ public class DashboardService
         var needPatients = Needs(keys, DashboardWidgetKeys.PatientsRegistered, DashboardWidgetKeys.PatientsNew);
         var needActivity = Needs(keys, DashboardWidgetKeys.RecentActivity);
         var needPeriodontal = Needs(keys, DashboardWidgetKeys.PeriodontalIncomplete);
+        var needInventory = Needs(keys, DashboardWidgetKeys.SmartAlerts);
 
         var agendaTask = needAgenda ? _agenda.GetAgendaAsync(today) : CompletedAgenda();
         var weekAgendaTask = needWeek ? _agenda.GetAgendaAsync(weekStart, endDate: weekStart.AddDays(6)) : CompletedAgenda();
@@ -92,6 +96,7 @@ public class DashboardService
         var patientsTask = needPatients ? _layoutApi.GetPatientStatsAsync() : Task.FromResult<(PatientDashboardStats?, string?)>((null, null));
         var activityTask = needActivity ? _layoutApi.GetRecentActivityAsync("7d", 10) : Task.FromResult<(List<RecentClinicalActivityItem>?, string?)>(([], null));
         var periodontalTask = needPeriodontal ? _layoutApi.GetPeriodontalIncompleteAsync() : Task.FromResult<(PeriodontalIncompleteStats?, string?)>((null, null));
+        var lowStockTask = needInventory ? _inventory.GetLowStockAsync() : Task.FromResult<(LowStockAlert?, string?)>((null, null));
 
         await Task.WhenAll(
             agendaTask,
@@ -105,7 +110,8 @@ public class DashboardService
             treatmentsTask,
             patientsTask,
             activityTask,
-            periodontalTask);
+            periodontalTask,
+            lowStockTask);
 
         var (agenda, agendaError) = await agendaTask;
         var (weekAgenda, _) = await weekAgendaTask;
@@ -119,6 +125,7 @@ public class DashboardService
         var (patientStats, patientsError) = await patientsTask;
         var (activity, activityError) = await activityTask;
         var (periodontal, periodontalError) = await periodontalTask;
+        var (lowStock, _) = await lowStockTask;
 
         if (IsConnectionError(agendaError) && agenda.Count == 0)
         {
@@ -241,15 +248,29 @@ public class DashboardService
             PeriodontalRestricted = IsRestricted(periodontalError)
         };
 
-        data.Alerts = BuildAlerts(data, stats);
+        data.Alerts = BuildAlerts(data, stats, lowStock);
         data.CriticalAlerts = data.Alerts.Count(a => a.Severity is "critical" or "warning");
         return data;
     }
 
-    private static List<DashboardAlert> BuildAlerts(DashboardData data, AppointmentStats? stats)
+    private static List<DashboardAlert> BuildAlerts(DashboardData data, AppointmentStats? stats, LowStockAlert? lowStock)
     {
         var alerts = new List<DashboardAlert>();
         var now = DateTime.Now.ToString("HH:mm", EsDo);
+
+        if (lowStock is { Count: > 0 })
+        {
+            var sample = string.Join(", ", lowStock.Items.Take(3).Select(i => i.Name));
+            alerts.Add(new DashboardAlert
+            {
+                Title = "Stock bajo",
+                Description = $"{lowStock.Count} ítem(s) en o bajo el mínimo" + (string.IsNullOrWhiteSpace(sample) ? "." : $": {sample}."),
+                Severity = "warning",
+                Time = now,
+                ActionLabel = "Ver inventario",
+                ActionHref = "/inventario"
+            });
+        }
 
         if (stats?.NoShow > 0)
         {

@@ -15,6 +15,7 @@ namespace Clinic_System.Application
             // Core Business Services
             services.AddScoped<IDoctorService, DoctorService>();
             services.AddScoped<IPatientService, PatientService>();
+            services.AddScoped<IPatientImportService, PatientImportService>();
             services.AddScoped<IAppointmentService, AppointmentService>();
             services.AddScoped<IPaymentService, PaymentService>();
             services.AddScoped<IMedicalRecordService, MedicalRecordService>();
@@ -30,6 +31,7 @@ namespace Clinic_System.Application
             services.AddScoped<ITreatmentProcedureService, TreatmentProcedureService>();
             services.AddScoped<IMedicalConditionService, MedicalConditionService>();
             services.AddScoped<IDashboardLayoutService, DashboardLayoutService>();
+            services.AddScoped<IInventoryService, InventoryService>();
 
             return services;
         }

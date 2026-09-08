@@ -95,7 +95,15 @@ namespace Clinic_System.Application.Service.Implemention
             await unitOfWork.SaveAsync();
         }
 
-        public async Task<Appointment> BookAppointmentAsync(int patientId, int doctorId, DateTime appointmentDate, TimeSpan appointmentTime, CancellationToken cancellationToken = default, int? treatmentProcedureId = null, decimal? quotedAmount = null)
+        public async Task<Appointment> BookAppointmentAsync(
+            int patientId,
+            int doctorId,
+            DateTime appointmentDate,
+            TimeSpan appointmentTime,
+            CancellationToken cancellationToken = default,
+            int? treatmentProcedureId = null,
+            decimal? quotedAmount = null,
+            bool allowFlexibleSchedule = false)
         {
             var appointmentDateTime = appointmentDate.Date.Add(appointmentTime);
 
@@ -129,7 +137,8 @@ namespace Clinic_System.Application.Service.Implemention
                     if (appointmentDateTime < DateTime.Now)
                         throw new ValidationException("No se puede agendar una cita en una fecha u hora pasada.");
 
-                    await EnsureClinicSlotAsync(appointmentDate, appointmentTime, cancellationToken);
+                    if (!allowFlexibleSchedule)
+                        await EnsureClinicSlotAsync(appointmentDate, appointmentTime, cancellationToken);
 
                     var isSlotBooked = bookedAppointmentsOnDay
                         .Any(a => a.AppointmentDate == appointmentDateTime);

@@ -48,6 +48,7 @@ namespace Clinic_System.API
                 builder.Services.AddSingleton<IClinicOperatingHoursService, FileClinicOperatingHoursService>();
                 builder.Services.AddSingleton<IEmailSettingsProvider, FileClinicEmailSettingsService>();
                 builder.Services.AddSingleton<IPatientNotificationSettingsService, FilePatientNotificationSettingsService>();
+                builder.Services.AddSingleton<ILowStockEmailAlertSettingsService, FileLowStockEmailAlertSettingsService>();
                 builder.Services.AddSingleton<IOdontogramSymbolConfigService, FileOdontogramSymbolConfigService>();
 
                 builder.Services.AddHttpContextAccessor();

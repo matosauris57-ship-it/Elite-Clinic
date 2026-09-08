@@ -33,6 +33,12 @@ namespace Clinic_System.Infrastructure.Helpers
                 "*/15 * * * *"
             );
 
+            recurringJobManager.AddOrUpdate<ILowStockEmailAlertDispatchService>(
+                "low-stock-email-alerts",
+                service => service.DispatchDueAsync(),
+                "*/15 * * * *"
+            );
+
             recurringJobManager.AddOrUpdate<IEmailCampaignService>(
                 "patient-email-campaigns",
                 service => service.DispatchDueAsync(),

@@ -113,5 +113,24 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 cancellationToken);
             return (withEmail, optedOut, invalid, eligible);
         }
+
+        public async Task<(HashSet<string> Phones, HashSet<string> NationalIds)> GetImportIdentityKeysAsync(
+            CancellationToken cancellationToken = default)
+        {
+            var phones = await context.Patients
+                .AsNoTracking()
+                .Select(p => p.Phone)
+                .ToListAsync(cancellationToken);
+
+            var nationalIds = await context.Patients
+                .AsNoTracking()
+                .Where(p => p.NationalId != null && p.NationalId != "")
+                .Select(p => p.NationalId!)
+                .ToListAsync(cancellationToken);
+
+            return (
+                new HashSet<string>(phones, StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(nationalIds, StringComparer.OrdinalIgnoreCase));
+        }
     }
 }

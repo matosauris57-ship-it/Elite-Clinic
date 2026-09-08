@@ -100,5 +100,14 @@
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         }
+
+        public async Task<HashSet<string>> GetAllPhonesAsync(CancellationToken cancellationToken = default)
+        {
+            var phones = await context.Doctors
+                .AsNoTracking()
+                .Select(d => d.Phone)
+                .ToListAsync(cancellationToken);
+            return new HashSet<string>(phones, StringComparer.OrdinalIgnoreCase);
+        }
     }
 }

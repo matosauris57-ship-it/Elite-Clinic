@@ -8,7 +8,15 @@ namespace Clinic_System.Application.Service.Interface
             CancellationToken cancellationToken = default);
         Task<List<Appointment>> GetBookedAppointmentsAsync(int doctorId, DateTime date, CancellationToken cancellationToken = default);
         Task<List<TimeSpan>> GetAvailableSlotsAsync(int doctorId, DateTime date, CancellationToken cancellationToken = default);
-        Task<Appointment> BookAppointmentAsync(int patientId, int doctorId, DateTime appointmentDate, TimeSpan appointmentTime, CancellationToken cancellationToken = default, int? treatmentProcedureId = null, decimal? quotedAmount = null);
+        Task<Appointment> BookAppointmentAsync(
+            int patientId,
+            int doctorId,
+            DateTime appointmentDate,
+            TimeSpan appointmentTime,
+            CancellationToken cancellationToken = default,
+            int? treatmentProcedureId = null,
+            decimal? quotedAmount = null,
+            bool allowFlexibleSchedule = false);
         Task<Appointment> RescheduleAppointmentAsync(RescheduleAppointmentCommand command, CancellationToken cancellationToken = default);
         Task<Appointment> CancelAppointmentAsync(CancelAppointmentCommand command, CancellationToken cancellationToken = default);
         Task<Appointment> ConfirmAppointmentAsync(int AppointmentId, int PatientId, PaymentMethod method

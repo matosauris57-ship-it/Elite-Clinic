@@ -65,6 +65,8 @@ global using Clinic_System.Application.Features.TreatmentProcedures.Commands.Mod
 global using Clinic_System.Application.Features.TreatmentProcedures.Queries.Models;
 global using Clinic_System.Application.Features.MedicalConditions.Commands.Models;
 global using Clinic_System.Application.Features.MedicalConditions.Queries.Models;
+global using Clinic_System.Application.Features.Inventory.Commands.Models;
+global using Clinic_System.Application.Features.Inventory.Queries.Models;
 global using Clinic_System.Infrastructure.Authentication.Models;
 global using System.Threading.RateLimiting;
 global using Microsoft.AspNetCore.RateLimiting;
@@ -73,6 +75,7 @@ global using Clinic_System.API.Extensions;
 global using Microsoft.AspNetCore.SignalR;
 global using Clinic_System.API.Hubs;
 global using Clinic_System.Application.DTOs;
+global using Clinic_System.Application.DTOs.Patients;
 global using Clinic_System.Infrastructure.MessageBroker.Consumers;
 global using Clinic_System.Infrastructure.MessageBroker;
 global using MassTransit;

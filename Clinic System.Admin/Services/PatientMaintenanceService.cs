@@ -280,6 +280,78 @@ public class PatientMaintenanceService
         }
     }
 
+    public async Task<(PatientImportPreview? Preview, string? Error)> PreviewImportAsync(Stream fileStream, string fileName)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var streamContent = new StreamContent(fileStream);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+            content.Add(streamContent, "file", string.IsNullOrWhiteSpace(fileName) ? "pacientes.csv" : fileName);
+
+            using var response = await Client.PostAsync("/api/patients/import/preview", content);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (null, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                return (null, "No tiene permiso para importar pacientes.");
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (null, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<PatientImportPreview>>(JsonOptions);
+            if (body?.Succeeded == true && body.Data != null)
+                return (body.Data, null);
+            return (null, body?.Message ?? "No se pudo validar el CSV.");
+        }
+        catch (Exception ex)
+        {
+            return (null, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
+    public async Task<(PatientImportResult? Result, string? Error)> ConfirmImportAsync(PatientImportConfirmPayload payload)
+    {
+        try
+        {
+            using var response = await Client.PostAsJsonAsync("/api/patients/import", payload, JsonOptions);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (null, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                return (null, "No tiene permiso para importar pacientes.");
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (null, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<PatientImportResult>>(JsonOptions);
+            if (body?.Succeeded == true && body.Data != null)
+                return (body.Data, null);
+            return (null, body?.Message ?? "No se pudo importar los pacientes.");
+        }
+        catch (Exception ex)
+        {
+            return (null, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
+    public async Task<(byte[]? Bytes, string? Error)> DownloadImportTemplateAsync()
+    {
+        try
+        {
+            using var response = await Client.GetAsync("/api/patients/import/template");
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (null, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                return (null, "No tiene permiso para descargar la plantilla.");
+            if (!response.IsSuccessStatusCode)
+                return (null, "No se pudo descargar la plantilla.");
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            return (bytes, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
     private string? FormatConnectionError(Exception ex) =>
         ApiConnectionMessages.IsConnectionFailure(ex)
             ? ApiConnectionMessages.ApiUnavailable(_apiSettings.ApiBaseUrl)

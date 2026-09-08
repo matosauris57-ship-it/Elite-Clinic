@@ -131,11 +131,6 @@ public class CancelDentalTreatmentRequest
     public string? Reason { get; set; }
 }
 
-public class CompleteDentalTreatmentRequest
-{
-    public DentalTreatmentClinicalResultRequest? ClinicalResult { get; set; }
-}
-
 public class DentalTreatmentClinicalResultRequest
 {
     public ToothSurface Surface { get; set; }
