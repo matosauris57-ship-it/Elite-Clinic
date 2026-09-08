@@ -29,6 +29,7 @@ namespace Clinic_System.Core.Interfaces.UnitOfWork
         IProcedureMaterialRepository ProcedureMaterialsRepository { get; }
         IStockMovementRepository StockMovementsRepository { get; }
         ITreatmentMaterialConsumptionRepository TreatmentMaterialConsumptionsRepository { get; }
+        IClinicReportRepository ClinicReportsRepository { get; }
         Task<int> SaveAsync(CancellationToken cancellationToken = default);
     }
 }

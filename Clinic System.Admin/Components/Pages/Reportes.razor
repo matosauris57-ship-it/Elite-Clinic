@@ -1,0 +1,402 @@
+@page "/reportes"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "reportes.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ReportMaintenanceService Reports
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Reportes — DentalCare Admin</PageTitle>
+
+<div class="billing-page maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Reportes</h1>
+            <p>Agenda, ingresos, producción, pacientes, tratamientos, inventario y cuentas por cobrar.</p>
+        </div>
+        <div class="command-actions">
+            <button class="btn-outline" disabled="@_loading" @onclick="ReloadAsync">
+                <Icon Name="refresh-cw" Class="btn-svg" />
+                Actualizar
+            </button>
+        </div>
+    </div>
+
+    <section class="billing-panel">
+        <div class="billing-filters">
+            <div class="form-group">
+                <label>Desde</label>
+                <input class="form-input" type="date" disabled="@_loading" @bind="_fromDate" />
+            </div>
+            <div class="form-group">
+                <label>Hasta</label>
+                <input class="form-input" type="date" disabled="@_loading" @bind="_toDate" />
+            </div>
+            <div class="form-group" style="align-self:end;">
+                <button class="btn-primary" disabled="@_loading" @onclick="ReloadAsync">
+                    @(_loading ? "Cargando..." : "Consultar")
+                </button>
+            </div>
+            <div class="form-group" style="align-self:end;">
+                <button class="btn-outline" disabled="@_loading" @onclick="SetLast30Days">Últimos 30 días</button>
+            </div>
+            <div class="form-group" style="align-self:end;">
+                <button class="btn-outline" disabled="@_loading" @onclick="SetThisMonth">Este mes</button>
+            </div>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="ReloadAsync" />
+    }
+
+    @if (_data != null)
+    {
+        <div class="billing-kpi-grid">
+            <div class="agenda-kpi accent-teal">
+                <span class="agenda-kpi-value">@_data.Attendance.Total</span>
+                <span class="agenda-kpi-label">Citas del período</span>
+            </div>
+            <div class="agenda-kpi accent-green">
+                <span class="agenda-kpi-value">@_data.Revenue.TotalDisplay</span>
+                <span class="agenda-kpi-label">Ingresos cobrados</span>
+            </div>
+            <div class="agenda-kpi accent-yellow">
+                <span class="agenda-kpi-value">@_data.Revenue.OutstandingBalanceDisplay</span>
+                <span class="agenda-kpi-label">Por cobrar</span>
+            </div>
+            <div class="agenda-kpi accent-purple">
+                <span class="agenda-kpi-value">@_data.Patients.NewInPeriod</span>
+                <span class="agenda-kpi-label">Pacientes nuevos</span>
+            </div>
+        </div>
+
+        <div class="report-tabs" role="tablist">
+            @foreach (var tab in Tabs)
+            {
+                <button type="button"
+                        class="tab-btn @(_activeTab == tab.Key ? "active" : null)"
+                        @onclick="() => _activeTab = tab.Key">
+                    @tab.Label
+                </button>
+            }
+        </div>
+
+        @if (_activeTab == "asistencia")
+        {
+            <section class="billing-panel">
+                <h2>Agenda y asistencia</h2>
+                <div class="billing-kpi-grid">
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Attendance.Completed</span><span class="agenda-kpi-label">Completadas</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Attendance.Confirmed</span><span class="agenda-kpi-label">Confirmadas</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Attendance.Cancelled</span><span class="agenda-kpi-label">Canceladas</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Attendance.NoShow</span><span class="agenda-kpi-label">No-show</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Attendance.AttendanceRate.ToString("0.0")%</span><span class="agenda-kpi-label">Tasa asistencia</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Attendance.NoShowRate.ToString("0.0")%</span><span class="agenda-kpi-label">Tasa no-show</span></div>
+                </div>
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Médico</th>
+                                <th>Total</th>
+                                <th>Completadas</th>
+                                <th>Confirmadas</th>
+                                <th>Canceladas</th>
+                                <th>No-show</th>
+                                <th>Asistencia</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_data.Attendance.ByDoctor.Count == 0)
+                            {
+                                <tr><td colspan="7">Sin citas en el período.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _data.Attendance.ByDoctor)
+                                {
+                                    <tr>
+                                        <td>@row.DoctorName</td>
+                                        <td>@row.Total</td>
+                                        <td>@row.Completed</td>
+                                        <td>@row.Confirmed</td>
+                                        <td>@row.Cancelled</td>
+                                        <td>@row.NoShow</td>
+                                        <td>@row.AttendanceRate.ToString("0.0")%</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+        else if (_activeTab == "ingresos")
+        {
+            <section class="billing-panel">
+                <h2>Ingresos</h2>
+                <div class="billing-kpi-grid">
+                    <div class="agenda-kpi accent-green"><span class="agenda-kpi-value">@_data.Revenue.TotalDisplay</span><span class="agenda-kpi-label">Total cobrado</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Revenue.CashDisplay</span><span class="agenda-kpi-label">Efectivo</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Revenue.CardDisplay</span><span class="agenda-kpi-label">Tarjeta</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Revenue.InstaPayDisplay</span><span class="agenda-kpi-label">InstaPay</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Revenue.TransactionCount</span><span class="agenda-kpi-label">Transacciones</span></div>
+                    <div class="agenda-kpi accent-yellow"><span class="agenda-kpi-value">@_data.Revenue.OutstandingBalanceDisplay</span><span class="agenda-kpi-label">Saldos pendientes</span></div>
+                </div>
+            </section>
+        }
+        else if (_activeTab == "produccion")
+        {
+            <section class="billing-panel">
+                <h2>Producción por odontólogo</h2>
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Médico</th>
+                                <th>Citas completadas</th>
+                                <th>Ingresos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_data.DoctorProduction.Count == 0)
+                            {
+                                <tr><td colspan="3">Sin producción en el período.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _data.DoctorProduction)
+                                {
+                                    <tr>
+                                        <td>@row.DoctorName</td>
+                                        <td>@row.CompletedAppointments</td>
+                                        <td>@row.RevenueDisplay</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+        else if (_activeTab == "pacientes")
+        {
+            <section class="billing-panel">
+                <h2>Pacientes</h2>
+                <div class="billing-kpi-grid">
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Patients.TotalPatients</span><span class="agenda-kpi-label">Total en clínica</span></div>
+                    <div class="agenda-kpi accent-green"><span class="agenda-kpi-value">@_data.Patients.NewInPeriod</span><span class="agenda-kpi-label">Nuevos en el período</span></div>
+                    <div class="agenda-kpi accent-teal"><span class="agenda-kpi-value">@_data.Patients.ReturningInPeriod</span><span class="agenda-kpi-label">Recurrentes con cita</span></div>
+                </div>
+                <p class="billing-muted">Recurrentes: pacientes creados antes del período que tuvieron al menos una cita en el rango.</p>
+            </section>
+        }
+        else if (_activeTab == "tratamientos")
+        {
+            <section class="billing-panel">
+                <h2>Tratamientos</h2>
+                <div class="billing-kpi-grid">
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Treatments.Planned</span><span class="agenda-kpi-label">Planificados</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Treatments.InProgress</span><span class="agenda-kpi-label">En curso</span></div>
+                    <div class="agenda-kpi accent-green"><span class="agenda-kpi-value">@_data.Treatments.Completed</span><span class="agenda-kpi-label">Completados</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Treatments.Cancelled</span><span class="agenda-kpi-label">Cancelados</span></div>
+                    <div class="agenda-kpi accent-yellow"><span class="agenda-kpi-value">@_data.Treatments.PendingPlans</span><span class="agenda-kpi-label">Planes pendientes</span></div>
+                </div>
+                <h3>Procedimientos más realizados</h3>
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Procedimiento</th>
+                                <th>Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_data.Treatments.TopProcedures.Count == 0)
+                            {
+                                <tr><td colspan="2">Sin tratamientos en el período.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _data.Treatments.TopProcedures)
+                                {
+                                    <tr>
+                                        <td>@row.ProcedureName</td>
+                                        <td>@row.Count</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+        else if (_activeTab == "inventario")
+        {
+            <section class="billing-panel">
+                <h2>Inventario</h2>
+                <div class="billing-kpi-grid">
+                    <div class="agenda-kpi accent-yellow"><span class="agenda-kpi-value">@_data.Inventory.LowStockCount</span><span class="agenda-kpi-label">Ítems bajo mínimo</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Inventory.MovementsIn</span><span class="agenda-kpi-label">Entradas</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Inventory.MovementsOut</span><span class="agenda-kpi-label">Salidas</span></div>
+                    <div class="agenda-kpi"><span class="agenda-kpi-value">@_data.Inventory.QuantityOut.ToString("0.##")</span><span class="agenda-kpi-label">Cantidad salida</span></div>
+                </div>
+
+                <h3>Stock bajo</h3>
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Ítem</th>
+                                <th>Stock</th>
+                                <th>Mínimo</th>
+                                <th>Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_data.Inventory.LowStockItems.Count == 0)
+                            {
+                                <tr><td colspan="5">No hay ítems bajo el mínimo.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _data.Inventory.LowStockItems)
+                                {
+                                    <tr>
+                                        <td>@row.Sku</td>
+                                        <td>@row.Name</td>
+                                        <td>@row.QuantityOnHand.ToString("0.##")</td>
+                                        <td>@row.MinimumStock.ToString("0.##")</td>
+                                        <td>@row.Unit</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>Consumo por procedimiento</h3>
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Procedimiento</th>
+                                <th>Material</th>
+                                <th>Cantidad</th>
+                                <th>Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_data.Inventory.ConsumptionByProcedure.Count == 0)
+                            {
+                                <tr><td colspan="4">Sin consumos confirmados en el período.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _data.Inventory.ConsumptionByProcedure)
+                                {
+                                    <tr>
+                                        <td>@row.ProcedureName</td>
+                                        <td>@row.ItemName</td>
+                                        <td>@row.Quantity.ToString("0.##")</td>
+                                        <td>@row.Unit</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+        else if (_activeTab == "cobrar")
+        {
+            <section class="billing-panel">
+                <h2>Cuentas por cobrar</h2>
+                <p class="billing-muted">Pacientes con saldo pendiente (facturas pendientes o parcialmente pagadas).</p>
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Paciente</th>
+                                <th>Facturas</th>
+                                <th>Saldo</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_data.Receivables.Count == 0)
+                            {
+                                <tr><td colspan="4">No hay saldos pendientes.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _data.Receivables)
+                                {
+                                    <tr>
+                                        <td>@row.PatientName</td>
+                                        <td>@row.InvoiceCount</td>
+                                        <td>@row.BalanceDisplay</td>
+                                        <td><a href="/pacientes/@row.PatientId">Ver ficha</a></td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+    }
+    else if (_loading)
+    {
+        <AnimatedLoader Compact="true" Message="Generando reportes..." />
+    }
+</div>
+
+@code {
+    private static readonly (string Key, string Label)[] Tabs =
+    [
+        ("asistencia", "Asistencia"),
+        ("ingresos", "Ingresos"),
+        ("produccion", "Producción"),
+        ("pacientes", "Pacientes"),
+        ("tratamientos", "Tratamientos"),
+        ("inventario", "Inventario"),
+        ("cobrar", "Por cobrar")
+    ];
+
+    private ClinicReportsData? _data;
+    private bool _loading = true;
+    private string? _error;
+    private string _activeTab = "asistencia";
+    private DateTime _fromDate = DateTime.Today.AddDays(-30);
+    private DateTime _toDate = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private void SetLast30Days()
+    {
+        _toDate = DateTime.Today;
+        _fromDate = DateTime.Today.AddDays(-30);
+    }
+
+    private void SetThisMonth()
+    {
+        _toDate = DateTime.Today;
+        _fromDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var (data, error) = await Reports.GetReportsAsync(_fromDate.Date, _toDate.Date);
+        _data = data;
+        _error = error;
+        _loading = false;
+    }
+}
