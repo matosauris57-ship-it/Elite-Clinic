@@ -57,9 +57,22 @@ public class TreatmentCatalogItem
     public string Category { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public decimal Price { get; set; }
+    public string PricingMode { get; set; } = "AtBooking";
     public string PriceRangeDisplay { get; set; } = string.Empty;
+    public string PricingModeDisplay { get; set; } = string.Empty;
+    public string PriceRaw { get; set; } = string.Empty;
     public int DurationMinutes { get; set; }
     public List<DoctorProcedurePriceItem> DoctorPrices { get; set; } = [];
+
+    public bool IsFixedPrice =>
+        string.Equals(PricingMode, "Fixed", StringComparison.OrdinalIgnoreCase);
+
+    public bool RequiresQuoteAtBooking =>
+        string.Equals(PricingMode, "AtBooking", StringComparison.OrdinalIgnoreCase)
+        || string.IsNullOrWhiteSpace(PricingMode);
+
+    public bool RequiresPriceAtBilling =>
+        string.Equals(PricingMode, "AtBilling", StringComparison.OrdinalIgnoreCase);
 }
 
 public class AppointmentWizardState

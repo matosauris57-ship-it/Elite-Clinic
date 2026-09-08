@@ -47,6 +47,28 @@ namespace Clinic_System.Application.Features.Appointments.Commands.Validators
                 .GreaterThan(0)
                 .When(x => x.QuotedAmount.HasValue)
                 .WithMessage("El precio del tratamiento debe ser mayor a 0.");
+
+            RuleFor(x => x)
+                .MustAsync(RequireQuoteWhenProcedureNeedsIt)
+                .WithMessage("Indique el precio del tratamiento al agendar esta cita.");
+        }
+
+        private async Task<bool> RequireQuoteWhenProcedureNeedsIt(
+            BookAppointmentCommand command,
+            CancellationToken cancellationToken)
+        {
+            if (!command.TreatmentProcedureId.HasValue)
+                return true;
+
+            var procedure = await unitOfWork.TreatmentProceduresRepository
+                .GetByIdAsync(command.TreatmentProcedureId.Value, cancellationToken);
+            if (procedure == null)
+                return true;
+
+            if (procedure.PricingMode == TreatmentPricingMode.AtBilling)
+                return true;
+
+            return command.QuotedAmount.HasValue && command.QuotedAmount.Value > 0;
         }
 
         private async Task<bool> DoctorExists(int doctorId, CancellationToken cancellationToken)

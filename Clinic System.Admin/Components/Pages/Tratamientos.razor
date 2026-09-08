@@ -1,4 +1,5 @@
 @page "/tratamientos"
+@using Clinic_System.Core.Finance
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "tratamientos.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject TreatmentProcedureMaintenanceService ProcedureService
@@ -12,7 +13,7 @@
     <div class="maintenance-header command-header">
         <div class="command-titles">
             <h1>Catálogo de procedimientos</h1>
-            <p>Servicios que se ofrecen en la clínica. El precio se indica al agendar o facturar.</p>
+            <p>Defina si el precio es fijo o se indica al agendar / facturar.</p>
         </div>
         <div class="command-actions">
             <a href="/tratamientos-clinicos" class="btn-outline">
@@ -103,6 +104,7 @@
                             <Icon Name="clock" Class="tx-meta-icon" />
                             @item.DurationMinutes min
                         </span>
+                        <span class="tx-price">@FormatProcedurePrice(item)</span>
                     </div>
                     <div class="tx-procedure-actions">
                         @if (_canEditProcedure)
@@ -160,6 +162,25 @@
                         <input class="form-input" type="number" min="1" @bind="_procedureForm.DurationMinutes" />
                     </div>
                 </div>
+                <div class="form-group">
+                    <label>¿Cómo se define el precio?</label>
+                    <select class="form-input" @bind="_procedureForm.PricingMode">
+                        <option value="Fixed">Precio fijo en el catálogo</option>
+                        <option value="AtBooking">Se ingresa al agendar la cita</option>
+                        <option value="AtBilling">Se ingresa al facturar</option>
+                    </select>
+                    <p class="billing-muted" style="margin-top:0.35rem;">
+                        @PricingModeHint(_procedureForm.PricingMode)
+                    </p>
+                </div>
+                @if (string.Equals(_procedureForm.PricingMode, "Fixed", StringComparison.OrdinalIgnoreCase))
+                {
+                    <div class="form-group">
+                        <label>Precio fijo (RD$)</label>
+                        <input class="form-input" type="text" inputmode="decimal" autocomplete="off"
+                               placeholder="0.00" @bind="_procedureForm.PriceInput" @bind:event="oninput" />
+                    </div>
+                }
                 <div class="form-row">
                     <div class="form-group">
                         <label class="checkbox-label">
@@ -300,7 +321,12 @@
     {
         _isProcedureEdit = false;
         _procedureFormError = null;
-        _procedureForm = new CreateTreatmentProcedureRequest { Category = Categories[0], DurationMinutes = 30 };
+        _procedureForm = new CreateTreatmentProcedureRequest
+        {
+            Category = Categories[0],
+            DurationMinutes = 30,
+            PricingMode = "AtBooking"
+        };
         _showProcedureModal = true;
     }
 
@@ -315,7 +341,10 @@
             Category = item.Category,
             Name = item.Name,
             DurationMinutes = item.DurationMinutes,
-            IsActive = item.IsActive
+            IsActive = item.IsActive,
+            PricingMode = string.IsNullOrWhiteSpace(item.PricingMode) ? "AtBooking" : item.PricingMode,
+            PriceInput = item.IsFixedPrice ? item.PriceRaw : string.Empty,
+            Price = item.Price
         };
         _showProcedureModal = true;
     }
@@ -347,8 +376,22 @@
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(_procedureForm.PricingMode))
+            _procedureForm.PricingMode = "AtBooking";
+
+        decimal price = 0;
+        if (string.Equals(_procedureForm.PricingMode, "Fixed", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Money.TryParse(_procedureForm.PriceInput, out price) || price <= 0)
+            {
+                _procedureFormError = "Indique un precio fijo mayor a cero.";
+                _procedureSaving = false;
+                return;
+            }
+        }
+
         _procedureForm.DoctorPrices = [];
-        _procedureForm.Price = 0;
+        _procedureForm.Price = price;
 
         if (_isProcedureEdit)
         {
@@ -357,7 +400,8 @@
                 Code = _procedureForm.Code,
                 Category = _procedureForm.Category,
                 Name = _procedureForm.Name,
-                Price = 0,
+                Price = price,
+                PricingMode = _procedureForm.PricingMode,
                 DurationMinutes = _procedureForm.DurationMinutes,
                 IsActive = _procedureForm.IsActive,
                 DoctorPrices = []
@@ -422,6 +466,22 @@
         string.IsNullOrWhiteSpace(category)
             ? category
             : char.ToUpper(category[0]) + category[1..].ToLower();
+
+    private static string FormatProcedurePrice(TreatmentProcedureListItem item)
+    {
+        if (item.IsFixedPrice && item.Price > 0)
+            return string.IsNullOrWhiteSpace(item.PriceDisplay) ? Money.Format(item.Price) : item.PriceDisplay;
+        if (!string.IsNullOrWhiteSpace(item.PricingModeDisplay))
+            return item.PricingModeDisplay;
+        return item.RequiresPriceAtBilling ? "Al facturar" : "Al agendar";
+    }
+
+    private static string PricingModeHint(string? mode) => mode switch
+    {
+        "Fixed" => "El monto queda definido en el catálogo y se usará al agendar o facturar.",
+        "AtBilling" => "No se pedirá precio al agendar; se ingresará al crear la factura.",
+        _ => "Al agendar la cita se pedirá el monto a cobrar."
+    };
 
     private static string GetCategoryClass(string category) => category.ToUpperInvariant() switch
     {

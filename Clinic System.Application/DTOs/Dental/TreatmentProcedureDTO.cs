@@ -7,9 +7,11 @@ namespace Clinic_System.Application.DTOs.Dental
         public string Category { get; set; } = null!;
         public string Name { get; set; } = null!;
         public decimal Price { get; set; }
+        public string PricingMode { get; set; } = "AtBooking";
         public string PriceDisplay { get; set; } = string.Empty;
         public string PriceRaw { get; set; } = string.Empty;
         public string PriceRangeDisplay { get; set; } = string.Empty;
+        public string PricingModeDisplay { get; set; } = string.Empty;
         public int DurationMinutes { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }

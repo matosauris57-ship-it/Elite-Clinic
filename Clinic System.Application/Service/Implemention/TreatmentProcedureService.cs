@@ -27,6 +27,7 @@ namespace Clinic_System.Application.Service.Implemention
             string category,
             string name,
             decimal price,
+            TreatmentPricingMode pricingMode,
             int durationMinutes,
             bool isActive,
             CancellationToken cancellationToken = default)
@@ -36,12 +37,17 @@ namespace Clinic_System.Application.Service.Implemention
             if (existing != null)
                 throw new InvalidOperationException($"A procedure with code '{normalizedCode}' already exists.");
 
+            var normalizedPrice = pricingMode == TreatmentPricingMode.Fixed
+                ? Money.Normalize(price)
+                : 0m;
+
             var procedure = new TreatmentProcedure
             {
                 Code = normalizedCode,
                 Category = category.Trim().ToUpperInvariant(),
                 Name = name.Trim(),
-                Price = Money.Normalize(price),
+                Price = normalizedPrice,
+                PricingMode = pricingMode,
                 DurationMinutes = durationMinutes,
                 IsActive = isActive
             };
@@ -56,6 +62,7 @@ namespace Clinic_System.Application.Service.Implemention
             string category,
             string name,
             decimal price,
+            TreatmentPricingMode pricingMode,
             int durationMinutes,
             bool isActive,
             CancellationToken cancellationToken = default)
@@ -69,7 +76,10 @@ namespace Clinic_System.Application.Service.Implemention
             procedure.Code = normalizedCode;
             procedure.Category = category.Trim().ToUpperInvariant();
             procedure.Name = name.Trim();
-            procedure.Price = Money.Normalize(price);
+            procedure.PricingMode = pricingMode;
+            procedure.Price = pricingMode == TreatmentPricingMode.Fixed
+                ? Money.Normalize(price)
+                : 0m;
             procedure.DurationMinutes = durationMinutes;
             procedure.IsActive = isActive;
 
@@ -164,6 +174,10 @@ namespace Clinic_System.Application.Service.Implemention
 
             foreach (var dto in dtos)
             {
+                var source = list.First(p => p.Id == dto.Id);
+                dto.PricingMode = source.PricingMode.ToString();
+                dto.PricingModeDisplay = FormatPricingMode(source.PricingMode);
+
                 var procedurePrices = pricesByProcedure.GetValueOrDefault(dto.Id) ?? [];
                 dto.DoctorPrices = procedurePrices.Select(p => new DoctorProcedurePriceDTO
                 {
@@ -174,32 +188,49 @@ namespace Clinic_System.Application.Service.Implemention
                     PriceRaw = Money.ToInput(p.Price)
                 }).ToList();
 
+                decimal catalogPrice = source.Price;
                 decimal resolved;
-                if (doctorId.HasValue)
+                if (source.PricingMode == TreatmentPricingMode.Fixed)
                 {
-                    var match = procedurePrices.FirstOrDefault(p => p.DoctorId == doctorId.Value);
-                    resolved = match?.Price ?? 0;
-                }
-                else if (procedurePrices.Count > 0)
-                {
-                    resolved = procedurePrices.Min(p => p.Price);
+                    if (doctorId.HasValue)
+                    {
+                        var match = procedurePrices.FirstOrDefault(p => p.DoctorId == doctorId.Value);
+                        resolved = match?.Price ?? catalogPrice;
+                    }
+                    else if (procedurePrices.Count > 0)
+                    {
+                        resolved = procedurePrices.Min(p => p.Price);
+                    }
+                    else
+                    {
+                        resolved = catalogPrice;
+                    }
+
+                    dto.Price = resolved;
+                    dto.PriceRaw = Money.ToInput(resolved);
+                    dto.PriceRangeDisplay = procedurePrices.Count > 0
+                        ? Money.FormatRange(procedurePrices.Min(p => p.Price), procedurePrices.Max(p => p.Price))
+                        : Money.Format(resolved);
+                    dto.PriceDisplay = dto.PriceRangeDisplay;
                 }
                 else
                 {
-                    resolved = dto.Price;
+                    dto.Price = 0;
+                    dto.PriceRaw = string.Empty;
+                    dto.PriceRangeDisplay = dto.PricingModeDisplay;
+                    dto.PriceDisplay = dto.PricingModeDisplay;
                 }
-
-                dto.Price = resolved;
-                dto.PriceRaw = Money.ToInput(resolved);
-                dto.PriceRangeDisplay = procedurePrices.Count > 0
-                    ? Money.FormatRange(procedurePrices.Min(p => p.Price), procedurePrices.Max(p => p.Price))
-                    : (resolved > 0 ? Money.Format(resolved) : "Según médico");
-                dto.PriceDisplay = doctorId.HasValue
-                    ? (resolved > 0 ? Money.Format(resolved) : "Sin precio para este médico")
-                    : dto.PriceRangeDisplay;
             }
 
             return dtos;
         }
+
+        private static string FormatPricingMode(TreatmentPricingMode mode) => mode switch
+        {
+            TreatmentPricingMode.Fixed => "Precio fijo",
+            TreatmentPricingMode.AtBooking => "Al agendar",
+            TreatmentPricingMode.AtBilling => "Al facturar",
+            _ => mode.ToString()
+        };
     }
 }

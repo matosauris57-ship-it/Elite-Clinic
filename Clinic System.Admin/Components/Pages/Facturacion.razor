@@ -1,5 +1,6 @@
 @page "/facturacion"
 @using System.Globalization
+@using Clinic_System.Core.Finance
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "facturacion.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject BillingMaintenanceService BillingService
@@ -362,7 +363,7 @@
                                 <option value="">Texto libre</option>
                                 @foreach (var procedure in _procedures)
                                 {
-                                    <option value="@procedure.Id">@procedure.Name</option>
+                                    <option value="@procedure.Id">@procedure.Name (@FormatProcedurePricingHint(procedure))</option>
                                 }
                             </select>
                         </div>
@@ -769,6 +770,19 @@
         _newLine.Description = procedure.Name;
         if (_newLine.Quantity <= 0)
             _newLine.Quantity = 1;
+
+        if (procedure.IsFixedPrice && procedure.Price > 0)
+        {
+            _newLinePriceInput = string.IsNullOrWhiteSpace(procedure.PriceRaw)
+                ? Money.ToInput(procedure.Price)
+                : procedure.PriceRaw;
+        }
+        else if (procedure.RequiresPriceAtBilling || procedure.RequiresQuoteAtBooking)
+        {
+            // Precio abierto: el usuario lo completa al facturar.
+            if (string.IsNullOrWhiteSpace(_newLinePriceInput))
+                _newLinePriceInput = string.Empty;
+        }
     }
 
     private async Task RefreshSelectedPaymentAsync()
@@ -911,6 +925,17 @@
         "3" => "InstaPay",
         _ => "el método seleccionado"
     };
+
+    private static string FormatProcedurePricingHint(TreatmentProcedureListItem procedure)
+    {
+        if (procedure.IsFixedPrice && procedure.Price > 0)
+            return string.IsNullOrWhiteSpace(procedure.PriceDisplay)
+                ? Money.Format(procedure.Price)
+                : procedure.PriceDisplay;
+        if (!string.IsNullOrWhiteSpace(procedure.PricingModeDisplay))
+            return procedure.PricingModeDisplay;
+        return procedure.RequiresPriceAtBilling ? "Al facturar" : "Al agendar";
+    }
 
     private void ShowAction(string message, bool success)
     {

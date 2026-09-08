@@ -45,9 +45,11 @@ namespace Clinic_System.Application.Mapping.Dental
         public void TreatmentProcedureMapping()
         {
             CreateMap<TreatmentProcedure, TreatmentProcedureDTO>()
+                .ForMember(d => d.PricingMode, o => o.MapFrom(s => s.PricingMode.ToString()))
                 .ForMember(d => d.PriceDisplay, o => o.MapFrom(s => Money.Format(s.Price)))
                 .ForMember(d => d.PriceRaw, o => o.MapFrom(s => Money.ToInput(s.Price)))
                 .ForMember(d => d.PriceRangeDisplay, o => o.Ignore())
+                .ForMember(d => d.PricingModeDisplay, o => o.Ignore())
                 .ForMember(d => d.DoctorPrices, o => o.Ignore());
         }
 

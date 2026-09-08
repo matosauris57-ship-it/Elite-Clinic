@@ -2042,6 +2042,11 @@ namespace Clinic_System.Data.Migrations
                     b.Property<decimal>("Price")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int>("PricingMode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -2055,6 +2060,8 @@ namespace Clinic_System.Data.Migrations
                             t.HasCheckConstraint("CK_TreatmentProcedures_Duration", "[DurationMinutes] > 0");
 
                             t.HasCheckConstraint("CK_TreatmentProcedures_Price", "[Price] >= 0");
+
+                            t.HasCheckConstraint("CK_TreatmentProcedures_PricingMode", "[PricingMode] IN (0, 1, 2)");
                         });
                 });
 

@@ -7,22 +7,36 @@ public class TreatmentProcedureListItem
     public string Category { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public decimal Price { get; set; }
+    public string PricingMode { get; set; } = "AtBooking";
     public string PriceDisplay { get; set; } = string.Empty;
     public string PriceRaw { get; set; } = string.Empty;
     public string PriceRangeDisplay { get; set; } = string.Empty;
+    public string PricingModeDisplay { get; set; } = string.Empty;
     public int DurationMinutes { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public List<DoctorProcedurePriceItem> DoctorPrices { get; set; } = [];
 
+    public bool IsFixedPrice =>
+        string.Equals(PricingMode, "Fixed", StringComparison.OrdinalIgnoreCase);
+
+    public bool RequiresQuoteAtBooking =>
+        string.Equals(PricingMode, "AtBooking", StringComparison.OrdinalIgnoreCase)
+        || string.IsNullOrWhiteSpace(PricingMode);
+
+    public bool RequiresPriceAtBilling =>
+        string.Equals(PricingMode, "AtBilling", StringComparison.OrdinalIgnoreCase);
+
     public decimal ResolvePrice(int? doctorId)
     {
+        if (!IsFixedPrice)
+            return 0;
+
         if (doctorId.HasValue)
         {
             var match = DoctorPrices.FirstOrDefault(p => p.DoctorId == doctorId.Value);
             if (match != null)
                 return match.Price;
-            return 0;
         }
 
         return Price;
@@ -50,6 +64,8 @@ public class CreateTreatmentProcedureRequest
     public string Category { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public decimal Price { get; set; }
+    public string PricingMode { get; set; } = "AtBooking";
+    public string PriceInput { get; set; } = string.Empty;
     public int DurationMinutes { get; set; } = 30;
     public bool IsActive { get; set; } = true;
     public List<DoctorProcedurePriceRequest> DoctorPrices { get; set; } = [];
@@ -62,6 +78,7 @@ public class UpdateTreatmentProcedureRequest
     public string Category { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public decimal Price { get; set; }
+    public string PricingMode { get; set; } = "AtBooking";
     public int DurationMinutes { get; set; }
     public bool IsActive { get; set; } = true;
     public List<DoctorProcedurePriceRequest> DoctorPrices { get; set; } = [];
