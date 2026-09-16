@@ -8,6 +8,10 @@ namespace Clinic_System.Application.Features.TreatmentPlans.Commands.Validators
             RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
             RuleFor(x => x.Notes).MaximumLength(2000);
             RuleFor(x => x.DiscountAmount).GreaterThanOrEqualTo(0);
+            RuleFor(x => x)
+                .Must(x => x.DiscountAmount <= x.Items.Sum(i => i.UnitPrice * i.Quantity))
+                .When(x => x.Items != null && x.Items.Count > 0)
+                .WithMessage("El descuento no puede superar el subtotal.");
             RuleFor(x => x.Items).NotEmpty();
             RuleForEach(x => x.Items).ChildRules(item =>
             {

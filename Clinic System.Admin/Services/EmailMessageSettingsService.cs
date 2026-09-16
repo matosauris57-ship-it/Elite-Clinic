@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Clinic_System.Core.Messaging;
 using Clinic_System.Core.Validation;
 using DentalCare.Admin.Models;
 
@@ -78,7 +79,7 @@ public class EmailMessageSettingsService
         var subject = ApplyPlaceholders(subjectTemplate, clinicName, context);
         var body = ApplyPlaceholders(bodyTemplate, clinicName, context);
 
-        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(body))
+        if (string.IsNullOrWhiteSpace(subject) || MessageBodyFormatting.IsBlank(body))
             return new EmailComposeResult(false, to, string.Empty, string.Empty,
                 "La plantilla de correo está vacía. Configúrela en Configuración → Mensajes de correo.");
 
@@ -131,10 +132,10 @@ public class EmailMessageSettingsService
         ConfirmationSubject = string.IsNullOrWhiteSpace(settings.ConfirmationSubject)
             ? "Cita confirmada - {clinica}"
             : settings.ConfirmationSubject.Trim(),
-        ReminderTemplate = string.IsNullOrWhiteSpace(settings.ReminderTemplate)
+        ReminderTemplate = MessageBodyFormatting.IsBlank(settings.ReminderTemplate)
             ? EmailMessageSettings.ReminderDefault
             : settings.ReminderTemplate.Trim(),
-        ConfirmationTemplate = string.IsNullOrWhiteSpace(settings.ConfirmationTemplate)
+        ConfirmationTemplate = MessageBodyFormatting.IsBlank(settings.ConfirmationTemplate)
             ? EmailMessageSettings.ConfirmationDefault
             : settings.ConfirmationTemplate.Trim(),
         DayBeforeEnabled = settings.DayBeforeEnabled,
@@ -146,7 +147,7 @@ public class EmailMessageSettingsService
         BirthdaySubject = string.IsNullOrWhiteSpace(settings.BirthdaySubject)
             ? "Feliz cumpleaños - {clinica}"
             : settings.BirthdaySubject.Trim(),
-        BirthdayTemplate = string.IsNullOrWhiteSpace(settings.BirthdayTemplate)
+        BirthdayTemplate = MessageBodyFormatting.IsBlank(settings.BirthdayTemplate)
             ? EmailMessageSettings.BirthdayDefault
             : settings.BirthdayTemplate.Trim()
     };
@@ -175,12 +176,16 @@ public class EmailMessageSettingsService
         var fecha = date?.ToString("d 'de' MMMM yyyy", MessageCulture) ?? "—";
         var hora = date?.ToString("HH:mm", MessageCulture) ?? "—";
 
-        return template
-            .Replace("{nombre}", context.PatientName, StringComparison.OrdinalIgnoreCase)
-            .Replace("{clinica}", clinicName, StringComparison.OrdinalIgnoreCase)
-            .Replace("{fecha}", fecha, StringComparison.OrdinalIgnoreCase)
-            .Replace("{hora}", hora, StringComparison.OrdinalIgnoreCase)
-            .Replace("{doctor}", context.DoctorName, StringComparison.OrdinalIgnoreCase)
-            .Replace("{edad}", "32", StringComparison.OrdinalIgnoreCase);
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["{nombre}"] = context.PatientName,
+            ["{clinica}"] = clinicName,
+            ["{fecha}"] = fecha,
+            ["{hora}"] = hora,
+            ["{doctor}"] = context.DoctorName,
+            ["{edad}"] = "32"
+        };
+
+        return MessageBodyFormatting.ApplyTokens(template, tokens);
     }
 }

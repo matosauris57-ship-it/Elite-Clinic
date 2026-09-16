@@ -49,7 +49,8 @@ public class CustomAuthStateProvider : AuthenticationStateProvider
                 storage.Roles,
                 storage.Permissions,
                 storage.CachedSessionId,
-                storage.AccessToken));
+                storage.AccessToken,
+                storage.DoctorId));
             return _cachedState;
         }
 
@@ -83,7 +84,8 @@ public class CustomAuthStateProvider : AuthenticationStateProvider
         IEnumerable<string> roles,
         IEnumerable<string>? permissions = null,
         string? sessionId = null,
-        string? accessToken = null)
+        string? accessToken = null,
+        int? doctorId = null)
     {
         var claims = new List<Claim>
         {
@@ -96,6 +98,9 @@ public class CustomAuthStateProvider : AuthenticationStateProvider
 
         if (!string.IsNullOrWhiteSpace(accessToken))
             claims.Add(new Claim(TokenStorage.ApiTokenClaimType, accessToken));
+
+        if (doctorId > 0)
+            claims.Add(new Claim("DoctorId", doctorId.ToString()));
 
         foreach (var role in roles)
             claims.Add(new Claim(ClaimTypes.Role, role));

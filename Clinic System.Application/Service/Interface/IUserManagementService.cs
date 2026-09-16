@@ -26,6 +26,12 @@ public interface IUserManagementService
         string userId,
         bool lockoutEnabled,
         CancellationToken cancellationToken = default);
+
+    Task<(bool Success, string? Error)> SetUserPasswordAsync(
+        string userId,
+        string newPassword,
+        bool actorIsAdmin,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class ManagedUserInfo

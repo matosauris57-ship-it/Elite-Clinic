@@ -67,4 +67,13 @@ public class AccessControlController : AppControllerBase
         var response = await mediator.Send(command);
         return NewResult(response);
     }
+
+    [HttpPut("users/{userId}/password")]
+    [Authorize(Policy = "staff.reset-password")]
+    public async Task<IActionResult> SetUserPassword(string userId, [FromBody] SetUserPasswordCommand command)
+    {
+        command.UserId = userId;
+        var response = await mediator.Send(command);
+        return NewResult(response);
+    }
 }

@@ -58,7 +58,12 @@ namespace Clinic_System.Data.Configurations
                 .HasColumnType("nvarchar(max)")
                 .HasColumnName("SignatureImageUrl");
 
-            // Index على Specialization للبحث السريع
+            builder.Property(d => d.CanViewAllClinicData)
+                .IsRequired()
+                .HasDefaultValue(true)
+                .HasColumnName("CanViewAllClinicData");
+
+            // Index sobre Specialization para búsqueda rápida
             builder.HasIndex(d => d.Specialization)
                 .HasDatabaseName("IX_Doctors_Specialization");
 

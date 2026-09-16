@@ -12,5 +12,8 @@
         public string Specialization { get; set; } = null!;
         public string? SignatureImageUrl { get; set; }
         public string ApplicationUserId { get; set; } = null!;
+        public bool CanViewAllClinicData { get; set; }
+        public string? Email { get; set; }
+        public string? UserName { get; set; }
     }
 }

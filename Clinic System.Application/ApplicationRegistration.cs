@@ -33,6 +33,8 @@ namespace Clinic_System.Application
             services.AddScoped<IDashboardLayoutService, DashboardLayoutService>();
             services.AddScoped<IInventoryService, InventoryService>();
             services.AddScoped<IClinicReportService, ClinicReportService>();
+            services.AddScoped<IPasswordRecoveryService, PasswordRecoveryService>();
+            services.AddScoped<IClinicDataScopeService, ClinicDataScopeService>();
 
             return services;
         }

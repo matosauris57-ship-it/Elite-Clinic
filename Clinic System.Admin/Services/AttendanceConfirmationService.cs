@@ -69,24 +69,24 @@ public class AttendanceConfirmationService
         }
     }
 
-    public async Task<(bool Success, string? Message, string? Error)> RespondAsync(string token, string action)
+    public async Task<(bool Success, string? Message, AttendanceConfirmationDetails? Details, string? Error)> RespondAsync(string token, string action, string? comment = null)
     {
         try
         {
             var client = _httpClientFactory.CreateClient("ClinicApiLogin");
             using var response = await client.PostAsJsonAsync(
                 "/api/appointments/attendance-confirmation/respond",
-                new { Token = token, Action = action },
+                new { Token = token, Action = action, Comment = comment },
                 JsonOptions);
 
-            var body = await response.Content.ReadFromJsonAsync<ApiResponse<AttendanceConfirmationResponseResult>>(JsonOptions);
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<AttendanceConfirmationDetails>>(JsonOptions);
             return body?.Succeeded == true
-                ? (true, body.Message, null)
-                : (false, null, body?.Message ?? "No se pudo registrar la respuesta.");
+                ? (true, body.Message, body.Data, null)
+                : (false, null, null, body?.Message ?? "No se pudo registrar la respuesta.");
         }
         catch (Exception ex)
         {
-            return (false, null, ex.Message);
+            return (false, null, null, ex.Message);
         }
     }
 

@@ -12,6 +12,7 @@ namespace Clinic_System.Core.Entities
         public virtual string? ApplicationUserId { get; set; }
 
         public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+        public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
         public virtual DentalHistory? DentalHistory { get; set; }
         public virtual ICollection<ToothRecord> ToothRecords { get; set; } = new List<ToothRecord>();
         public virtual ICollection<ToothChartEntry> ToothChartEntries { get; set; } = new List<ToothChartEntry>();
@@ -23,5 +24,7 @@ namespace Clinic_System.Core.Entities
         public virtual ICollection<PatientPrescription> PatientPrescriptions { get; set; } = new List<PatientPrescription>();
         public virtual ICollection<EmergencyContact> EmergencyContacts { get; set; } = new List<EmergencyContact>();
         public virtual ICollection<PatientMedicalCertificate> MedicalCertificates { get; set; } = new List<PatientMedicalCertificate>();
+        public virtual ICollection<PatientClinicalAttachment> ClinicalAttachments { get; set; } = new List<PatientClinicalAttachment>();
+        public virtual ICollection<PatientInformedConsent> InformedConsents { get; set; } = new List<PatientInformedConsent>();
     }
 }

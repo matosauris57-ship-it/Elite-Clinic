@@ -18,6 +18,11 @@ public static class AdminPermissionCatalog
 
         public static bool IsSystemRole(string roleName) =>
             !string.IsNullOrWhiteSpace(roleName) && All.Contains(roleName);
+
+        public static bool CanEditModulePermissions(string roleName) =>
+            !string.IsNullOrWhiteSpace(roleName)
+            && !string.Equals(roleName, Admin, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(roleName, Patient, StringComparison.OrdinalIgnoreCase);
     }
 
     public static class Actions
@@ -26,12 +31,17 @@ public static class AdminPermissionCatalog
         public const string Create = "create";
         public const string Edit = "edit";
         public const string Delete = "delete";
+        public const string ResetPassword = "reset-password";
+        public const string ViewAll = "view-all";
     }
+
+    public const string ViewAllClinicData = "datos.view-all";
 
     public sealed record ModuleDefinition(string Key, string DisplayName, IReadOnlyList<string> Actions);
 
     public static readonly IReadOnlyList<ModuleDefinition> Modules =
     [
+        new("datos", "Alcance de datos clínicos", [Actions.ViewAll]),
         new("dashboard", "Dashboard", [Actions.View]),
         new("agendar-cita", "Agendar Cita", [Actions.View, Actions.Create]),
         new("agenda", "Agenda", [Actions.View, Actions.Edit, Actions.Delete]),
@@ -42,17 +52,19 @@ public static class AdminPermissionCatalog
         new("tratamientos", "Tratamientos", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
         new("odontograma", "Odontograma", [Actions.View, Actions.Edit]),
         new("periodontograma", "Periodontograma", [Actions.View, Actions.Edit]),
-        new("planes-tratamiento", "Planes de tratamiento", [Actions.View, Actions.Create, Actions.Edit]),
+        new("planes-tratamiento", "Presupuestos", [Actions.View, Actions.Create, Actions.Edit]),
         new("historial", "Historial Clínico", [Actions.View, Actions.Create, Actions.Edit]),
         new("recetas", "Recetas", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
         new("certificados", "Certificados médicos", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
+        new("consentimientos", "Consentimientos informados", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete]),
         new("facturacion", "Facturación", [Actions.View, Actions.Create, Actions.Edit]),
         new("analitica", "Analítica", [Actions.View]),
         new("inventario", "Inventario", [Actions.View, Actions.Edit]),
         new("reportes", "Reportes", [Actions.View]),
         new("campanas", "Campañas de correo", [Actions.View, Actions.Create, Actions.Edit]),
         new("configuracion", "Configuración", [Actions.View]),
-        new("usuarios", "Usuarios y roles", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete])
+        new("usuarios", "Usuarios y roles", [Actions.View, Actions.Create, Actions.Edit, Actions.Delete, Actions.ResetPassword]),
+        new("recuperacion-contrasena", "Recuperación de contraseña", [Actions.View, Actions.Edit, Actions.ResetPassword])
     ];
 
     public static readonly IReadOnlyList<string> All = BuildAll();

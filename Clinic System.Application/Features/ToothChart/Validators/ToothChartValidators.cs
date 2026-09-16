@@ -14,8 +14,13 @@ public class CreateToothChartEntryValidator : AbstractValidator<CreateToothChart
         RuleFor(x => x.Surface).IsInEnum();
         RuleFor(x => x.Phase).IsInEnum();
         RuleFor(x => x.Condition).IsInEnum();
+        RuleFor(x => x.Surfaces)
+            .Must(x => x == null || x.Count <= 5)
+            .WithMessage("Puede marcar como máximo cinco caras.");
+        RuleForEach(x => x.Surfaces).IsInEnum();
         RuleFor(x => x)
-            .Must(x => ToothFindingRules.MatchesScope(x.Condition, x.Surface))
+            .Must(x => ToothSurfaceSelection.Resolve(x.Surface, x.Surfaces)
+                .All(surface => ToothFindingRules.MatchesScope(x.Condition, surface)))
             .WithMessage("Esa condición no corresponde al alcance seleccionado (pieza completa o superficie).");
         RuleFor(x => x.CariesType).IsInEnum().When(x => x.CariesType.HasValue);
         RuleFor(x => x.Icdas).IsInEnum().When(x => x.Icdas.HasValue);
@@ -56,8 +61,8 @@ public class CreateToothChartEntriesBatchValidator : AbstractValidator<CreateToo
     public CreateToothChartEntriesBatchValidator()
     {
         RuleFor(x => x.PatientId).GreaterThan(0);
-        RuleFor(x => x)
-            .Must(x => x.ToothNumbers.Count > 0 || x.BridgeUnits.Count > 0)
+        RuleFor(x => x.ToothNumbers)
+            .Must((cmd, nums) => nums.Count > 0 || cmd.BridgeUnits.Count > 0)
             .WithMessage("Seleccione al menos una pieza.");
         RuleFor(x => x.ToothNumbers)
             .Must(x => x.Distinct().Count() <= 32)
@@ -69,8 +74,13 @@ public class CreateToothChartEntriesBatchValidator : AbstractValidator<CreateToo
         RuleFor(x => x.Surface).IsInEnum();
         RuleFor(x => x.Phase).IsInEnum();
         RuleFor(x => x.Condition).IsInEnum();
+        RuleFor(x => x.Surfaces)
+            .Must(x => x == null || x.Count <= 5)
+            .WithMessage("Puede marcar como máximo cinco caras.");
+        RuleForEach(x => x.Surfaces).IsInEnum();
         RuleFor(x => x)
-            .Must(x => ToothFindingRules.MatchesScope(x.Condition, x.Surface))
+            .Must(x => ToothSurfaceSelection.Resolve(x.Surface, x.Surfaces)
+                .All(surface => ToothFindingRules.MatchesScope(x.Condition, surface)))
             .WithMessage("Esa condición no corresponde al alcance seleccionado (pieza completa o superficie).");
         RuleFor(x => x.CariesType).NotNull().When(x => ToothFindingRules.RequiresCariesDetails(x.Condition))
             .WithMessage("Indique el tipo de caries.");
@@ -117,5 +127,56 @@ public class GetDentalTimelineValidator : AbstractValidator<GetDentalTimelineQue
             .Must(FdiToothNumber.IsValid)
             .When(x => x.ToothNumber.HasValue)
             .WithMessage("El diente debe usar una notación FDI válida.");
+    }
+}
+
+public class GetToothChartEntryValidator : AbstractValidator<GetToothChartEntryQuery>
+{
+    public GetToothChartEntryValidator()
+    {
+        RuleFor(x => x.Id).GreaterThan(0);
+    }
+}
+
+public class VoidToothChartEntryValidator : AbstractValidator<VoidToothChartEntryCommand>
+{
+    public VoidToothChartEntryValidator()
+    {
+        RuleFor(x => x.Id).GreaterThan(0);
+    }
+}
+
+public class UpdateToothChartEntryValidator : AbstractValidator<UpdateToothChartEntryCommand>
+{
+    public UpdateToothChartEntryValidator()
+    {
+        RuleFor(x => x.Id).GreaterThan(0);
+        RuleFor(x => x.Surface).IsInEnum();
+        RuleFor(x => x.Phase).IsInEnum();
+        RuleFor(x => x.Condition).IsInEnum();
+        RuleFor(x => x)
+            .Must(x => ToothFindingRules.MatchesScope(x.Condition, x.Surface))
+            .WithMessage("Esa condición no corresponde al alcance seleccionado (pieza completa o superficie).");
+        RuleFor(x => x.CariesType).IsInEnum().When(x => x.CariesType.HasValue);
+        RuleFor(x => x.Icdas).IsInEnum().When(x => x.Icdas.HasValue);
+        RuleFor(x => x.CariesType)
+            .NotNull()
+            .When(x => ToothFindingRules.RequiresCariesDetails(x.Condition))
+            .WithMessage("Indique el tipo de caries.");
+        RuleFor(x => x.Icdas)
+            .NotNull()
+            .When(x => ToothFindingRules.RequiresCariesDetails(x.Condition))
+            .WithMessage("Indique la clasificación ICDAS.");
+        RuleFor(x => x.CariesType)
+            .Null()
+            .When(x => !ToothFindingRules.RequiresCariesDetails(x.Condition));
+        RuleFor(x => x.Icdas)
+            .Null()
+            .When(x => !ToothFindingRules.RequiresCariesDetails(x.Condition));
+        RuleFor(x => x.RestorationMaterial).IsInEnum().When(x => x.RestorationMaterial.HasValue);
+        RuleFor(x => x.Severity).IsInEnum().When(x => x.Severity.HasValue);
+        RuleFor(x => x.Notes).MaximumLength(1000);
+        RuleFor(x => x.ClinicalDiagnosis).MaximumLength(200);
+        RuleFor(x => x.ProposedTreatment).MaximumLength(500);
     }
 }

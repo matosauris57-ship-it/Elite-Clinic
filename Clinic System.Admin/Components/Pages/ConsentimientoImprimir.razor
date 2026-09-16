@@ -1,0 +1,139 @@
+@page "/pacientes/{PatientId:int}/consentimientos/imprimir"
+@layout PrintLayout
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "pacientes.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Clinic_System.Core.Catalog
+@using Clinic_System.Core.Enums
+@using System.Text.Json
+@inject PatientMaintenanceService Patients
+@inject InformedConsentTemplateSettingsService TemplateSettings
+@inject IJSRuntime JS
+
+<PageTitle>Imprimir consentimiento</PageTitle>
+
+<div class="invoice-print-page">
+    <div class="invoice-print-toolbar no-print">
+        <a class="btn-outline" href="/pacientes/@PatientId?tab=consentimientos">Volver a la ficha</a>
+        <button class="btn-primary" disabled="@_loading" @onclick="PrintAsync">Generar PDF / Imprimir</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_loading)
+    {
+        <AnimatedLoader Message="Preparando consentimiento..." />
+    }
+    else
+    {
+        <InformedConsentDocument Title="@_title"
+                                 PatientName="@(_profile?.FullName ?? "Paciente")"
+                                 PatientNationalId="@_profile?.NationalId"
+                                 DoctorName="@_doctorName"
+                                 DoctorSignatureImageUrl="@_doctorSignatureImageUrl"
+                                 ToothNumber="_toothNumber"
+                                 SignedOn="_signedOn"
+                                 BodyText="@_bodyText"
+                                 Notes="@_notes" />
+    }
+</div>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [SupplyParameterFromQuery(Name = "tipo")] public int? Tipo { get; set; }
+    [SupplyParameterFromQuery(Name = "pieza")] public int? ToothNumber { get; set; }
+    [SupplyParameterFromQuery(Name = "medico")] public string? DoctorName { get; set; }
+    [SupplyParameterFromQuery(Name = "notas")] public string? Notes { get; set; }
+    [SupplyParameterFromQuery(Name = "fecha")] public string? Fecha { get; set; }
+
+    private PatientClinicalProfile? _profile;
+    private string _title = "Consentimiento informado";
+    private string _bodyText = "";
+    private string? _doctorName;
+    private string? _doctorSignatureImageUrl;
+    private string? _notes;
+    private int? _toothNumber;
+    private DateTime _signedOn = DateTime.Today;
+    private bool _loading = true;
+    private string? _error;
+    private bool _draftLoaded;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _draftLoaded)
+            return;
+
+        _draftLoaded = true;
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("dentalCareUi.takeConsentPrintDraft");
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("patientId", out var pid) && pid.GetInt32() == PatientId)
+                {
+                    if (root.TryGetProperty("title", out var title))
+                        _title = title.GetString() ?? _title;
+                    if (root.TryGetProperty("bodyText", out var body))
+                        _bodyText = body.GetString() ?? _bodyText;
+                    if (root.TryGetProperty("notes", out var notes))
+                        _notes = notes.GetString();
+                    if (root.TryGetProperty("doctorName", out var doctor))
+                        _doctorName = doctor.GetString();
+                    if (root.TryGetProperty("doctorSignatureImageUrl", out var signature))
+                        _doctorSignatureImageUrl = signature.GetString();
+                    if (root.TryGetProperty("toothNumber", out var tooth) && tooth.ValueKind == JsonValueKind.Number)
+                        _toothNumber = tooth.GetInt32();
+                    if (root.TryGetProperty("signedOn", out var signed) && DateTime.TryParse(signed.GetString(), out var date))
+                        _signedOn = date.Date;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        var type = Enum.IsDefined(typeof(InformedConsentType), Tipo ?? -1)
+            ? (InformedConsentType)Tipo!.Value
+            : InformedConsentType.EvaluationDiagnosis;
+        var catalog = InformedConsentCatalog.GetOrDefault(type);
+        _title = catalog.Title;
+        _bodyText = TemplateSettings.GetBody(type);
+        _doctorName = DoctorName;
+        _notes = Notes;
+        _toothNumber = ToothNumber;
+
+        if (!string.IsNullOrWhiteSpace(Fecha) && DateTime.TryParse(Fecha, out var parsed))
+            _signedOn = parsed.Date;
+
+        var (profile, error) = await Patients.GetClinicalProfileAsync(PatientId);
+        _profile = profile;
+        _error = error;
+        if (_profile == null && string.IsNullOrWhiteSpace(_error))
+            _error = "No se encontró el paciente.";
+
+        _loading = false;
+    }
+
+    private async Task PrintAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareUi.printPage");
+        }
+        catch
+        {
+        }
+    }
+}

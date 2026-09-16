@@ -8,11 +8,16 @@ public class PermissionResolver : IPermissionResolver
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public PermissionResolver(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager)
+    public PermissionResolver(
+        UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager,
+        IUnitOfWork unitOfWork)
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<IReadOnlyList<string>> ResolvePermissionsAsync(string userId, CancellationToken cancellationToken = default)
@@ -22,7 +27,13 @@ public class PermissionResolver : IPermissionResolver
             return [];
 
         var roles = await _userManager.GetRolesAsync(user);
-        return await ResolvePermissionsForRolesAsync(roles, cancellationToken);
+        var permissions = (await ResolvePermissionsForRolesAsync(roles, cancellationToken)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var doctor = await _unitOfWork.DoctorsRepository.GetDoctorByUserIdAsync(userId, cancellationToken);
+        if (doctor is { CanViewAllClinicData: true })
+            permissions.Add(AdminPermissionCatalog.ViewAllClinicData);
+
+        return permissions.ToList();
     }
 
     public async Task<IReadOnlyList<string>> ResolvePermissionsForRolesAsync(IEnumerable<string> roles, CancellationToken cancellationToken = default)

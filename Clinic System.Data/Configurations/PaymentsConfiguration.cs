@@ -92,19 +92,28 @@ namespace Clinic_System.Data.Configurations
             builder.HasOne(p => p.Appointment)
                 .WithOne(a => a.Payment)
                 .HasForeignKey<Payment>(p => p.AppointmentId)
-                .OnDelete(DeleteBehavior.Cascade);
-            // OnDelete(DeleteBehavior.Cascade): عند حذف Appointment، يتم حذف Payment تلقائياً
-            // هذا متسق مع AppointmentsConfiguration حيث Payment لا معنى له بدون Appointment
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired(false);
 
-            // تسمية Foreign Key Column
             builder.Property(p => p.AppointmentId)
                 .HasColumnName("AppointmentId");
 
-            // Index على AppointmentId (لكنه Unique بالفعل بسبب One-to-One)
             builder.HasIndex(p => p.AppointmentId)
                 .IsUnique()
+                .HasFilter("[AppointmentId] IS NOT NULL")
                 .HasDatabaseName("IX_Payments_AppointmentId");
-            // IsUnique: يضمن أن كل Appointment له Payment واحد فقط
+
+            builder.Property(p => p.PatientId)
+                .IsRequired()
+                .HasColumnName("PatientId");
+
+            builder.HasOne(p => p.Patient)
+                .WithMany(pt => pt.Payments)
+                .HasForeignKey(p => p.PatientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasIndex(p => p.PatientId)
+                .HasDatabaseName("IX_Payments_PatientId");
 
             // Composite Index على PaymentDate و PaymentMethod
             builder.HasIndex(p => new { p.PaymentDate, p.PaymentMethod })
@@ -137,11 +146,31 @@ namespace Clinic_System.Data.Configurations
             builder.HasIndex(p => p.CreatedAt)
                 .HasDatabaseName("IX_Payments_CreatedAt");
 
+            builder.Property(p => p.DiscountAmount)
+                .HasColumnType("decimal(18,2)")
+                .HasDefaultValue(0m)
+                .HasColumnName("DiscountAmount");
+
+            builder.Property(p => p.TreatmentPlanId)
+                .HasColumnName("TreatmentPlanId");
+
+            builder.HasOne(p => p.TreatmentPlan)
+                .WithMany(t => t.Invoices)
+                .HasForeignKey(p => p.TreatmentPlanId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
+
+            builder.HasIndex(p => p.TreatmentPlanId)
+                .HasDatabaseName("IX_Payments_TreatmentPlanId");
+
+            builder.Ignore(p => p.Subtotal);
             builder.Ignore(p => p.InvoiceTotal);
             builder.Ignore(p => p.AmountCollected);
             builder.Ignore(p => p.Balance);
             builder.Ignore(p => p.CanEditInvoice);
+            builder.Ignore(p => p.CanAddInvoiceLines);
             builder.Ignore(p => p.CanReceivePayment);
+            builder.Ignore(p => p.CanRefund);
         }
     }
 }

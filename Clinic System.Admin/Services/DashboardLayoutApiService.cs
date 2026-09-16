@@ -59,6 +59,11 @@ public class DashboardLayoutApiService
     public Task<(PeriodontalIncompleteStats? Data, string? Error)> GetPeriodontalIncompleteAsync() =>
         GetAsync<PeriodontalIncompleteStats>("/api/dashboard/periodontal-incomplete", "No se pudieron cargar los periodontogramas.");
 
+    public Task<(List<AttendanceLinkAlertItem>? Data, string? Error)> GetAttendanceLinkAlertsAsync(string period, int take) =>
+        GetAsync<List<AttendanceLinkAlertItem>>(
+            $"/api/dashboard/attendance-link-alerts?period={Uri.EscapeDataString(period)}&take={take}",
+            "No se pudieron cargar las respuestas del enlace.");
+
     private async Task<(T? Data, string? Error)> GetAsync<T>(string url, string fallback)
     {
         try

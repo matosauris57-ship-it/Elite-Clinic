@@ -9,6 +9,7 @@ public static class AuthorizationServiceExtensions
     public static IServiceCollection AddPermissionAuthorization(this IServiceCollection services)
     {
         services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddSingleton<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
         services.AddSingleton<IAuthorizationHandler, AdminPanelAccessHandler>();
 
         services.AddAuthorization(options =>
@@ -102,6 +103,11 @@ public static class AuthorizationServiceExtensions
             RegisterCompositePolicy(options, "agenda.delete+patient",
                 AdminPermissionCatalog.Build("agenda", AdminPermissionCatalog.Actions.Delete),
                 AdminPermissionCatalog.SystemRoles.Patient);
+
+            options.AddPolicy("staff.reset-password", policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    AdminPermissionCatalog.Build("usuarios", AdminPermissionCatalog.Actions.ResetPassword),
+                    AdminPermissionCatalog.Build("recuperacion-contrasena", AdminPermissionCatalog.Actions.ResetPassword))));
         });
 
         return services;

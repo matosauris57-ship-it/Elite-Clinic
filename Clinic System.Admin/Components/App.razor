@@ -1,4 +1,5 @@
 @inject IHttpContextAccessor HttpContextAccessor
+@inject ClinicProfileService ClinicProfile
 
 <!DOCTYPE html>
 <html lang="es" data-theme="@InitialTheme">
@@ -18,6 +19,9 @@
             document.cookie = key + '=' + theme + ';path=/;max-age=31536000;SameSite=Lax';
         })();
     </script>
+    <link rel="icon" type="image/svg+xml" href="@FaviconHref" />
+    <link rel="shortcut icon" href="@FaviconHref" />
+    <link rel="apple-touch-icon" href="@FaviconHref" />
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["css/admin.css"]" />
     <link rel="stylesheet" href="@Assets["css/waiting-room.css"]" />
@@ -30,6 +34,8 @@
     <Routes />
     <ReconnectModal />
     <script src="@Assets["js/theme.js"]"></script>
+    <script src="@Assets["js/rich-text-editor.js"]"></script>
+    <script src="@Assets["js/admin-nav.js"]"></script>
     <script src="@Assets["js/loader-media.js"]"></script>
     <script src="@Assets["js/dashboard-grid.js"]"></script>
     <script src="@Assets["js/waiting-room.js"]"></script>
@@ -46,6 +52,15 @@
 </html>
 
 @code {
+    private string FaviconHref
+    {
+        get
+        {
+            var logo = ClinicProfile.Get().DisplayLogoUrl;
+            return string.IsNullOrWhiteSpace(logo) ? Assets["favicon.svg"] : logo;
+        }
+    }
+
     private string InitialTheme
     {
         get

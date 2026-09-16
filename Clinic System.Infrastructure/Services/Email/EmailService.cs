@@ -1,14 +1,13 @@
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using Clinic_System.Core.Messaging;
 using MimeKit.Utils;
 
 namespace Clinic_System.Infrastructure.Services.Email
 {
     public class EmailService : IEmailService
     {
-        private static readonly Regex HtmlTag = new(@"</?[a-zA-Z][^>]*>", RegexOptions.Compiled);
-
         private readonly IEmailSettingsProvider _emailSettings;
 
         public EmailService(IEmailSettingsProvider emailSettings)
@@ -39,18 +38,20 @@ namespace Clinic_System.Infrastructure.Services.Email
             message.Headers.Replace(HeaderId.Importance, "normal");
 
             var bodybuilder = new BodyBuilder();
-            if (LooksLikeHtml(body))
+            string html;
+            if (MessageBodyFormatting.LooksLikeHtml(body))
             {
-                bodybuilder.HtmlBody = body;
-                bodybuilder.TextBody = ToPlainText(body);
+                html = MessageBodyFormatting.Sanitize(body);
+                bodybuilder.TextBody = MessageBodyFormatting.StripToPlainText(html);
             }
             else
             {
                 var plain = body.Trim();
                 bodybuilder.TextBody = plain;
-                bodybuilder.HtmlBody = ToSimpleHtml(plain);
+                html = "<p>" + WebUtility.HtmlEncode(plain).Replace("\r\n", "\n").Replace("\n", "<br>\n") + "</p>";
             }
 
+            bodybuilder.HtmlBody = WrapHtmlDocument(html);
             message.Body = bodybuilder.ToMessageBody();
 
             using var client = new SmtpClient();
@@ -66,23 +67,14 @@ namespace Clinic_System.Infrastructure.Services.Email
             }
         }
 
-        private static bool LooksLikeHtml(string body) =>
-            !string.IsNullOrWhiteSpace(body) && HtmlTag.IsMatch(body);
-
-        private static string ToPlainText(string html)
+        private static string WrapHtmlDocument(string html)
         {
-            var text = Regex.Replace(html, @"<(br|BR)\s*/?>", "\n");
-            text = Regex.Replace(text, @"</p>", "\n\n", RegexOptions.IgnoreCase);
-            text = HtmlTag.Replace(text, string.Empty);
-            return WebUtility.HtmlDecode(text).Trim();
-        }
+            if (Regex.IsMatch(html, @"<html[\s>]", RegexOptions.IgnoreCase))
+                return html;
 
-        private static string ToSimpleHtml(string plain)
-        {
-            var escaped = WebUtility.HtmlEncode(plain).Replace("\r\n", "\n").Replace("\n", "<br>\n");
             var builder = new StringBuilder();
             builder.Append("<!DOCTYPE html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.5;color:#222\">");
-            builder.Append("<p>").Append(escaped).Append("</p>");
+            builder.Append(html);
             builder.Append("</body></html>");
             return builder.ToString();
         }

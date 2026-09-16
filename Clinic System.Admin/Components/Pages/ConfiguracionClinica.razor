@@ -48,7 +48,7 @@
                 {
                     <button type="button" class="btn-outline" disabled="@_saving" @onclick="RemoveLogo">Quitar logo</button>
                 }
-                <p class="billing-muted">PNG, JPG, WEBP, GIF o SVG. Máximo 2 MB. Se usa en la factura y el menú.</p>
+                <p class="billing-muted">PNG, JPG, WEBP, GIF o SVG. Máximo 2 MB. Si no sube uno, se usa el icono de la clínica (facturas, menú y correos).</p>
             </div>
         </div>
 
@@ -141,8 +141,9 @@
                 <label>URL pública del portal (Admin)</label>
                 <input class="form-input" disabled="@(!_canEdit || _saving)" @bind="_publicSiteUrl" @bind:event="oninput" maxlength="300" placeholder="https://tu-dominio-admin.com" />
                 <p class="billing-muted" style="margin-top:0.35rem;">
-                    Enlace base para que el paciente agende desde el correo de campaña (cualquier horario).
+                    Enlace base para que el paciente solicite cita desde el correo de campaña.
                     Use la misma URL con la que abre el Admin en el navegador.
+                    Las solicitudes se confirman en Campañas → Solicitudes.
                 </p>
             </div>
         </div>

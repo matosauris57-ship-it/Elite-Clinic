@@ -25,12 +25,36 @@ namespace Clinic_System.Application.Mapping.Dental
         public void TreatmentPlanMapping()
         {
             CreateMap<PlanItem, PlanItemDTO>()
-                .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.LineTotal));
+                .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.LineTotal))
+                .ForMember(d => d.UnitPriceDisplay, o => o.MapFrom(s => Money.Format(s.UnitPrice)))
+                .ForMember(d => d.LineTotalDisplay, o => o.MapFrom(s => Money.Format(s.LineTotal)))
+                .ForMember(d => d.AcceptanceStatus, o => o.MapFrom(s => s.AcceptanceStatus.ToString()))
+                .ForMember(d => d.ExecutionStatus, o => o.MapFrom(s => s.ExecutionStatus.ToString()));
 
             CreateMap<TreatmentPlan, TreatmentPlanDTO>()
                 .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()))
                 .ForMember(d => d.TotalAmount, o => o.MapFrom(s => s.TotalAmount))
-                .ForMember(d => d.FinalAmount, o => o.MapFrom(s => s.FinalAmount));
+                .ForMember(d => d.FinalAmount, o => o.MapFrom(s => s.FinalAmount))
+                .ForMember(d => d.TotalAmountDisplay, o => o.MapFrom(s => Money.Format(s.TotalAmount)))
+                .ForMember(d => d.DiscountAmountDisplay, o => o.MapFrom(s => Money.Format(s.DiscountAmount)))
+                .ForMember(d => d.FinalAmountDisplay, o => o.MapFrom(s => Money.Format(s.FinalAmount)))
+                .ForMember(d => d.CanInvoice, o => o.MapFrom(s => s.CanInvoice))
+                .ForMember(d => d.AmountBilled, o => o.MapFrom(s => s.AmountBilled))
+                .ForMember(d => d.AmountBilledDisplay, o => o.MapFrom(s => Money.Format(s.AmountBilled)))
+                .ForMember(d => d.AmountCollectedOnAccount, o => o.MapFrom(s => s.AmountCollectedOnAccount))
+                .ForMember(d => d.AmountCollectedOnAccountDisplay, o => o.MapFrom(s => Money.Format(s.AmountCollectedOnAccount)))
+                .ForMember(d => d.RemainingToBill, o => o.MapFrom(s => s.RemainingToBill))
+                .ForMember(d => d.RemainingToBillDisplay, o => o.MapFrom(s => Money.Format(s.RemainingToBill)))
+                .ForMember(d => d.RemainingToCollect, o => o.MapFrom(s => s.RemainingToCollect))
+                .ForMember(d => d.RemainingToCollectDisplay, o => o.MapFrom(s => Money.Format(s.RemainingToCollect)))
+                .ForMember(d => d.UnbilledCompletedAmount, o => o.MapFrom(s => s.UnbilledCompletedAmount))
+                .ForMember(d => d.UnbilledCompletedAmountDisplay, o => o.MapFrom(s => Money.Format(s.UnbilledCompletedAmount)))
+                .ForMember(d => d.InvoicePaymentIds, o => o.MapFrom(s => s.InvoicePaymentIds.ToList()))
+                .ForMember(d => d.PatientName, o => o.MapFrom(s => s.Patient != null ? s.Patient.FullName : string.Empty))
+                .ForMember(d => d.PatientPhone, o => o.MapFrom(s =>
+                    s.Patient != null ? (s.Patient.MobilePhone ?? s.Patient.Phone) : null))
+                .ForMember(d => d.PatientNationalId, o => o.MapFrom(s =>
+                    s.Patient != null ? s.Patient.NationalId : null));
         }
 
         public void InvoiceLineMapping()

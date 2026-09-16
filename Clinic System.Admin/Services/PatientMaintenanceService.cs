@@ -28,6 +28,40 @@ public class PatientMaintenanceService
 
     private HttpClient Client => _apiClient.Client;
 
+    public async Task<(PagedResult<PatientListItem>? Page, string? Error)> GetPatientsPagedAsync(
+        int pageNumber = 1,
+        int pageSize = 20,
+        string status = "all",
+        string? search = null)
+    {
+        try
+        {
+            var query = new List<string>
+            {
+                $"PageNumber={Math.Max(1, pageNumber)}",
+                $"PageSize={Math.Clamp(pageSize, 1, 100)}",
+                $"Status={Uri.EscapeDataString(string.IsNullOrWhiteSpace(status) ? "all" : status)}"
+            };
+            if (!string.IsNullOrWhiteSpace(search))
+                query.Add($"Search={Uri.EscapeDataString(search.Trim())}");
+
+            using var response = await Client.GetAsync($"/api/patients/paging?{string.Join("&", query)}");
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (null, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (null, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<PagedResult<PatientListItem>>>(JsonOptions);
+            if (body?.Succeeded == true && body.Data != null)
+                return (body.Data, null);
+            return (null, body?.Message ?? "No se pudieron cargar los pacientes.");
+        }
+        catch (Exception ex)
+        {
+            return (null, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
     public async Task<(List<PatientListItem> Patients, string? Error)> GetPatientsAsync(bool includeInactive = true)
     {
         try
@@ -68,42 +102,46 @@ public class PatientMaintenanceService
         }
     }
 
-    public async Task<(bool Success, string? Error, int? Id)> CreatePatientAsync(CreatePatientRequest request)
+    public async Task<(bool Success, string? Error, int? Id, int? DuplicatePatientId)> CreatePatientAsync(CreatePatientRequest request)
     {
         try
         {
             var response = await Client.PostAsJsonAsync("/api/patients", request, JsonOptions);
             if (ApiConnectionMessages.IsRateLimited(response))
-                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), null);
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), null, null);
 
             var body = await response.Content.ReadFromJsonAsync<ApiResponse<CreatedPatientResponse>>(JsonOptions);
             if (body?.Succeeded == true && body.Data != null)
-                return (true, null, body.Data.Id);
-            return (false, body?.Message ?? "No se pudo registrar el paciente.", null);
+                return (true, null, body.Data.Id, null);
+
+            var (error, duplicateId) = PatientSaveErrors.FromApi(body, "No se pudo registrar el paciente.");
+            return (false, error, null, duplicateId);
         }
         catch (Exception ex)
         {
-            return (false, FormatConnectionError(ex) ?? ex.Message, null);
+            return (false, FormatConnectionError(ex) ?? ex.Message, null, null);
         }
     }
 
-    public async Task<(bool Success, string? Error)> UpdatePatientAsync(int id, UpdatePatientRequest request)
+    public async Task<(bool Success, string? Error, int? DuplicatePatientId)> UpdatePatientAsync(int id, UpdatePatientRequest request)
     {
         try
         {
             request.Id = id;
             var response = await Client.PutAsJsonAsync($"/api/patients/{id}", request, JsonOptions);
             if (ApiConnectionMessages.IsRateLimited(response))
-                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), null);
 
             var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(JsonOptions);
             if (body?.Succeeded == true)
-                return (true, null);
-            return (false, body?.Message ?? "No se pudo actualizar el paciente.");
+                return (true, null, null);
+
+            var (error, duplicateId) = PatientSaveErrors.FromApi(body, "No se pudo actualizar el paciente.");
+            return (false, error, duplicateId);
         }
         catch (Exception ex)
         {
-            return (false, FormatConnectionError(ex) ?? ex.Message);
+            return (false, FormatConnectionError(ex) ?? ex.Message, null);
         }
     }
 

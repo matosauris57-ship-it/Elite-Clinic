@@ -2,6 +2,8 @@
 @using Clinic_System.Core.Finance
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "tratamientos.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Clinic_System.Core.Enums
+@using Clinic_System.Core.Validation
 @inject TreatmentProcedureMaintenanceService ProcedureService
 @inject AuthService AuthService
 @inject PermissionService PermissionService
@@ -105,6 +107,7 @@
                             @item.DurationMinutes min
                         </span>
                         <span class="tx-price">@FormatProcedurePrice(item)</span>
+                        <span class="tx-duration">@TreatmentProcedureRules.TargetLabel(item.Target)</span>
                     </div>
                     <div class="tx-procedure-actions">
                         @if (_canEditProcedure)
@@ -181,6 +184,26 @@
                                placeholder="0.00" @bind="_procedureForm.PriceInput" @bind:event="oninput" />
                     </div>
                 }
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Alcance clínico</label>
+                        <select class="form-input" @bind="_procedureForm.Target">
+                            <option value="@TreatmentProcedureTarget.WholeMouth">Boca completa</option>
+                            <option value="@TreatmentProcedureTarget.PerTooth">Por pieza</option>
+                            <option value="@TreatmentProcedureTarget.PerSurface">Por superficie</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Piezas permitidas</label>
+                        <select class="form-input" @bind="_procedureForm.ToothKindFilter">
+                            <option value="@TreatmentToothKindFilter.Any">Cualquier pieza</option>
+                            <option value="@TreatmentToothKindFilter.Molar">Solo molares</option>
+                            <option value="@TreatmentToothKindFilter.Permanent">Solo permanentes</option>
+                            <option value="@TreatmentToothKindFilter.Anterior">Solo anteriores</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="rx-hint">Una extracción o endodoncia es por pieza. Una limpieza o radiografía panorámica es de boca completa. Un sellante requiere superficie.</p>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="checkbox-label">
@@ -325,7 +348,8 @@
         {
             Category = Categories[0],
             DurationMinutes = 30,
-            PricingMode = "AtBooking"
+            PricingMode = "AtBooking",
+            Target = TreatmentProcedureTarget.PerTooth
         };
         _showProcedureModal = true;
     }
@@ -344,7 +368,9 @@
             IsActive = item.IsActive,
             PricingMode = string.IsNullOrWhiteSpace(item.PricingMode) ? "AtBooking" : item.PricingMode,
             PriceInput = item.IsFixedPrice ? item.PriceRaw : string.Empty,
-            Price = item.Price
+            Price = item.Price,
+            Target = item.Target,
+            ToothKindFilter = item.ToothKindFilter
         };
         _showProcedureModal = true;
     }
@@ -404,6 +430,8 @@
                 PricingMode = _procedureForm.PricingMode,
                 DurationMinutes = _procedureForm.DurationMinutes,
                 IsActive = _procedureForm.IsActive,
+                Target = _procedureForm.Target,
+                ToothKindFilter = _procedureForm.ToothKindFilter,
                 DoctorPrices = []
             };
             var (success, error) = await ProcedureService.UpdateProcedureAsync(_editingProcedureId, update);

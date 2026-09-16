@@ -100,11 +100,13 @@ public class ToothChartService
 
         request.ToothNumber = numbers[0];
         request.ToothNumbers = numbers;
+        request.Surfaces = ResolveSurfaces(request);
+        request.Surface = request.Surfaces[0];
 
         if (numbers.Count == 1)
         {
             var single = await CreateEntryAsync(request);
-            return single.Error == null ? (1, null) : (0, single.Error);
+            return single.Error == null ? (request.Surfaces.Count, null) : (0, single.Error);
         }
 
         var batch = await CreateEntriesBatchAsync(ToBatchRequest(request, numbers));
@@ -172,6 +174,87 @@ public class ToothChartService
         }
     }
 
+    public async Task<(ToothChartEntry? Entry, string? Error)> GetEntryAsync(long id)
+    {
+        try
+        {
+            using var response = await Client.GetAsync($"/api/dental/odontogram/entries/{id}");
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+                return (null, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (null, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<ToothChartEntry>>(JsonOptions);
+            return body?.Succeeded == true && body.Data != null
+                ? (body.Data, null)
+                : (null, FormatApiError(body, "No se pudo cargar el hallazgo."));
+        }
+        catch (Exception ex)
+        {
+            return (null, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
+    public async Task<(ToothChartEntry? Entry, string? Error)> UpdateEntryAsync(
+        long id,
+        CreateToothChartEntryRequest request)
+    {
+        try
+        {
+            using var response = await Client.PutAsJsonAsync(
+                $"/api/dental/odontogram/entries/{id}",
+                new
+                {
+                    request.Surface,
+                    request.Phase,
+                    request.Condition,
+                    request.RestorationMaterial,
+                    request.CariesType,
+                    request.Icdas,
+                    request.Severity,
+                    request.ClinicalDiagnosis,
+                    request.ProposedTreatment,
+                    request.Notes
+                },
+                JsonOptions);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+                return (null, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (null, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<ToothChartEntry>>(JsonOptions);
+            return body?.Succeeded == true && body.Data != null
+                ? (body.Data, null)
+                : (null, FormatApiError(body, "No se pudo actualizar el hallazgo."));
+        }
+        catch (Exception ex)
+        {
+            return (null, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
+    public async Task<(bool Success, string? Error)> VoidEntryAsync(long id)
+    {
+        try
+        {
+            using var response = await Client.DeleteAsync($"/api/dental/odontogram/entries/{id}");
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+                return (false, ApiConnectionMessages.UnauthorizedSession(_tokenStorage));
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<string>>(JsonOptions);
+            return body?.Succeeded == true
+                ? (true, null)
+                : (false, FormatApiError(body, "No se pudo anular el hallazgo."));
+        }
+        catch (Exception ex)
+        {
+            return (false, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
     public async Task<(List<DentalClinicalEvent> Events, string? Error)> GetTimelineAsync(
         int patientId,
         int? toothNumber = null)
@@ -206,6 +289,7 @@ public class ToothChartService
         PatientId = request.PatientId,
         ToothNumbers = [.. teeth],
         Surface = request.Surface,
+        Surfaces = [.. request.Surfaces],
         Phase = request.Phase,
         Condition = request.Condition,
         RestorationMaterial = request.RestorationMaterial,
@@ -219,6 +303,19 @@ public class ToothChartService
         BridgeSpanId = request.BridgeSpanId,
         BridgeUnits = request.BridgeUnits
     };
+
+    private static List<ToothSurface> ResolveSurfaces(CreateToothChartEntryRequest request)
+    {
+        var faces = new[]
+        {
+            ToothSurface.Mesial,
+            ToothSurface.OcclusalIncisal,
+            ToothSurface.Distal,
+            ToothSurface.BuccalFacial,
+            ToothSurface.LingualPalatal
+        }.Where(request.Surfaces.Contains).Distinct().ToList();
+        return faces.Count > 0 ? faces : [request.Surface];
+    }
 
     private string? FormatConnectionError(Exception ex) =>
         ApiConnectionMessages.IsConnectionFailure(ex)

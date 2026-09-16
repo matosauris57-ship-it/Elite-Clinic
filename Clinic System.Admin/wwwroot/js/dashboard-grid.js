@@ -23,7 +23,20 @@ window.dentalCareDashboardGrid = (function () {
         return Number.isFinite(n) ? n : fallback;
     }
 
+    function readPlacement(cell) {
+        return {
+            x: readInt(cell.getAttribute('data-x') || cell.style.getPropertyValue('--x'), 0),
+            y: readInt(cell.getAttribute('data-y') || cell.style.getPropertyValue('--y'), 0),
+            w: readInt(cell.getAttribute('data-w') || cell.style.getPropertyValue('--w'), 3),
+            h: readInt(cell.getAttribute('data-h') || cell.style.getPropertyValue('--h'), 2)
+        };
+    }
+
     function applyPlacement(cell, x, y, w, h) {
+        cell.setAttribute('data-x', String(x));
+        cell.setAttribute('data-y', String(y));
+        cell.setAttribute('data-w', String(w));
+        cell.setAttribute('data-h', String(h));
         cell.style.setProperty('--x', String(x));
         cell.style.setProperty('--y', String(y));
         cell.style.setProperty('--w', String(w));
@@ -33,14 +46,37 @@ window.dentalCareDashboardGrid = (function () {
         cell.style.transform = '';
     }
 
+    function isDragSource(target) {
+        if (!target || !target.closest) return false;
+        if (target.closest('.widget-tool-btn') || target.closest('.widget-resize-handle'))
+            return false;
+        return !!(target.closest('.widget-drag-handle') || target.closest('.widget-toolbar'));
+    }
+
     function notify(inst, id, x, y, w, h) {
         if (!inst.dotNet || !id) return;
         inst.dotNet.invokeMethodAsync('OnCellMoved', id, x, y, w, h);
     }
 
+    function bind(inst) {
+        var opts = { capture: true, passive: false };
+        inst.el.addEventListener('pointerdown', inst.onPointerDown, opts);
+        window.addEventListener('pointermove', inst.onPointerMove, opts);
+        window.addEventListener('pointerup', inst.onPointerUp, opts);
+        window.addEventListener('pointercancel', inst.onPointerUp, opts);
+    }
+
+    function unbind(inst) {
+        var opts = { capture: true };
+        inst.el.removeEventListener('pointerdown', inst.onPointerDown, opts);
+        window.removeEventListener('pointermove', inst.onPointerMove, opts);
+        window.removeEventListener('pointerup', inst.onPointerUp, opts);
+        window.removeEventListener('pointercancel', inst.onPointerUp, opts);
+    }
+
     function init(elementId, editMode, dotNetRef) {
         var el = document.getElementById(elementId);
-        if (!el) return;
+        if (!el) return false;
         destroy(elementId);
 
         var inst = { el: el, editMode: !!editMode, dotNet: dotNetRef, drag: null, resize: null };
@@ -49,33 +85,30 @@ window.dentalCareDashboardGrid = (function () {
         inst.onPointerDown = function (event) {
             if (!inst.editMode) return;
             if (event.button != null && event.button !== 0) return;
-            var handle = event.target.closest('.widget-drag-handle');
+            if (!inst.el.contains(event.target)) return;
+
             var resize = event.target.closest('.widget-resize-handle');
+            var dragging = !resize && isDragSource(event.target);
+            if (!resize && !dragging) return;
+
             var cell = event.target.closest('.dash-cell');
-            if (!cell || !inst.el.contains(cell) || (!handle && !resize)) return;
+            if (!cell || !inst.el.contains(cell)) return;
+
             event.preventDefault();
             event.stopPropagation();
 
-            var id = cell.getAttribute('data-widget-id');
-            var x = readInt(cell.style.getPropertyValue('--x'), 0);
-            var y = readInt(cell.style.getPropertyValue('--y'), 0);
-            var w = readInt(cell.style.getPropertyValue('--w'), 3);
-            var h = readInt(cell.style.getPropertyValue('--h'), 2);
-            var minW = readInt(cell.getAttribute('data-min-w'), 2);
-            var minH = readInt(cell.getAttribute('data-min-h'), 2);
-            var maxW = readInt(cell.getAttribute('data-max-w'), 12);
-            var maxH = readInt(cell.getAttribute('data-max-h'), 8);
+            var place = readPlacement(cell);
             var start = {
-                id: id,
+                id: cell.getAttribute('data-widget-id'),
                 cell: cell,
-                x: x,
-                y: y,
-                w: w,
-                h: h,
-                minW: minW,
-                minH: minH,
-                maxW: maxW,
-                maxH: maxH,
+                x: place.x,
+                y: place.y,
+                w: place.w,
+                h: place.h,
+                minW: readInt(cell.getAttribute('data-min-w'), 2),
+                minH: readInt(cell.getAttribute('data-min-h'), 2),
+                maxW: readInt(cell.getAttribute('data-max-w'), 12),
+                maxH: readInt(cell.getAttribute('data-max-h'), 8),
                 pointerX: event.clientX,
                 pointerY: event.clientY,
                 pointerId: event.pointerId
@@ -90,14 +123,13 @@ window.dentalCareDashboardGrid = (function () {
             }
 
             try { cell.setPointerCapture(event.pointerId); } catch (e) { }
-            window.addEventListener('pointermove', inst.onPointerMove);
-            window.addEventListener('pointerup', inst.onPointerUp);
-            window.addEventListener('pointercancel', inst.onPointerUp);
         };
 
         inst.onPointerMove = function (event) {
             var action = inst.drag || inst.resize;
             if (!action) return;
+            if (action.pointerId != null && event.pointerId !== action.pointerId) return;
+            event.preventDefault();
             var cell = action.cell;
             if (inst.drag) {
                 cell.style.transform = 'translate(' + (event.clientX - action.pointerX) + 'px,' + (event.clientY - action.pointerY) + 'px)';
@@ -105,7 +137,7 @@ window.dentalCareDashboardGrid = (function () {
                 var m = metrics(inst.el);
                 var dw = Math.round((event.clientX - action.pointerX) / (m.col + m.gap));
                 var dh = Math.round((event.clientY - action.pointerY) / m.row);
-                var nextW = clamp(action.w + dw, action.minW, Math.min(action.maxW, m.cols));
+                var nextW = clamp(action.w + dw, action.minW, Math.min(action.maxW, m.cols - action.x));
                 var nextH = clamp(action.h + dh, action.minH, action.maxH);
                 applyPlacement(cell, action.x, action.y, nextW, nextH);
             }
@@ -114,6 +146,7 @@ window.dentalCareDashboardGrid = (function () {
         inst.onPointerUp = function (event) {
             var action = inst.drag || inst.resize;
             if (!action) return;
+            if (action.pointerId != null && event.pointerId !== action.pointerId) return;
             var cell = action.cell;
             cell.classList.remove('is-dragging', 'is-resizing');
             try { cell.releasePointerCapture(action.pointerId); } catch (e) { }
@@ -141,29 +174,25 @@ window.dentalCareDashboardGrid = (function () {
 
             inst.drag = null;
             inst.resize = null;
-            window.removeEventListener('pointermove', inst.onPointerMove);
-            window.removeEventListener('pointerup', inst.onPointerUp);
-            window.removeEventListener('pointercancel', inst.onPointerUp);
         };
 
-        el.addEventListener('pointerdown', inst.onPointerDown);
-        el.addEventListener('pointermove', inst.onPointerMove);
-        el.addEventListener('pointerup', inst.onPointerUp);
-        el.addEventListener('pointercancel', inst.onPointerUp);
+        bind(inst);
+        return true;
     }
 
     function setEditMode(elementId, editMode) {
         var inst = instances[elementId];
-        if (inst) inst.editMode = !!editMode;
+        var el = document.getElementById(elementId);
+        if (!inst || !el || inst.el !== el)
+            return init(elementId, editMode, inst ? inst.dotNet : null);
+        inst.editMode = !!editMode;
+        return true;
     }
 
     function destroy(elementId) {
         var inst = instances[elementId];
         if (!inst) return;
-        inst.el.removeEventListener('pointerdown', inst.onPointerDown);
-        inst.el.removeEventListener('pointermove', inst.onPointerMove);
-        inst.el.removeEventListener('pointerup', inst.onPointerUp);
-        inst.el.removeEventListener('pointercancel', inst.onPointerUp);
+        unbind(inst);
         delete instances[elementId];
     }
 

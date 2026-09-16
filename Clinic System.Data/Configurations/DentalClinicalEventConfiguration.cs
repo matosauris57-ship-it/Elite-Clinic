@@ -11,6 +11,8 @@ public class DentalClinicalEventConfiguration : IEntityTypeConfiguration<DentalC
         builder.Property(x => x.ReferenceType).HasMaxLength(100);
         builder.Property(x => x.ReferenceId).HasMaxLength(100);
         builder.Property(x => x.RecordedByUserId).HasMaxLength(450);
+        builder.Property(x => x.IsVoided).HasDefaultValue(false).IsRequired();
+        builder.Property(x => x.VoidedByUserId).HasMaxLength(450);
         builder.HasIndex(x => new { x.PatientId, x.RecordedAt });
         builder.HasIndex(x => new { x.PatientId, x.ToothNumber, x.RecordedAt });
 

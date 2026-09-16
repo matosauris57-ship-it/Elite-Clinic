@@ -14,5 +14,6 @@ namespace Clinic_System.Application.DTOs.Patients
         public string CreatedAt { get; set; }
         public string ApplicationUserId { get; set; } = null!;
         public bool IsActive { get; set; } = true;
+        public decimal OutstandingBalance { get; set; }
     }
 }

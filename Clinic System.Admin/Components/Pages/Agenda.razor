@@ -8,6 +8,8 @@
 @inject WhatsAppMessageSettingsService WhatsAppSettings
 @inject EmailMessageSettingsService EmailMessageSettings
 @inject AttendanceConfirmationService AttendanceService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 
 <PageTitle>Agenda — DentalCare Admin</PageTitle>
@@ -78,13 +80,22 @@
             <div class="agenda-filters">
                 <div class="form-group">
                     <label>Médico</label>
-                    <select class="form-input" disabled="@_loading" @bind="_doctorFilter" @bind:after="OnRemoteFilterChangedAsync">
-                        <option value="0">Todos los médicos</option>
-                        @foreach (var doc in _doctors)
-                        {
-                            <option value="@doc.Id">@doc.FullName</option>
-                        }
-                    </select>
+                    @if (_restrictsOwnData)
+                    {
+                        <select class="form-input" disabled="true">
+                            <option>@(SelectedDoctorForActions?.FullName ?? "Sus citas")</option>
+                        </select>
+                    }
+                    else
+                    {
+                        <select class="form-input" disabled="@_loading" @bind="_doctorFilter" @bind:after="OnRemoteFilterChangedAsync">
+                            <option value="0">Todos los médicos</option>
+                            @foreach (var doc in _doctors)
+                            {
+                                <option value="@doc.Id">@doc.FullName</option>
+                            }
+                        </select>
+                    }
                 </div>
                 <div class="form-group">
                     <label>Estado</label>
@@ -93,6 +104,7 @@
                         <option value="Pending">Pendiente</option>
                         <option value="Confirmed">Confirmada</option>
                         <option value="Rescheduled">Reagendada</option>
+                        <option value="InProgress">En atención</option>
                         <option value="Completed">Completada</option>
                         <option value="Cancelled">Cancelada</option>
                         <option value="NoShow">No asistió</option>
@@ -279,7 +291,7 @@
 @if (_showDetailModal && _selectedAppointment != null)
 {
     <div class="modal-overlay" @onclick="CloseDetailModal">
-        <div class="modal-panel modal-panel-wide" @onclick:stopPropagation="true">
+        <div class="modal-panel modal-panel-wide agenda-detail-modal" @onclick:stopPropagation="true">
             <div class="modal-header">
                 <h2>Detalle de cita</h2>
                 <button class="modal-close" @onclick="CloseDetailModal">×</button>
@@ -292,22 +304,90 @@
                 <div><span>Especialidad</span><strong>@_selectedAppointment.Specialization</strong></div>
                 <div><span>Fecha y hora</span><strong>@_selectedAppointment.AppointmentDate</strong></div>
                 <div><span>Estado</span><strong><span class="status-badge @GetStatusClass(_selectedAppointment.Status)">@FormatStatus(_selectedAppointment.Status)</span></strong></div>
+                @if (_selectedAppointment.Status == "Cancelled")
+                {
+                    <div><span>Cancelada por</span><strong>@FormatCancellationChannel(_selectedAppointment.CancellationChannel)</strong></div>
+                    <div><span>Fecha de cancelación</span><strong>@( _selectedAppointment.CancelledAt?.ToString("dd/MM/yyyy HH:mm") ?? "—")</strong></div>
+                    <div class="agenda-cancel-comment"><span>Comentario</span><strong>@(string.IsNullOrWhiteSpace(_selectedAppointment.CancellationComment) ? "Sin comentario" : _selectedAppointment.CancellationComment)</strong></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_selectedAppointment.ProcedureName) || _selectedAppointment.ToothNumber.HasValue || _selectedAppointment.PlanItemId.HasValue)
+                {
+                    <div><span>Motivo / procedimiento</span><strong>@(string.IsNullOrWhiteSpace(_selectedAppointment.ProcedureName) ? "Tratamiento del plan" : _selectedAppointment.ProcedureName)</strong></div>
+                    <div><span>Pieza</span><strong>@(_selectedAppointment.ToothNumber?.ToString() ?? "—")</strong></div>
+                    @if (_selectedAppointment.TreatmentPlanId.HasValue)
+                    {
+                        <div><span>Plan</span><strong>#@_selectedAppointment.TreatmentPlanId</strong></div>
+                    }
+                }
+                @if (_selectedAppointment.Status == "Completed")
+                {
+                    <div><span>Factura</span><strong>@(_selectedAppointment.PaymentId is > 0 ? $"#{_selectedAppointment.PaymentId}" : "Sin factura")</strong></div>
+                }
             </div>
             <PatientClinicalHistoryPanel PatientId="_selectedAppointment.PatientId"
                                          PatientName="@_selectedAppointment.PatientFullName"
                                          Collapsible="true" />
-            <div class="modal-actions">
-                <button class="btn-outline" @onclick="CloseDetailModal">Cerrar</button>
+            @if (!string.IsNullOrEmpty(_actionMessage))
+            {
+                <div class="@(_actionIsSuccess ? "wizard-success" : "wizard-error") agenda-detail-feedback">@_actionMessage</div>
+            }
+            <div class="agenda-detail-footer">
+                @if (CanCallPatientToWaitingRoom)
+                {
+                    <button type="button" class="btn-primary agenda-call-btn" disabled="@_saving" @onclick="CallPatientAsync">
+                        <Icon Name="megaphone" Class="btn-svg" />
+                        @(_saving ? "Llamando..." : "Llamar paciente a la sala")
+                    </button>
+                    <p class="agenda-call-hint">Se muestra en la pantalla de sala de espera para que pase con el médico.</p>
+                }
                 @if (_selectedAppointment.Status != "Cancelled")
                 {
-                    <button class="btn-outline" @onclick="() => OpenWhatsAppReminder(_selectedAppointment)">Recordatorio WhatsApp</button>
-                    <button class="btn-outline" @onclick="() => OpenEmailReminder(_selectedAppointment)">Recordatorio correo</button>
-                    <button class="btn-outline" @onclick="() => OpenAttendanceWhatsAppAsync(_selectedAppointment)">Enlace asistencia WS</button>
-                    <button class="btn-outline" @onclick="() => OpenAttendanceEmailAsync(_selectedAppointment)">Enlace asistencia correo</button>
-                    <button class="btn-outline" @onclick='() => OpenDoctorAppointmentWhatsApp(_selectedAppointment, "Recordatorio")'>WhatsApp doctor</button>
-                    <button class="btn-outline" @onclick='() => OpenDoctorAppointmentEmail(_selectedAppointment, "Recordatorio")'>Correo doctor</button>
+                    <div class="agenda-comm-groups">
+                        <div class="agenda-comm-group">
+                            <h3>Recordatorio al paciente</h3>
+                            <button type="button" class="btn-outline" @onclick="() => OpenWhatsAppReminder(_selectedAppointment)">
+                                <Icon Name="message-circle" Class="btn-svg" /> WhatsApp
+                            </button>
+                            <button type="button" class="btn-outline" @onclick="() => OpenEmailReminder(_selectedAppointment)">
+                                <Icon Name="mail" Class="btn-svg" /> Correo
+                            </button>
+                        </div>
+                        <div class="agenda-comm-group">
+                            <h3>Enlace de asistencia</h3>
+                            <button type="button" class="btn-outline" @onclick="() => OpenAttendanceWhatsAppAsync(_selectedAppointment)">
+                                <Icon Name="message-circle" Class="btn-svg" /> WhatsApp
+                            </button>
+                            <button type="button" class="btn-outline" @onclick="() => OpenAttendanceEmailAsync(_selectedAppointment)">
+                                <Icon Name="mail" Class="btn-svg" /> Correo
+                            </button>
+                        </div>
+                        <div class="agenda-comm-group">
+                            <h3>Avisar al médico</h3>
+                            <button type="button" class="btn-outline" @onclick='() => OpenDoctorAppointmentWhatsApp(_selectedAppointment, "Recordatorio")'>
+                                <Icon Name="message-circle" Class="btn-svg" /> WhatsApp
+                            </button>
+                            <button type="button" class="btn-outline" @onclick='() => OpenDoctorAppointmentEmail(_selectedAppointment, "Recordatorio")'>
+                                <Icon Name="mail" Class="btn-svg" /> Correo
+                            </button>
+                        </div>
+                    </div>
                 }
-                <button class="btn-primary" @onclick="() => { CloseDetailModal(); OpenActionsMenu(_selectedAppointment!); }">Acciones</button>
+                <div class="agenda-detail-footer-bar">
+                    <button type="button" class="btn-outline" @onclick="CloseDetailModal">Cerrar</button>
+                    @if (CanStartConsultation(_selectedAppointment.Status))
+                    {
+                        <button type="button" class="btn-primary" disabled="@_saving" @onclick="StartConsultationAsync">
+                            @(_selectedAppointment.Status == "InProgress" ? "Continuar consulta" : "Iniciar consulta")
+                        </button>
+                    }
+                    @if (CanCollectAppointment(_selectedAppointment))
+                    {
+                        <button type="button" class="btn-primary" disabled="@_saving" @onclick="() => GoToInvoice(_selectedAppointment)">
+                            Cobrar factura
+                        </button>
+                    }
+                    <button type="button" class="btn-primary" @onclick="() => { CloseDetailModal(); OpenActionsMenu(_selectedAppointment!); }">Acciones</button>
+                </div>
             </div>
         </div>
     </div>
@@ -323,18 +403,31 @@
             </div>
             @if (!string.IsNullOrEmpty(_actionMessage))
             {
-                <div class="wizard-error agenda-action-message">@_actionMessage</div>
+                <div class="@(_actionIsSuccess ? "wizard-success" : "wizard-error") agenda-action-message">@_actionMessage</div>
             }
             <div class="agenda-actions-grid">
                 @if (_selectedAppointment.Status == "Pending")
                 {
                     <button class="btn-primary" disabled="@_saving" @onclick="OpenConfirmModal">Confirmar</button>
                 }
+                @if (CanStartConsultation(_selectedAppointment.Status))
+                {
+                    <button class="btn-primary" disabled="@_saving" @onclick="StartConsultationAsync">
+                        @(_selectedAppointment.Status == "InProgress" ? "Continuar consulta" : "Iniciar consulta")
+                    </button>
+                }
                 @if (_selectedAppointment.Status is "Confirmed" or "Rescheduled" or "Pending")
                 {
                     <button class="btn-outline" disabled="@_saving" @onclick="OpenRescheduleModal">Reagendar</button>
-                    <button class="btn-outline" disabled="@_saving" @onclick="OpenCompleteModal">Completar</button>
                     <button class="btn-outline" disabled="@_saving" @onclick="OpenNoShowModal">No asistió</button>
+                }
+                @if (_selectedAppointment.Status == "InProgress")
+                {
+                    <button class="btn-outline" disabled="@_saving" @onclick="OpenCompleteModal">Completar</button>
+                }
+                @if (CanCollectAppointment(_selectedAppointment))
+                {
+                    <button class="btn-primary" disabled="@_saving" @onclick="() => GoToInvoice(_selectedAppointment)">Cobrar factura</button>
                 }
                 @if (_selectedAppointment.Status is not "Completed" and not "Cancelled" and not "NoShow")
                 {
@@ -342,7 +435,7 @@
                 }
                 @if (_selectedAppointment.Status is not "Cancelled" and not "Completed")
                 {
-                    <button class="btn-outline" disabled="@_saving" @onclick="CallPatientAsync">Llamar paciente</button>
+                    <button class="btn-outline" disabled="@_saving" @onclick="CallPatientAsync">Llamar paciente a la sala</button>
                 }
                 @if (_selectedAppointment.Status != "Cancelled")
                 {
@@ -367,24 +460,7 @@
                 <button class="modal-close" @onclick="CloseConfirmModal">×</button>
             </div>
             @if (!string.IsNullOrEmpty(_modalError)) { <div class="wizard-error">@_modalError</div> }
-            <div class="new-patient-form">
-                <div class="form-group">
-                    <label>Método de pago</label>
-                    <select class="form-input" @bind="_confirmForm.method">
-                        <option value="Cash">Efectivo</option>
-                        <option value="CreditCard">Tarjeta</option>
-                        <option value="InstaPay">InstaPay</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Monto (opcional)</label>
-                    <input class="form-input" type="number" step="0.01" @bind="_confirmForm.amount" />
-                </div>
-                <div class="form-group">
-                    <label>Notas</label>
-                    <textarea class="form-input" rows="2" @bind="_confirmForm.Notes"></textarea>
-                </div>
-            </div>
+            <p class="modal-confirm-text">Se confirmará la asistencia de @_selectedAppointment.PatientFullName. Luego puede iniciar la consulta desde el detalle de la cita.</p>
             <div class="modal-actions">
                 <button class="btn-outline" @onclick="CloseConfirmModal">Cancelar</button>
                 <button class="btn-primary" disabled="@_saving" @onclick="ConfirmAsync">@(_saving ? "Confirmando..." : "Confirmar")</button>
@@ -402,17 +478,14 @@
                 <button class="modal-close" @onclick="CloseCancelModal">×</button>
             </div>
             @if (!string.IsNullOrEmpty(_modalError)) { <div class="wizard-error">@_modalError</div> }
-            @if (IsWithinOneHour(_selectedAppointment))
-            {
-                <div class="wizard-error">No se puede cancelar: faltan menos de 1 hora para la cita.</div>
-            }
-            else
-            {
-                <p>¿Cancelar la cita de <strong>@_selectedAppointment.PatientFullName</strong> el @_selectedAppointment.AppointmentDate?</p>
-            }
+            <p>¿Cancelar la cita de <strong>@_selectedAppointment.PatientFullName</strong> el @_selectedAppointment.AppointmentDate?</p>
+            <div class="form-group">
+                <label>Comentario (opcional)</label>
+                <textarea class="form-input" rows="3" maxlength="500" @bind="_cancelComment" placeholder="Motivo o nota del paciente."></textarea>
+            </div>
             <div class="modal-actions">
                 <button class="btn-outline" @onclick="CloseCancelModal">Volver</button>
-                <button class="btn-primary btn-table-danger" disabled="@(_saving || IsWithinOneHour(_selectedAppointment))" @onclick="CancelAsync">
+                <button class="btn-primary btn-table-danger" disabled="@_saving" @onclick="CancelAsync">
                     @(_saving ? "Cancelando..." : "Confirmar cancelación")
                 </button>
             </div>
@@ -494,6 +567,7 @@
                 <button class="modal-close" @onclick="CloseCompleteModal">×</button>
             </div>
             @if (!string.IsNullOrEmpty(_modalError)) { <div class="wizard-error">@_modalError</div> }
+            <p class="modal-confirm-text">La cita pasará a completada y se abrirá la factura para cobrar el procedimiento de esta visita.</p>
             <div class="new-patient-form">
                 <div class="form-group">
                     <label>Diagnóstico *</label>
@@ -604,6 +678,7 @@
     private string _viewMode = "week";
     private string _search = string.Empty;
     private int _doctorFilter;
+    private bool _restrictsOwnData;
     private string _statusFilter = string.Empty;
     private string _listDateMode = "day";
     private DateTime _rangeFrom = DateTime.Today;
@@ -625,6 +700,7 @@
     private bool _showActionsModal;
     private bool _showConfirmModal;
     private bool _showCancelModal;
+    private string _cancelComment = string.Empty;
     private bool _showRescheduleModal;
     private bool _showCompleteModal;
     private bool _showNoShowModal;
@@ -642,7 +718,9 @@
     private string? _emailError;
     private string? _modalError;
     private string? _actionMessage;
+    private bool _actionIsSuccess;
     private bool _saving;
+    private bool _canViewFacturas;
 
     private ConfirmAppointmentRequest _confirmForm = new();
     private CompleteAppointmentRequest _completeForm = new();
@@ -659,13 +737,23 @@
     protected override async Task OnInitializedAsync()
     {
         ParseQueryParams();
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canViewFacturas = PermissionService.HasPermission(user, "facturacion.view");
+        _restrictsOwnData = PermissionService.RestrictsToOwnDoctorData(user);
         _calendarMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
         _rescheduleMonth = _calendarMonth;
         _doctors = await BookingService.GetDoctorsAsync();
+        if (_restrictsOwnData)
+        {
+            var ownId = PermissionService.GetDoctorId(user);
+            if (ownId.HasValue)
+                _doctorFilter = ownId.Value;
+        }
         var (schedule, _) = await BookingService.GetClinicScheduleAsync();
         if (schedule != null)
             _schedule = schedule;
         await ReloadAgendaAsync();
+        OpenQueriedAppointmentDetail();
     }
 
     private void ParseQueryParams()
@@ -680,7 +768,10 @@
         }
 
         if (query.TryGetValue("id", out var idVal) && int.TryParse(idVal.ToString(), out var id))
+        {
             _highlightId = id;
+            _viewMode = "day";
+        }
 
         if (query.TryGetValue("vista", out var vistaVal))
         {
@@ -726,6 +817,16 @@
 
     private bool IsHighlighted(AppointmentAgendaItem appt) =>
         _highlightId.HasValue && appt.Id == _highlightId.Value;
+
+    private void OpenQueriedAppointmentDetail()
+    {
+        if (!_highlightId.HasValue)
+            return;
+
+        var appt = _appointments.FirstOrDefault(a => a.Id == _highlightId.Value);
+        if (appt != null)
+            OpenDetailModal(appt);
+    }
 
     private int TotalAppointments => _stats?.TotalAppointments ?? 0;
     private int PendingAppointments => _stats?.Pending ?? 0;
@@ -1039,7 +1140,8 @@
             || !string.IsNullOrWhiteSpace(_statusFilter)
             || !string.IsNullOrWhiteSpace(_search);
         _search = string.Empty;
-        _doctorFilter = 0;
+        if (!_restrictsOwnData)
+            _doctorFilter = 0;
         _statusFilter = string.Empty;
         _listDateMode = "day";
         _rangeFrom = DateTime.Today;
@@ -1081,19 +1183,32 @@
     private void OpenDetailModal(AppointmentAgendaItem appt)
     {
         _selectedAppointment = appt;
+        _actionMessage = null;
+        _actionIsSuccess = false;
         _showDetailModal = true;
     }
 
-    private void CloseDetailModal() { _showDetailModal = false; }
+    private void CloseDetailModal()
+    {
+        _showDetailModal = false;
+        _actionMessage = null;
+        _actionIsSuccess = false;
+    }
 
     private void OpenActionsMenu(AppointmentAgendaItem appt)
     {
         _selectedAppointment = appt;
         _actionMessage = null;
+        _actionIsSuccess = false;
         _showActionsModal = true;
     }
 
-    private void CloseActionsModal() { _showActionsModal = false; _actionMessage = null; }
+    private void CloseActionsModal()
+    {
+        _showActionsModal = false;
+        _actionMessage = null;
+        _actionIsSuccess = false;
+    }
 
     private void OpenConfirmModal()
     {
@@ -1122,9 +1237,59 @@
         await ReloadAgendaAsync();
     }
 
+    private static bool CanStartConsultation(string status) =>
+        status is "Pending" or "Confirmed" or "Rescheduled" or "InProgress";
+
+    private bool CanCollectAppointment(AppointmentAgendaItem appointment) =>
+        _canViewFacturas && appointment.Status == "Completed" && appointment.PaymentId is > 0;
+
+    private void GoToInvoice(AppointmentAgendaItem appointment)
+    {
+        if (appointment.PaymentId is not > 0)
+            return;
+
+        CloseWorkflowModals();
+        Navigation.NavigateTo($"/facturacion?pago={appointment.PaymentId}&paciente={appointment.PatientId}");
+    }
+
+    private async Task StartConsultationAsync()
+    {
+        if (_selectedAppointment == null)
+            return;
+
+        _saving = true;
+        _modalError = null;
+        _actionMessage = null;
+        AppointmentAgendaItem? started = _selectedAppointment;
+        if (_selectedAppointment.Status != "InProgress")
+        {
+            var (success, error, appointment) = await AgendaService.StartConsultationAsync(_selectedAppointment.Id);
+            if (!success)
+            {
+                _saving = false;
+                _modalError = error;
+                _actionMessage = error;
+                _actionIsSuccess = false;
+                return;
+            }
+
+            started = appointment ?? _selectedAppointment;
+            started.Status = "InProgress";
+            _selectedAppointment.Status = "InProgress";
+        }
+
+        _saving = false;
+        var patientId = started.PatientId;
+        var appointmentId = started.Id;
+        var motive = string.IsNullOrWhiteSpace(started.ProcedureName) ? "Consulta" : started.ProcedureName;
+        CloseWorkflowModals();
+        Navigation.NavigateTo($"/pacientes/{patientId}?tab=odontograma&cita={appointmentId}&motivo={Uri.EscapeDataString(motive)}");
+    }
+
     private void OpenCancelModal()
     {
         _modalError = null;
+        _cancelComment = string.Empty;
         _showCancelModal = true;
         _showActionsModal = false;
     }
@@ -1139,7 +1304,8 @@
         var (success, error) = await AgendaService.CancelAsync(new CancelAppointmentRequest
         {
             AppointmentId = _selectedAppointment.Id,
-            PatientId = _selectedAppointment.PatientId
+            PatientId = _selectedAppointment.PatientId,
+            Comment = string.IsNullOrWhiteSpace(_cancelComment) ? null : _cancelComment.Trim()
         });
         _saving = false;
         if (!success) { _modalError = error; return; }
@@ -1234,6 +1400,8 @@
 
     private async Task CompleteAsync()
     {
+        if (_selectedAppointment == null)
+            return;
         if (string.IsNullOrWhiteSpace(_completeForm.Diagnosis) || string.IsNullOrWhiteSpace(_completeForm.Description))
         {
             _modalError = "Diagnóstico y descripción son obligatorios.";
@@ -1241,11 +1409,22 @@
         }
         _saving = true;
         _modalError = null;
-        var (success, error) = await AgendaService.CompleteAsync(_completeForm);
+        var patientId = _selectedAppointment.PatientId;
+        var (success, error, paymentId) = await AgendaService.CompleteAsync(_completeForm);
         _saving = false;
         if (!success) { _modalError = error; return; }
-        await SendDoctorAppointmentChangeEmailAsync(_selectedAppointment!, "Cita completada");
+        await SendDoctorAppointmentChangeEmailAsync(_selectedAppointment, "Cita completada");
         CloseWorkflowModals();
+        if (paymentId > 0 && _canViewFacturas)
+        {
+            Navigation.NavigateTo($"/facturacion?pago={paymentId}&paciente={patientId}");
+            return;
+        }
+
+        _actionMessage = paymentId > 0
+            ? "Cita completada y factura creada. Un usuario con acceso a facturación puede cobrarla."
+            : "Cita completada. No se pudo abrir la factura; revísela en facturación.";
+        _actionIsSuccess = true;
         await ReloadAgendaAsync();
     }
 
@@ -1281,7 +1460,8 @@
         _saving = true;
         var (success, error) = await AgendaService.CallPatientAsync(_selectedAppointment.Id);
         _saving = false;
-        _actionMessage = success ? "Paciente llamado a sala de espera." : error;
+        _actionIsSuccess = success;
+        _actionMessage = success ? "Paciente llamado a la sala de espera." : error;
     }
 
     private void CloseWorkflowModals()
@@ -1296,6 +1476,7 @@
         _showEmailModal = false;
         _modalError = null;
         _actionMessage = null;
+        _actionIsSuccess = false;
     }
 
     private void OpenWhatsAppReminder(AppointmentAgendaItem appt)
@@ -1630,20 +1811,27 @@
         CloseEmailModal();
     }
 
-    private static bool IsWithinOneHour(AppointmentAgendaItem appt)
+    private static string FormatCancellationChannel(string? channel) => channel switch
     {
-        var dt = appt.ParsedDate;
-        return dt.HasValue && (dt.Value - DateTime.Now).TotalHours < 1 && dt.Value > DateTime.Now;
-    }
+        "Staff" => "Recepción / clínica",
+        "Patient" => "Paciente (enlace de asistencia)",
+        "System" => "Automática (sistema)",
+        _ => string.IsNullOrWhiteSpace(channel) ? "No registrada" : channel
+    };
 
     private static string FormatSelectedDate(DateTime date) =>
         date.ToString("dddd, d 'de' MMMM yyyy", new System.Globalization.CultureInfo("es-ES"));
+
+    private bool CanCallPatientToWaitingRoom =>
+        _selectedAppointment is not null
+        && _selectedAppointment.Status is not "Cancelled" and not "Completed";
 
     private static string FormatStatus(string status) => status switch
     {
         "Pending" => "Pendiente",
         "Confirmed" => "Confirmada",
         "Rescheduled" => "Reagendada",
+        "InProgress" => "En atención",
         "Completed" => "Completada",
         "Cancelled" => "Cancelada",
         "NoShow" => "No asistió",
@@ -1655,6 +1843,7 @@
         "Pending" => "status-planned",
         "Confirmed" => "status-progress",
         "Rescheduled" => "status-progress",
+        "InProgress" => "status-progress",
         "Completed" => "status-completed",
         "Cancelled" => "status-cancelled",
         "NoShow" => "status-cancelled",

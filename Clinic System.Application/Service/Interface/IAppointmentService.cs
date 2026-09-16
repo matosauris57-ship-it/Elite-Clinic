@@ -16,7 +16,9 @@ namespace Clinic_System.Application.Service.Interface
             CancellationToken cancellationToken = default,
             int? treatmentProcedureId = null,
             decimal? quotedAmount = null,
+            int? planItemId = null,
             bool allowFlexibleSchedule = false);
+        Task<Appointment> StartConsultationAsync(int appointmentId, CancellationToken cancellationToken = default);
         Task<Appointment> RescheduleAppointmentAsync(RescheduleAppointmentCommand command, CancellationToken cancellationToken = default);
         Task<Appointment> CancelAppointmentAsync(CancelAppointmentCommand command, CancellationToken cancellationToken = default);
         Task<Appointment> ConfirmAppointmentAsync(int AppointmentId, int PatientId, PaymentMethod method

@@ -30,15 +30,38 @@ public class DentalWorkflowTransitionTests
     }
 
     [Fact]
-    public void Plan_FollowsDraftApprovedCompletedTransition()
+    public void Plan_FollowsDraftIssuedAcceptedCompletedTransition()
     {
         var plan = new TreatmentPlan();
 
-        plan.Approve();
+        plan.Issue();
+        plan.Status.Should().Be(TreatmentPlanStatus.Issued);
+        plan.Approve("Ana Pérez");
         plan.Complete();
 
         plan.Status.Should().Be(TreatmentPlanStatus.Completed);
+        plan.AcceptedByName.Should().Be("Ana Pérez");
         ((Action)(() => plan.Reject())).Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Plan_BillableLines_ApplyDiscountToLastItems()
+    {
+        var plan = new TreatmentPlan
+        {
+            DiscountAmount = 100,
+            Items =
+            [
+                new PlanItem { ProcedureName = "Corona", Quantity = 1, UnitPrice = 400 },
+                new PlanItem { ProcedureName = "Limpieza", Quantity = 1, UnitPrice = 100 }
+            ]
+        };
+
+        var lines = plan.ToBillableLines();
+
+        lines.Should().HaveCount(2);
+        lines.Sum(x => x.UnitPrice * x.Quantity).Should().Be(400);
+        plan.FinalAmount.Should().Be(400);
     }
 
     [Fact]
@@ -85,5 +108,39 @@ public class DentalWorkflowTransitionTests
                 e.Title == "Tratamiento creado" &&
                 e.RecordedByUserId == "user-1"),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void Appointment_StartConsultation_ThenComplete_DoesNotRequireInvoice()
+    {
+        var appointment = new Appointment { Status = AppointmentStatus.Pending };
+        appointment.StartConsultation();
+        appointment.Status.Should().Be(AppointmentStatus.InProgress);
+        appointment.Complete();
+        appointment.Status.Should().Be(AppointmentStatus.Completed);
+    }
+
+    [Fact]
+    public void PlanApprove_LeavesEachItemPendingUntilAccepted()
+    {
+        var restoration = new PlanItem { ProcedureName = "Restauración 16", Quantity = 1, UnitPrice = 3500 };
+        var cleaning = new PlanItem { ProcedureName = "Limpieza", Quantity = 1, UnitPrice = 2000 };
+        var plan = new TreatmentPlan { Items = [restoration, cleaning] };
+
+        plan.Approve("Paciente");
+
+        restoration.AcceptanceStatus.Should().Be(PlanItemAcceptanceStatus.Pending);
+        cleaning.AcceptanceStatus.Should().Be(PlanItemAcceptanceStatus.Pending);
+
+        restoration.Accept();
+        cleaning.Reject();
+
+        restoration.AcceptanceStatus.Should().Be(PlanItemAcceptanceStatus.Approved);
+        restoration.ExecutionStatus.Should().Be(PlanItemExecutionStatus.Pending);
+        cleaning.AcceptanceStatus.Should().Be(PlanItemAcceptanceStatus.Rejected);
+        plan.BillableCompletedItems.Should().BeEmpty();
+
+        restoration.MarkCompleted();
+        plan.UnbilledCompletedAmount.Should().Be(3500);
     }
 }

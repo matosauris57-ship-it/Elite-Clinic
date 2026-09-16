@@ -13,6 +13,7 @@ public class DashboardLayoutEngineTests
         visible.Should().Contain(DashboardWidgetKeys.AppointmentsTodayKpi);
         visible.Should().Contain(DashboardWidgetKeys.TodayAppointments);
         visible.Should().Contain(DashboardWidgetKeys.SystemStatus);
+        visible.Should().Contain(DashboardWidgetKeys.AttendanceLinkAlerts);
         visible.Should().NotContain(DashboardWidgetKeys.PatientsRegistered);
     }
 
@@ -91,5 +92,51 @@ public class DashboardLayoutEngineTests
         var restored = DashboardLayoutEngine.Normalize(DashboardWidgetCatalog.CreateDefaultLayout());
         DashboardLayoutEngine.VisibleItems(restored).Should().NotBeEmpty();
         restored.Items.First(i => i.WidgetKey == DashboardWidgetKeys.AppointmentsTodayKpi).X.Should().Be(0);
+    }
+
+    [Fact]
+    public void ClinicAvailability_EnablesNewDefaultWidgetsMissingFromStoredClinicLayout()
+    {
+        var clinic = DashboardWidgetCatalog.CreateDefaultLayout();
+        clinic.Items.RemoveAll(i => i.WidgetKey == DashboardWidgetKeys.AttendanceLinkAlerts);
+
+        var user = DashboardWidgetCatalog.CreateDefaultLayout();
+        var hidden = user.Items.First(i => i.WidgetKey == DashboardWidgetKeys.AttendanceLinkAlerts);
+        hidden.Visible = false;
+        hidden.Y = 80;
+
+        var merged = DashboardLayoutEngine.ApplyClinicAvailability(user, clinic);
+        var item = merged.Items.First(i => i.WidgetKey == DashboardWidgetKeys.AttendanceLinkAlerts);
+
+        item.Visible.Should().BeTrue();
+        item.Y.Should().Be(80);
+    }
+
+    [Fact]
+    public void ClinicAvailability_DoesNotResetPositionOfWidgetsTheUserAlreadyPlaced()
+    {
+        var clinic = DashboardWidgetCatalog.CreateDefaultLayout();
+        var user = DashboardWidgetCatalog.CreateDefaultLayout();
+        var alerts = user.Items.First(i => i.WidgetKey == DashboardWidgetKeys.SmartAlerts);
+        alerts.X = 0;
+        alerts.Y = 2;
+
+        var merged = DashboardLayoutEngine.ApplyClinicAvailability(user, clinic);
+        var item = merged.Items.First(i => i.WidgetKey == DashboardWidgetKeys.SmartAlerts);
+
+        item.X.Should().Be(0);
+        item.Y.Should().Be(2);
+    }
+
+    [Fact]
+    public void ForceVisible_TurnsOnAttendanceLinkWidget()
+    {
+        var layout = DashboardWidgetCatalog.CreateDefaultLayout();
+        layout = DashboardLayoutEngine.SetVisible(layout, DashboardWidgetKeys.AttendanceLinkAlerts, false);
+
+        var forced = DashboardLayoutEngine.ForceVisible(layout, DashboardWidgetKeys.AttendanceLinkAlerts);
+        var item = forced.Items.First(i => i.WidgetKey == DashboardWidgetKeys.AttendanceLinkAlerts);
+
+        item.Visible.Should().BeTrue();
     }
 }

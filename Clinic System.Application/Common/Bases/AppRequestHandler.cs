@@ -1,3 +1,5 @@
+using Clinic_System.Core.Authorization;
+
 namespace Clinic_System.Application.Common.Bases
 {
     public abstract class AppRequestHandler<TRequest, TResponse> : ResponseHandler, IRequestHandler<TRequest, Response<TResponse>>
@@ -15,6 +17,21 @@ namespace Clinic_System.Application.Common.Bases
         protected int? CurrentDoctorId => _currentUserService.DoctorId;
         protected int? CurrentPatientId => _currentUserService.PatientId;
         protected bool IsAdmin => _currentUserService.IsAdmin;
+        protected bool RestrictsToOwnDoctorData => _currentUserService.RestrictsToOwnDoctorData;
+        protected bool CanViewAllClinicData => _currentUserService.CanViewAllClinicData;
+
+        protected bool HasDoctorDirectoryPermission(string action) =>
+            IsAdmin ||
+            _currentUserService.HasPermission(AdminPermissionCatalog.Build("medicos", action));
+
+        protected Task<Response<TResponse>?> ValidateDoctorDirectoryAccess(int targetDoctorId, bool requireEdit)
+        {
+            var action = requireEdit ? AdminPermissionCatalog.Actions.Edit : AdminPermissionCatalog.Actions.View;
+            if (HasDoctorDirectoryPermission(action))
+                return Task.FromResult<Response<TResponse>?>(null);
+
+            return ValidateDoctorAccess(targetDoctorId);
+        }
 
         protected Task<Response<TResponse>?> ValidateDoctorAccess(int targetDoctorId)
         {
@@ -40,13 +57,42 @@ namespace Clinic_System.Application.Common.Bases
                 Unauthorized<TResponse>("Acceso denegado. Solo puede consultar sus propios datos."));
         }
 
+        protected int? ApplyDoctorScope(int? requestedDoctorId) =>
+            RestrictsToOwnDoctorData ? CurrentDoctorId : requestedDoctorId;
+
+        protected Task<Response<TResponse>?> ValidateScopedDoctorSelection(int doctorId)
+        {
+            if (!RestrictsToOwnDoctorData)
+                return Task.FromResult<Response<TResponse>?>(null);
+
+            if (CurrentDoctorId == doctorId)
+                return Task.FromResult<Response<TResponse>?>(null);
+
+            return Task.FromResult<Response<TResponse>?>(
+                Unauthorized<TResponse>("Solo puede agendar o consultar citas asignadas a usted."));
+        }
+
         protected Task<(int TargetId, Response<TResponse>? Error)> GetAuthorizedDoctorId(int? requestDoctorId)
         {
-            if (IsAdmin)
+            if (RestrictsToOwnDoctorData)
+            {
+                if (requestDoctorId is > 0 && requestDoctorId != CurrentDoctorId)
+                    return Task.FromResult<(int, Response<TResponse>?)>(
+                        (0, Unauthorized<TResponse>("Acceso denegado. Solo puede consultar sus propios datos.")));
+
+                return Task.FromResult<(int, Response<TResponse>?)>((CurrentDoctorId!.Value, null));
+            }
+
+            if (IsAdmin || CanViewAllClinicData)
             {
                 if (requestDoctorId is null or 0)
+                {
+                    if (CurrentDoctorId.HasValue)
+                        return Task.FromResult<(int, Response<TResponse>?)>((CurrentDoctorId.Value, null));
+
                     return Task.FromResult<(int, Response<TResponse>?)>(
                         (0, BadRequest<TResponse>("Debe indicar el médico.")));
+                }
 
                 return Task.FromResult<(int, Response<TResponse>?)>((requestDoctorId.Value, null));
             }

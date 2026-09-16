@@ -41,6 +41,27 @@ public class TreatmentPlanMaintenanceService
         }
     }
 
+    public async Task<(TreatmentPlanListItem? Item, string? Error)> GetByIdAsync(int planId)
+    {
+        try
+        {
+            using var response = await apiClient.Client.GetAsync($"/api/dental/treatment-plans/{planId}");
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return (null, ApiConnectionMessages.UnauthorizedSession(tokenStorage));
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (null, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<TreatmentPlanListItem>>(JsonOptions);
+            return body?.Succeeded == true && body.Data != null
+                ? (body.Data, null)
+                : (null, FormatApiErrors(body));
+        }
+        catch (Exception ex)
+        {
+            return (null, ConnectionError(ex));
+        }
+    }
+
     public async Task<(bool Success, string? Error)> CreateAsync(CreateTreatmentPlanRequest request)
     {
         try
@@ -54,10 +75,43 @@ public class TreatmentPlanMaintenanceService
         }
     }
 
-    public Task<(bool Success, string? Error)> ApproveAsync(int id) => PutAsync(id, "approve", null);
+    public Task<(bool Success, string? Error)> IssueAsync(int id) => PutAsync(id, "issue", null);
+
+    public Task<(bool Success, string? Error)> ApproveAsync(int id, string? acceptedByName) =>
+        PutAsync(id, "approve", new ApproveTreatmentPlanRequest { AcceptedByName = acceptedByName });
+
     public Task<(bool Success, string? Error)> CompleteAsync(int id) => PutAsync(id, "complete", null);
+
     public Task<(bool Success, string? Error)> RejectAsync(int id, string? reason) =>
         PutAsync(id, "reject", new RejectTreatmentPlanRequest { Reason = reason });
+
+    public Task<(bool Success, string? Error)> AcceptItemAsync(int itemId) =>
+        PutItemAsync(itemId, "accept");
+
+    public Task<(bool Success, string? Error)> RejectItemAsync(int itemId) =>
+        PutItemAsync(itemId, "reject");
+
+    public async Task<(bool Success, string? Error, TreatmentPlanListItem? Plan)> InvoiceAsync(int id, string? amountInput = null, bool completedOnly = false)
+    {
+        try
+        {
+            using var response = await apiClient.Client.PostAsJsonAsync(
+                $"/api/dental/treatment-plans/{id}/invoice",
+                new InvoiceTreatmentPlanRequest { AmountInput = amountInput, CompletedOnly = completedOnly },
+                JsonOptions);
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), null);
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<TreatmentPlanListItem>>(JsonOptions);
+            return body?.Succeeded == true
+                ? (true, null, body.Data)
+                : (false, FormatApiErrors(body), null);
+        }
+        catch (Exception ex)
+        {
+            return (false, ConnectionError(ex), null);
+        }
+    }
 
     private async Task<(bool Success, string? Error)> PutAsync(int id, string action, object? payload)
     {
@@ -66,6 +120,19 @@ public class TreatmentPlanMaintenanceService
             using var response = payload == null
                 ? await apiClient.Client.PutAsync($"/api/dental/treatment-plans/{id}/{action}", null)
                 : await apiClient.Client.PutAsJsonAsync($"/api/dental/treatment-plans/{id}/{action}", payload, JsonOptions);
+            return await ReadOperationAsync(response);
+        }
+        catch (Exception ex)
+        {
+            return (false, ConnectionError(ex));
+        }
+    }
+
+    private async Task<(bool Success, string? Error)> PutItemAsync(int itemId, string action)
+    {
+        try
+        {
+            using var response = await apiClient.Client.PutAsync($"/api/dental/treatment-plans/items/{itemId}/{action}", null);
             return await ReadOperationAsync(response);
         }
         catch (Exception ex)

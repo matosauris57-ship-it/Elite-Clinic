@@ -1,0 +1,19 @@
+@namespace DentalCare.Admin.Components.Shared
+@inject NavigationManager Navigation
+
+@if (PatientId is int id && id > 0)
+{
+    <div class="duplicate-cedula-banner" role="alert">
+        <div>
+            <strong>Esta cédula ya existe</strong>
+            <p>Ya hay un paciente registrado con esa cédula.</p>
+        </div>
+        <button type="button" class="btn-primary" @onclick="() => Go(id)">Ver paciente</button>
+    </div>
+}
+
+@code {
+    [Parameter] public int? PatientId { get; set; }
+
+    private void Go(int id) => Navigation.NavigateTo($"/pacientes/{id}");
+}

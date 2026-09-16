@@ -2,6 +2,7 @@
 @using Microsoft.Extensions.Caching.Memory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject AgendaMaintenanceService AgendaService
+@inject PasswordRecoveryMaintenanceService RecoveryService
 @inject PermissionService PermissionService
 @inject ClinicProfileService ClinicProfile
 @inject IMemoryCache MemoryCache
@@ -24,6 +25,12 @@
                 <div class="logo-title">@_profile.Name</div>
                 <div class="logo-badge">ADMIN</div>
             </div>
+            <button type="button"
+                    class="icon-btn sidebar-close-btn"
+                    aria-label="Cerrar menú"
+                    onclick="window.dentalCareNav.close()">
+                <Icon Name="x" Class="icon-svg" />
+            </button>
         </div>
         <div class="status-pill online">
             <span class="status-dot"></span>
@@ -77,6 +84,7 @@
     private string _roleLabel = "Staff";
     private string _initials = "AD";
     private int? _pendingToday;
+    private int? _pendingPasswordRecovery;
     private bool _canViewConfig;
     private ClinicProfile _profile = new();
 
@@ -94,9 +102,11 @@
         new("clipboard-list", "Historial Clínico", "/historial", NavLinkMatch.Prefix, "historial.view", null, null),
         new("credit-card", "Facturación", "/facturacion", NavLinkMatch.Prefix, "facturacion.view", null, null),
         new("mail", "Campañas", "/campanas", NavLinkMatch.Prefix, "campanas.view", null, null),
+        new("inbox", "Solicitudes campaña", "/campanas/solicitudes", NavLinkMatch.Prefix, "campanas.view", null, "badge-purple"),
         new("bar-chart-2", "Analítica", "/analitica", NavLinkMatch.Prefix, "analitica.view", null, null),
         new("package", "Inventario", "/inventario", NavLinkMatch.Prefix, "inventario.view", null, null),
-        new("file-bar-chart", "Reportes", "/reportes", NavLinkMatch.Prefix, "reportes.view", null, null)
+        new("file-bar-chart", "Reportes", "/reportes", NavLinkMatch.Prefix, "reportes.view", null, null),
+        new("key", "Recuperar contraseña", "/configuracion/recuperacion-contrasena", NavLinkMatch.Prefix, "recuperacion-contrasena.view", null, "badge-purple")
     ];
 
     private List<MenuItem> VisibleMenuItems { get; set; } = [];
@@ -151,10 +161,25 @@
         {
             // Silently ignore if API unavailable during sidebar load
         }
+
+        try
+        {
+            if (PermissionService.HasPermission(user, "recuperacion-contrasena.view"))
+            {
+                var (count, _) = await RecoveryService.GetPendingCountAsync();
+                if (count > 0)
+                    _pendingPasswordRecovery = count;
+            }
+        }
+        catch
+        {
+        }
     }
 
     private int? GetBadge(MenuItem item) =>
-        item.Href == "/agenda" ? _pendingToday : item.Badge;
+        item.Href == "/agenda" ? _pendingToday
+        : item.Href == "/configuracion/recuperacion-contrasena" ? _pendingPasswordRecovery
+        : item.Badge;
 
     private void OnClinicProfileChanged() =>
         _ = InvokeAsync(() =>

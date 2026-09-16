@@ -21,7 +21,8 @@ namespace Clinic_System.Application.Tests.Features.Doctors.QueriesTests.Handlers
                 _mockCurrentUserService.Object, _mockDoctorService.Object,
                 _mockMapper.Object,
                 _mockLogger.Object,
-                _mockCacheService.Object);
+                _mockCacheService.Object,
+                Mock.Of<IIdentityService>());
         }
 
         [Fact]

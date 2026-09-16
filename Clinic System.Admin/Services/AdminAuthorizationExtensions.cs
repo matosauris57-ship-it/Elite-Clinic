@@ -22,6 +22,12 @@ public static class AdminAuthorizationExtensions
                         ctx.User.IsInRole(AdminPermissionCatalog.SystemRoles.Admin) ||
                         ctx.User.HasClaim(AdminPermissionCatalog.ClaimType, permission)));
             }
+
+            options.AddPolicy("staff.reset-password", policy =>
+                policy.RequireAssertion(ctx =>
+                    ctx.User.IsInRole(AdminPermissionCatalog.SystemRoles.Admin) ||
+                    ctx.User.HasClaim(AdminPermissionCatalog.ClaimType, "usuarios.reset-password") ||
+                    ctx.User.HasClaim(AdminPermissionCatalog.ClaimType, "recuperacion-contrasena.reset-password")));
         });
 
         return services;

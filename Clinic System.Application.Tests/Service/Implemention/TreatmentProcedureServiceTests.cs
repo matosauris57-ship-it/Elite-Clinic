@@ -34,7 +34,8 @@ public class TreatmentProcedureServiceTests
 
         var result = await _sut.CreateAsync(
             "LIMP", "PREVENTIVO", "Limpieza", 1500m,
-            TreatmentPricingMode.Fixed, 30, true, CancellationToken.None);
+            TreatmentPricingMode.Fixed, 30, true,
+            TreatmentProcedureTarget.PerTooth, TreatmentToothKindFilter.Any, CancellationToken.None);
 
         result.PricingMode.Should().Be(TreatmentPricingMode.Fixed);
         result.Price.Should().Be(1500m);
@@ -51,7 +52,8 @@ public class TreatmentProcedureServiceTests
 
         var result = await _sut.CreateAsync(
             "ORTO", "ORTODONCIA", "Ajuste", 999m,
-            TreatmentPricingMode.AtBilling, 45, true, CancellationToken.None);
+            TreatmentPricingMode.AtBilling, 45, true,
+            TreatmentProcedureTarget.WholeMouth, TreatmentToothKindFilter.Any, CancellationToken.None);
 
         result.PricingMode.Should().Be(TreatmentPricingMode.AtBilling);
         result.Price.Should().Be(0m);

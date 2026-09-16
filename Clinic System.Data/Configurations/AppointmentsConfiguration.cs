@@ -61,6 +61,35 @@ namespace Clinic_System.Data.Configurations
             builder.Property(a => a.SameDayReminderSentAt)
                 .HasColumnName("SameDayReminderSentAt");
 
+            builder.Property(a => a.QuotedAmount)
+                .HasColumnType("decimal(18,2)")
+                .HasColumnName("QuotedAmount");
+
+            builder.Property(a => a.CancelledAt)
+                .HasColumnName("CancelledAt");
+
+            builder.Property(a => a.CancellationChannel)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .HasColumnName("CancellationChannel");
+
+            builder.Property(a => a.CancellationComment)
+                .HasMaxLength(500)
+                .HasColumnName("CancellationComment");
+
+            builder.Property(a => a.AttendanceLinkRespondedAt)
+                .HasColumnName("AttendanceLinkRespondedAt");
+
+            builder.Property(a => a.AttendanceLinkAccepted)
+                .HasColumnName("AttendanceLinkAccepted");
+
+            builder.Property(a => a.AttendanceLinkComment)
+                .HasMaxLength(500)
+                .HasColumnName("AttendanceLinkComment");
+
+            builder.HasIndex(a => a.AttendanceLinkRespondedAt)
+                .HasDatabaseName("IX_Appointments_AttendanceLinkRespondedAt");
+
             // ============================================
             // Patient Relationship (Many-to-One)
             // ============================================
@@ -123,6 +152,24 @@ namespace Clinic_System.Data.Configurations
             // هنا نحدد فقط Navigation Property بدون تكرار الـ Configuration
             builder.HasOne(a => a.Payment)
                 .WithOne(p => p.Appointment);
+
+            builder.HasOne(a => a.TreatmentPlan)
+                .WithMany()
+                .HasForeignKey(a => a.TreatmentPlanId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(a => a.PlanItem)
+                .WithMany()
+                .HasForeignKey(a => a.PlanItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(a => a.TreatmentProcedure)
+                .WithMany()
+                .HasForeignKey(a => a.TreatmentProcedureId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.HasIndex(a => a.PlanItemId);
+            builder.HasIndex(a => a.TreatmentPlanId);
 
             // ============================================
             // Soft Delete

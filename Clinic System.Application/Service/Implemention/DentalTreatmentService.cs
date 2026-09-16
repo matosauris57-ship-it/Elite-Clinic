@@ -35,12 +35,8 @@ namespace Clinic_System.Application.Service.Implemention
                     throw new InvalidOperationException("Appointment does not belong to the specified patient.");
             }
 
-            if (toothNumber.HasValue && !FdiToothNumber.IsValid(toothNumber.Value))
-                throw new InvalidOperationException("El diente debe usar una notación FDI válida.");
-
-            if (treatmentProcedureId.HasValue &&
-                await unitOfWork.TreatmentProceduresRepository.GetByIdAsync(treatmentProcedureId.Value, cancellationToken) == null)
-                throw new NotFoundException($"Treatment procedure with ID {treatmentProcedureId} not found.");
+            (toothNumber, toothSurface) = await ResolveScopeAsync(
+                treatmentProcedureId, toothNumber, toothSurface, cancellationToken);
 
             int? toothRecordId = null;
             if (toothNumber.HasValue)
@@ -105,9 +101,10 @@ namespace Clinic_System.Application.Service.Implemention
             DateTime? toDate,
             int pageNumber,
             int pageSize,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? doctorId = null)
             => unitOfWork.DentalTreatmentsRepository.GetAllForAdminAsync(
-                search, statuses, fromDate, toDate, pageNumber, pageSize, cancellationToken);
+                search, statuses, fromDate, toDate, pageNumber, pageSize, cancellationToken, doctorId);
 
         public async Task<DentalTreatment> GetByIdAsync(int treatmentId, CancellationToken cancellationToken = default)
         {
@@ -133,12 +130,8 @@ namespace Clinic_System.Application.Service.Implemention
             if (treatment.Status is DentalTreatmentStatus.Completed or DentalTreatmentStatus.Cancelled)
                 throw new InvalidOperationException("Cannot update a completed or cancelled treatment.");
 
-            if (toothNumber.HasValue && !FdiToothNumber.IsValid(toothNumber.Value))
-                throw new InvalidOperationException("El diente debe usar una notación FDI válida.");
-
-            if (treatmentProcedureId.HasValue &&
-                await unitOfWork.TreatmentProceduresRepository.GetByIdAsync(treatmentProcedureId.Value, cancellationToken) == null)
-                throw new NotFoundException($"Treatment procedure with ID {treatmentProcedureId} not found.");
+            (toothNumber, toothSurface) = await ResolveScopeAsync(
+                treatmentProcedureId, toothNumber, toothSurface, cancellationToken);
 
             int? toothRecordId = null;
             if (toothNumber.HasValue)
@@ -176,6 +169,39 @@ namespace Clinic_System.Application.Service.Implemention
             treatment.IsDeleted = true;
             treatment.DeletedAt = DateTime.Now;
             unitOfWork.DentalTreatmentsRepository.Update(treatment, cancellationToken);
+        }
+
+        private async Task<(int? ToothNumber, ToothSurface? Surface)> ResolveScopeAsync(
+            int? treatmentProcedureId,
+            int? toothNumber,
+            ToothSurface? toothSurface,
+            CancellationToken cancellationToken)
+        {
+            TreatmentProcedure? procedure = null;
+            if (treatmentProcedureId.HasValue)
+            {
+                procedure = await unitOfWork.TreatmentProceduresRepository.GetByIdAsync(treatmentProcedureId.Value, cancellationToken);
+                if (procedure == null)
+                    throw new NotFoundException($"Treatment procedure with ID {treatmentProcedureId} not found.");
+            }
+
+            var target = procedure?.Target
+                ?? (toothNumber.HasValue ? TreatmentProcedureTarget.PerTooth : TreatmentProcedureTarget.WholeMouth);
+            var filter = procedure?.ToothKindFilter ?? TreatmentToothKindFilter.Any;
+            if (target == TreatmentProcedureTarget.WholeMouth)
+            {
+                toothNumber = null;
+                toothSurface = null;
+            }
+
+            var scopeError = TreatmentProcedureRules.ValidateAssignment(target, filter, toothNumber, toothSurface);
+            if (scopeError != null)
+                throw new InvalidOperationException(scopeError);
+
+            if (toothNumber.HasValue && !FdiToothNumber.IsValid(toothNumber.Value))
+                throw new InvalidOperationException("El diente debe usar una notación FDI válida.");
+
+            return (toothNumber, toothSurface);
         }
 
         private Task AddEventAsync(

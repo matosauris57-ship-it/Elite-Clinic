@@ -57,6 +57,9 @@ public class RoleManagementService : IRoleManagementService
         if (string.Equals(role.Name, AdminPermissionCatalog.SystemRoles.Admin, StringComparison.OrdinalIgnoreCase))
             return (false, "Los permisos del rol Admin no son editables.");
 
+        if (string.Equals(role.Name, AdminPermissionCatalog.SystemRoles.Patient, StringComparison.OrdinalIgnoreCase))
+            return (false, "Los permisos del rol Patient no son editables.");
+
         var validPermissions = permissions
             .Where(AdminPermissionCatalog.IsValid)
             .Distinct(StringComparer.OrdinalIgnoreCase)

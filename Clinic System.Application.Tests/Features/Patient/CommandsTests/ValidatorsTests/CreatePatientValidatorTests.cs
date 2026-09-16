@@ -43,6 +43,16 @@ namespace Clinic_System.Application.Tests.Features.Patients.CommandsTests.Valida
         }
 
         [Fact]
+        public async Task PatientName_WithNumbers_ShouldHaveValidationError()
+        {
+            var command = ValidCommand();
+            command.FullName = "Juan123 Perez";
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldHaveValidationErrorFor(c => c.FullName)
+                .WithErrorMessage(PersonNameRules.InvalidNameMessage);
+        }
+
+        [Fact]
         public async Task Address_Empty_ShouldHaveValidationError()
         {
             var command = ValidCommand();
@@ -152,6 +162,34 @@ namespace Clinic_System.Application.Tests.Features.Patients.CommandsTests.Valida
 
             var result = await _validator.TestValidateAsync(command);
             result.ShouldNotHaveValidationErrorFor(c => c.Email);
+        }
+
+        [Fact]
+        public async Task NationalId_WhenAlreadyExists_ShouldHaveValidationError()
+        {
+            var command = ValidCommand();
+            command.NationalId = "001-0000000-1";
+            _mockDoctorRepo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Doctor, bool>>>()))
+                .ReturnsAsync(new List<Doctor>());
+            _mockPatientRepo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Patient, bool>>>()))
+                .ReturnsAsync((Expression<Func<Patient, bool>> expr) =>
+                {
+                    var existing = new Patient { Id = 9, NationalId = "00100000001", Phone = "5555555555" };
+                    return new[] { existing }.AsQueryable().Where(expr).ToList();
+                });
+
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldHaveValidationErrorFor(c => c.NationalId)
+                .WithErrorMessage("National ID is already exists");
+        }
+
+        [Fact]
+        public async Task Phone_TooLong_ShouldHaveValidationError()
+        {
+            var command = ValidCommand();
+            command.Phone = "+12345678901234567890";
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldHaveValidationErrorFor(c => c.Phone);
         }
     }
 }

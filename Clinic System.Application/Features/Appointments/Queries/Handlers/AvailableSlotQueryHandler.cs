@@ -1,25 +1,30 @@
 ﻿namespace Clinic_System.Application.Features.Appointments.Queries.Handlers
 {
-    public class AvailableSlotQueryHandler : ResponseHandler, IRequestHandler<GetAvailableSlotQuery, Response<List<AvailableSlotDTO>>>
+    public class AvailableSlotQueryHandler : AppRequestHandler<GetAvailableSlotQuery, List<AvailableSlotDTO>>
     {
         private readonly IAppointmentService appointmentService;
         private readonly IMapper mapper;
         private readonly ILogger<AvailableSlotQueryHandler> logger;
 
         public AvailableSlotQueryHandler(
+            ICurrentUserService currentUserService,
             IAppointmentService appointmentService,
             IMapper mapper,
-            ILogger<AvailableSlotQueryHandler> logger)
+            ILogger<AvailableSlotQueryHandler> logger) : base(currentUserService)
         {
             this.appointmentService = appointmentService;
             this.mapper = mapper;
             this.logger = logger;
         }
 
-        public async Task<Response<List<AvailableSlotDTO>>> Handle(GetAvailableSlotQuery request, CancellationToken cancellationToken)
+        public override async Task<Response<List<AvailableSlotDTO>>> Handle(GetAvailableSlotQuery request, CancellationToken cancellationToken)
         {
             try
             {
+                var scopeError = await ValidateScopedDoctorSelection(request.DoctorId);
+                if (scopeError != null)
+                    return scopeError;
+
                 logger.LogInformation("Fetching available slots for DoctorId={DoctorId} on Date={Date}", request.DoctorId, request.Date);
 
                 var availableSlots = await appointmentService

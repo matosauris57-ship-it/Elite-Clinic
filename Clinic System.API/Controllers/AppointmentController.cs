@@ -76,11 +76,17 @@ namespace Clinic_System.API.Controllers
             var response = await mediator.Send(command);
             return NewResult(response);
         }
-[HttpPut("complete")]
+        [HttpPut("complete")]
         public async Task<IActionResult> CompleteAppointment([FromBody] CompleteAppointmentCommand command)
         {
             var response = await mediator.Send(command);
             return NewResult(response);
+        }
+
+        [HttpPut("start")]
+        public async Task<IActionResult> StartConsultation([FromBody] StartConsultationCommand command)
+        {
+            return NewResult(await mediator.Send(command));
         }
 [HttpPut("reschedule")]
         public async Task<IActionResult> RescheduleAppointment([FromBody] RescheduleAppointmentCommand command)

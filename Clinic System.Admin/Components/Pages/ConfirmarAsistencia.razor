@@ -11,21 +11,16 @@
             <Icon Name="calendar" Class="login-logo-svg" StrokeWidth="1.6" />
         </div>
         <h1>Confirmar asistencia</h1>
-        <p>Indique si podrá asistir a su cita.</p>
+        <p>@(CanChoose ? "Indique si podrá asistir a su cita." : "Esta cita ya tiene una respuesta registrada.")</p>
     </div>
 
     @if (_loading)
     {
         <AnimatedLoader Compact="true" Message="Validando enlace..." />
     }
-    else if (!string.IsNullOrWhiteSpace(_error))
+    else if (!string.IsNullOrWhiteSpace(_error) && _details == null)
     {
         <div class="login-error">@_error</div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_success))
-    {
-        <div class="wizard-success">@_success</div>
-        <p class="attendance-muted">Puede cerrar esta ventana.</p>
     }
     else if (_details != null)
     {
@@ -37,14 +32,40 @@
             <div><span>Estado</span><strong>@FormatStatus(_details.Status)</strong></div>
         </div>
 
-        <div class="attendance-actions">
-            <button class="btn-primary" disabled="@_saving" @onclick='() => RespondAsync("confirm")'>
-                @(_saving ? "Guardando..." : "Sí, asistiré")
-            </button>
-            <button class="btn-outline" disabled="@_saving" @onclick='() => RespondAsync("decline")'>
-                No podré asistir
-            </button>
-        </div>
+        @if (CanChoose)
+        {
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="login-error">@_error</div>
+            }
+            <div class="form-group attendance-comment">
+                <label>Comentario (opcional)</label>
+                <textarea class="form-input" rows="3" maxlength="500" @bind="_comment"
+                          placeholder="El personal de la clínica lo verá junto a su respuesta."></textarea>
+            </div>
+
+            <div class="attendance-actions">
+                <button class="btn-primary" disabled="@_saving" @onclick='() => RespondAsync("confirm")'>
+                    @(_saving ? "Guardando..." : "Sí, asistiré")
+                </button>
+                <button class="btn-outline" disabled="@_saving" @onclick='() => RespondAsync("decline")'>
+                    No podré asistir
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="wizard-success">@SavedAnswerTitle</div>
+            <div class="attendance-summary">
+                <div><span>Su respuesta</span><strong>@SavedAnswerLabel</strong></div>
+                @if (_details.RespondedAt.HasValue)
+                {
+                    <div><span>Enviada</span><strong>@_details.RespondedAt.Value.ToString("dd/MM/yyyy HH:mm")</strong></div>
+                }
+                <div><span>Comentario</span><strong>@(string.IsNullOrWhiteSpace(_details.Comment) ? "Sin comentario" : _details.Comment)</strong></div>
+            </div>
+            <p class="attendance-muted">Puede cerrar esta ventana. El enlace ya no permite cambiar la respuesta.</p>
+        }
     }
 </div>
 
@@ -55,7 +76,25 @@
     private bool _loading = true;
     private bool _saving;
     private string? _error;
-    private string? _success;
+    private string _comment = string.Empty;
+
+    private bool CanChoose =>
+        _details is { CanRespond: true, AlreadyResponded: false }
+        && _details.Status is "Pending" or "Rescheduled";
+
+    private string SavedAnswerTitle => _details?.Accepted switch
+    {
+        true => "Asistencia confirmada. ¡Gracias!",
+        false => "Hemos registrado que no podrá asistir.",
+        _ => "Esta cita ya tiene una respuesta registrada."
+    };
+
+    private string SavedAnswerLabel => _details?.Accepted switch
+    {
+        true => "Sí, asistiré",
+        false => "No podré asistir",
+        _ => FormatStatus(_details?.Status ?? "")
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -74,12 +113,13 @@
 
     private async Task RespondAsync(string action)
     {
-        if (string.IsNullOrWhiteSpace(Token))
+        if (string.IsNullOrWhiteSpace(Token) || !CanChoose)
             return;
 
         _saving = true;
         _error = null;
-        var (ok, message, error) = await AttendanceService.RespondAsync(Token, action);
+        var comment = !string.IsNullOrWhiteSpace(_comment) ? _comment.Trim() : null;
+        var (ok, _, details, error) = await AttendanceService.RespondAsync(Token, action, comment);
         _saving = false;
 
         if (!ok)
@@ -88,7 +128,20 @@
             return;
         }
 
-        _success = message ?? "Respuesta registrada.";
+        if (details != null)
+        {
+            _details = details;
+            _details.CanRespond = false;
+        }
+        else if (_details != null)
+        {
+            _details.CanRespond = false;
+            _details.AlreadyResponded = true;
+            _details.Accepted = action == "confirm";
+            _details.Comment = comment;
+            _details.RespondedAt ??= DateTime.Now;
+            _details.Status = action == "confirm" ? "Confirmed" : "Cancelled";
+        }
     }
 
     private static string FormatStatus(string status) => status switch
@@ -96,6 +149,7 @@
         "Pending" => "Pendiente",
         "Confirmed" => "Confirmada",
         "Rescheduled" => "Reagendada",
+        "InProgress" => "En atención",
         "Completed" => "Completada",
         "Cancelled" => "Cancelada",
         "NoShow" => "No asistió",

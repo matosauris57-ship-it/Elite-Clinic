@@ -11,7 +11,8 @@ namespace Clinic_System.Core.Interfaces.Repositories.IEntitiesRepository
         PaymentMethod? method,
         int pageNumber,
         int pageSize,
-        string? search = null);
+        string? search = null,
+        bool outstandingOnly = false);
 
         Task<Payment> GetPaymentDetailsByIdAsync(int id);
         Task<Payment?> GetPaymentWithLinesAsync(int id, CancellationToken cancellationToken = default);
@@ -19,5 +20,7 @@ namespace Clinic_System.Core.Interfaces.Repositories.IEntitiesRepository
         Task<Payment?> GetPaymentByAppointmentIdAsync(int appointmentId);
 
         Task<(decimal total, int count)> GetDoctorRevenueStatsAsync(int doctorId, DateTime from, DateTime to, CancellationToken cancellationToken = default);
+        Task<Dictionary<int, decimal>> GetOutstandingBalancesByPatientAsync(CancellationToken cancellationToken = default);
+        Task<Dictionary<int, decimal>> GetOutstandingBalancesByPatientAsync(IEnumerable<int>? patientIds, CancellationToken cancellationToken = default);
     }
 }

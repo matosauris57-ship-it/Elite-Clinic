@@ -61,16 +61,99 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        public async Task<IEnumerable<Patient?>> GetAllForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default)
+        public Task<IEnumerable<Patient?>> GetAllForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default)
+            => GetAllForAdminAsync(includeInactive, attendedByDoctorId: null, cancellationToken);
+
+        public async Task<IEnumerable<Patient?>> GetAllForAdminAsync(
+            bool includeInactive,
+            int? attendedByDoctorId,
+            CancellationToken cancellationToken = default)
         {
             IQueryable<Patient> query = context.Patients.AsNoTracking();
 
             if (includeInactive)
                 query = query.IgnoreQueryFilters();
 
+            if (attendedByDoctorId.HasValue)
+            {
+                var doctorId = attendedByDoctorId.Value;
+                var relatedIds = context.Appointments
+                    .Where(a => a.DoctorId == doctorId)
+                    .Select(a => a.PatientId)
+                    .Distinct();
+
+                query = query.Where(p => relatedIds.Contains(p.Id));
+            }
+
             return await query
-                .OrderBy(p => p.FullName)
+                .OrderBy(p => p.IsDeleted)
+                .ThenBy(p => p.FullName)
                 .ToListAsync(cancellationToken);
+        }
+
+        public async Task<(List<Patient> Items, int TotalCount)> GetFilteredForAdminPagedAsync(
+            int pageNumber,
+            int pageSize,
+            string? search,
+            string status,
+            int? attendedByDoctorId = null,
+            CancellationToken cancellationToken = default)
+        {
+            pageNumber = pageNumber < 1 ? 1 : pageNumber;
+            pageSize = pageSize < 1 ? 20 : Math.Min(pageSize, 100);
+            status = string.IsNullOrWhiteSpace(status) ? "all" : status.Trim().ToLowerInvariant();
+
+            IQueryable<Patient> query = context.Patients.AsNoTracking();
+
+            if (status is "all" or "inactive")
+                query = query.IgnoreQueryFilters();
+
+            query = status switch
+            {
+                "active" => query.Where(p => !p.IsDeleted),
+                "inactive" => query.Where(p => p.IsDeleted),
+                _ => query
+            };
+
+            if (attendedByDoctorId.HasValue)
+            {
+                var doctorId = attendedByDoctorId.Value;
+                var relatedIds = context.Appointments
+                    .Where(a => a.DoctorId == doctorId)
+                    .Select(a => a.PatientId)
+                    .Distinct();
+                query = query.Where(p => relatedIds.Contains(p.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                query = query.Where(p =>
+                    EF.Functions.Like(p.FullName, $"%{term}%")
+                    || (p.NationalId != null && EF.Functions.Like(p.NationalId, $"%{term}%"))
+                    || (p.Phone != null && EF.Functions.Like(p.Phone, $"%{term}%"))
+                    || (p.MobilePhone != null && EF.Functions.Like(p.MobilePhone, $"%{term}%"))
+                    || (p.Email != null && EF.Functions.Like(p.Email, $"%{term}%")));
+            }
+
+            query = query
+                .OrderBy(p => p.IsDeleted)
+                .ThenBy(p => p.FullName);
+
+            var totalCount = await query.CountAsync(cancellationToken);
+            var items = await query
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken);
+
+            return (items, totalCount);
+        }
+
+        public async Task<bool> IsLinkedToDoctorAsync(int patientId, int doctorId, CancellationToken cancellationToken = default)
+        {
+            return await context.Appointments
+                .AsNoTracking()
+                .AnyAsync(a => a.PatientId == patientId && a.DoctorId == doctorId, cancellationToken);
         }
 
         public async Task<Patient?> GetByIdIncludingDeletedAsync(int id, CancellationToken cancellationToken = default)

@@ -13,3 +13,13 @@ public sealed class PermissionRequirement : IAuthorizationRequirement
     public string Permission { get; }
     public IReadOnlyList<string> AllowedRoles { get; }
 }
+
+public sealed class AnyPermissionRequirement : IAuthorizationRequirement
+{
+    public AnyPermissionRequirement(params string[] permissions)
+    {
+        Permissions = permissions ?? [];
+    }
+
+    public IReadOnlyList<string> Permissions { get; }
+}

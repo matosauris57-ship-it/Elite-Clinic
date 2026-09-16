@@ -1,6 +1,8 @@
 @page "/configuracion"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
 @rendermode InteractiveServer
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Configuración — DentalCare Admin</PageTitle>
 
@@ -23,20 +25,38 @@
             <h3>Usuarios y roles</h3>
             <p>Gestiona cuentas staff, roles personalizados y permisos por módulo.</p>
         </NavLink>
+        @if (_canViewRecovery)
+        {
+            <NavLink class="config-hub-card" href="/configuracion/recuperacion-contrasena">
+                <Icon Name="key" Class="config-hub-icon" />
+                <h3>Recuperación de contraseña</h3>
+                <p>Quién indicó que olvidó su contraseña. Con el permiso «Cambiar contraseña» puede asignar una clave nueva.</p>
+            </NavLink>
+        }
         <NavLink class="config-hub-card" href="/configuracion/mensajes-whatsapp">
             <Icon Name="message-circle" Class="config-hub-icon" />
             <h3>Mensajes WhatsApp</h3>
-            <p>Edita las plantillas de recordatorio y confirmación de citas.</p>
+            <p>Plantillas de recordatorio y confirmación, con negrita y formato.</p>
         </NavLink>
         <NavLink class="config-hub-card" href="/campanas">
             <Icon Name="mail" Class="config-hub-icon" />
             <h3>Campañas de correo</h3>
             <p>Avisos a pacientes con correo, en lotes de 15 cada 15 minutos.</p>
         </NavLink>
+        <NavLink class="config-hub-card" href="/campanas/solicitudes">
+            <Icon Name="inbox" Class="config-hub-icon" />
+            <h3>Solicitudes de campaña</h3>
+            <p>Confirme o reasigne las citas pedidas desde el enlace del correo de campaña.</p>
+        </NavLink>
         <NavLink class="config-hub-card" href="/configuracion/mensajes-correo">
             <Icon Name="mail" Class="config-hub-icon" />
             <h3>Mensajes de correo</h3>
-            <p>Recordatorios automáticos, confirmación y felicitación de cumpleaños.</p>
+            <p>Recordatorios automáticos, confirmación y cumpleaños, con formato visual.</p>
+        </NavLink>
+        <NavLink class="config-hub-card" href="/configuracion/consentimientos">
+            <Icon Name="check-circle-2" Class="config-hub-icon" />
+            <h3>Consentimientos informados</h3>
+            <p>Plantillas de texto para cada tipo de consentimiento. Se usan al imprimir y archivar.</p>
         </NavLink>
         <NavLink class="config-hub-card" href="/configuracion/alertas-inventario">
             <Icon Name="package" Class="config-hub-icon" />
@@ -55,3 +75,13 @@
         </NavLink>
     </div>
 </div>
+
+@code {
+    private bool _canViewRecovery;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canViewRecovery = PermissionService.HasPermission(user, "recuperacion-contrasena.view");
+    }
+}

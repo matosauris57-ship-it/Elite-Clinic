@@ -1,3 +1,5 @@
+using FluentValidation.Results;
+
 namespace Clinic_System.Application.Common.Behaviors
 {
     public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
@@ -23,7 +25,7 @@ namespace Clinic_System.Application.Common.Behaviors
 
                 if (failures.Count != 0)
                 {
-                    var messages = failures.Select(x => x.PropertyName + ": " + x.ErrorMessage).ToList();
+                    var messages = failures.Select(FormatFailure).ToList();
 
                     _logger.LogWarning("Validation errors - {CommandType} - Errors: {@ValidationErrors}",
                         typeof(TRequest).Name, messages);
@@ -37,6 +39,14 @@ namespace Clinic_System.Application.Common.Behaviors
 
             _logger.LogInformation("Validation successful for command {CommandType}", typeof(TRequest).Name);
             return await next();
+        }
+
+        private static string FormatFailure(ValidationFailure failure)
+        {
+            var message = $"{failure.PropertyName}: {failure.ErrorMessage}";
+            if (failure.CustomState is int existingPatientId && existingPatientId > 0)
+                message += $"|{PatientFieldLimits.ExistingPatientMarker}{existingPatientId}";
+            return message;
         }
 
         private static bool TryCreateValidationResponse(List<string> messages, out TResponse response)

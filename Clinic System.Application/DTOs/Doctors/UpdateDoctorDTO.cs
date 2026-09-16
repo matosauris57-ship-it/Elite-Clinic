@@ -7,5 +7,8 @@
         public string Phone { get; set; } = null!;
         public string Specialization { get; set; } = null!;
         public string? SignatureImageUrl { get; set; }
+        public bool CanViewAllClinicData { get; set; }
+        public string? Email { get; set; }
+        public string? UserName { get; set; }
     }
 }

@@ -30,6 +30,8 @@ namespace Clinic_System.Application.Service.Implemention
             TreatmentPricingMode pricingMode,
             int durationMinutes,
             bool isActive,
+            TreatmentProcedureTarget target,
+            TreatmentToothKindFilter toothKindFilter,
             CancellationToken cancellationToken = default)
         {
             var normalizedCode = code.Trim().ToLowerInvariant();
@@ -49,6 +51,8 @@ namespace Clinic_System.Application.Service.Implemention
                 Price = normalizedPrice,
                 PricingMode = pricingMode,
                 DurationMinutes = durationMinutes,
+                Target = target,
+                ToothKindFilter = toothKindFilter,
                 IsActive = isActive
             };
 
@@ -65,6 +69,8 @@ namespace Clinic_System.Application.Service.Implemention
             TreatmentPricingMode pricingMode,
             int durationMinutes,
             bool isActive,
+            TreatmentProcedureTarget target,
+            TreatmentToothKindFilter toothKindFilter,
             CancellationToken cancellationToken = default)
         {
             var procedure = await GetByIdAsync(id, cancellationToken);
@@ -81,6 +87,8 @@ namespace Clinic_System.Application.Service.Implemention
                 ? Money.Normalize(price)
                 : 0m;
             procedure.DurationMinutes = durationMinutes;
+            procedure.Target = target;
+            procedure.ToothKindFilter = toothKindFilter;
             procedure.IsActive = isActive;
 
             unitOfWork.TreatmentProceduresRepository.Update(procedure, cancellationToken);

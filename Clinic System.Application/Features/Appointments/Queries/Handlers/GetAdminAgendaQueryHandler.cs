@@ -16,6 +16,7 @@ namespace Clinic_System.Application.Features.Appointments.Queries.Handlers
 
         public override async Task<Response<PagedResult<AppointmentAgendaItemDTO>>> Handle(GetAdminAgendaQuery request, CancellationToken cancellationToken)
         {
+            request.DoctorId = ApplyDoctorScope(request.DoctorId);
             var appointments = await appointmentService.GetAgendaForAdminAsync(request, cancellationToken);
             var items = mapper.Map<List<AppointmentAgendaItemDTO>>(appointments.Items);
 

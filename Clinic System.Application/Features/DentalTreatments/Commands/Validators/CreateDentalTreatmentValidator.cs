@@ -13,6 +13,10 @@ namespace Clinic_System.Application.Features.DentalTreatments.Commands.Validator
             RuleFor(x => x.ToothNumber!.Value)
                 .Must(FdiToothNumber.IsValid)
                 .When(x => x.ToothNumber.HasValue);
+            RuleForEach(x => x.ToothNumbers)
+                .Must(FdiToothNumber.IsValid)
+                .When(x => x.ToothNumbers.Count > 0)
+                .WithMessage("Cada diente debe usar una notación FDI válida.");
             RuleFor(x => x.ToothSurface).IsInEnum().When(x => x.ToothSurface.HasValue);
         }
     }

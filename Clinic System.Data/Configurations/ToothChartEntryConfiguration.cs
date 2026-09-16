@@ -10,6 +10,9 @@ public class ToothChartEntryConfiguration : IEntityTypeConfiguration<ToothChartE
         builder.Property(x => x.ClinicalDiagnosis).HasMaxLength(200);
         builder.Property(x => x.ProposedTreatment).HasMaxLength(500);
         builder.Property(x => x.RecordedByUserId).HasMaxLength(450);
+        builder.Property(x => x.IsVoided).HasDefaultValue(false).IsRequired();
+        builder.Property(x => x.VoidedByUserId).HasMaxLength(450);
+        builder.Property(x => x.VoidReason).HasMaxLength(500);
         builder.Property(x => x.RestorationMaterial);
         builder.Property(x => x.CariesType);
         builder.Property(x => x.Icdas);

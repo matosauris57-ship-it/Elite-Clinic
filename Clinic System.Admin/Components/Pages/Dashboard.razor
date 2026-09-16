@@ -163,13 +163,14 @@
                     </select>
                 </label>
             }
-            else if (_settingsKey == DashboardWidgetKeys.RecentActivity)
+            else if (_settingsKey == DashboardWidgetKeys.RecentActivity || _settingsKey == DashboardWidgetKeys.AttendanceLinkAlerts)
             {
                 <label class="dash-field">
                     Periodo
                     <select @bind="_settingsPeriod">
                         <option value="24h">Últimas 24 horas</option>
                         <option value="7d">Últimos 7 días</option>
+                        <option value="14d">Últimos 14 días</option>
                         <option value="30d">Últimos 30 días</option>
                     </select>
                 </label>
@@ -218,6 +219,7 @@
             {
                 _layout = DashboardLayoutEngine.Normalize(response.Layout);
                 _clinicEnabledKeys = response.ClinicEnabledKeys;
+                await EnsureAttendanceLinkWidgetAsync();
             }
             else
             {
@@ -242,6 +244,7 @@
         var day = _data.Today == default ? DateTime.Today : _data.Today;
         _todayLabel = day.ToString("dddd d 'de' MMMM", EsDo);
         await RefreshActivityAsync();
+        await RefreshAttendanceLinkAsync();
     }
 
     private async Task EnterEdit()
@@ -273,6 +276,7 @@
         var positions = nodes.Select(n => new DashboardWidgetPlacement
         {
             Id = n.Id,
+            WidgetKey = n.Id,
             X = n.X,
             Y = n.Y,
             W = n.W,
@@ -290,10 +294,10 @@
         _addOptions.Clear();
         foreach (var def in DashboardWidgetCatalog.All)
         {
-            var item = _layout.Items.First(i => i.WidgetKey == def.Key);
-            if (item.Visible) continue;
+            var item = _layout.Items.FirstOrDefault(i => i.WidgetKey == def.Key);
+            if (item == null || item.Visible) continue;
             if (def.Required) continue;
-            if (_clinicEnabledKeys.Count > 0 && !_clinicEnabledKeys.Contains(def.Key, StringComparer.OrdinalIgnoreCase))
+            if (!ClinicAllows(def.Key))
                 continue;
             if (!PermissionService.HasPermission(user, def.Permission))
                 continue;
@@ -325,7 +329,10 @@
     {
         _settingsKey = key;
         var item = _layout?.Items.FirstOrDefault(i => i.WidgetKey == key);
-        _settingsPeriod = item?.Settings.GetValueOrDefault("period") ?? (key == DashboardWidgetKeys.RecentActivity ? "7d" : "today");
+        _settingsPeriod = item?.Settings.GetValueOrDefault("period")
+            ?? (_settingsKey == DashboardWidgetKeys.RecentActivity ? "7d"
+                : _settingsKey == DashboardWidgetKeys.AttendanceLinkAlerts ? "14d"
+                : "today");
         _settingsLimit = item?.Settings.GetValueOrDefault("limit") ?? "10";
     }
 
@@ -341,9 +348,12 @@
             item.Settings["limit"] = _settingsLimit;
         if (_settingsKey == DashboardWidgetKeys.RecentActivity)
             item.Settings["period"] = _settingsPeriod;
+        if (_settingsKey == DashboardWidgetKeys.AttendanceLinkAlerts)
+            item.Settings["period"] = _settingsPeriod;
         _settingsKey = null;
         await SaveNowAsync();
         await RefreshActivityAsync();
+        await RefreshAttendanceLinkAsync();
     }
 
     private async Task RestoreAsync()
@@ -392,7 +402,9 @@
         var (response, error) = await LayoutApi.SaveLayoutAsync(_layout);
         if (response?.Layout != null)
         {
-            _layout = DashboardLayoutEngine.Normalize(response.Layout);
+            _clinicEnabledKeys = response.ClinicEnabledKeys.Count > 0
+                ? response.ClinicEnabledKeys
+                : _clinicEnabledKeys;
             _saveStatus = "Guardado";
             _layoutError = null;
         }
@@ -417,6 +429,44 @@
         _data.HistoryRestricted = !string.IsNullOrWhiteSpace(error) && error.Contains("autoriz", StringComparison.OrdinalIgnoreCase);
     }
 
+    private async Task RefreshAttendanceLinkAsync()
+    {
+        if (_data == null || _layout == null) return;
+        var item = _layout.Items.FirstOrDefault(i => i.WidgetKey == DashboardWidgetKeys.AttendanceLinkAlerts);
+        if (item is not { Visible: true }) return;
+        var period = item.Settings.GetValueOrDefault("period") ?? "14d";
+        var take = item.Settings.TryGetValue("limit", out var raw) && int.TryParse(raw, out var n) ? n : 20;
+        var (items, error) = await LayoutApi.GetAttendanceLinkAlertsAsync(period, take);
+        _data.AttendanceLinkAlerts = items ?? [];
+        _data.AttendanceLinkError = error;
+        _data.AttendanceLinkRestricted = !string.IsNullOrWhiteSpace(error) && error.Contains("autoriz", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task EnsureAttendanceLinkWidgetAsync()
+    {
+        if (_layout == null) return;
+        if (!ClinicAllows(DashboardWidgetKeys.AttendanceLinkAlerts))
+            return;
+
+        var item = _layout.Items.FirstOrDefault(i => i.WidgetKey == DashboardWidgetKeys.AttendanceLinkAlerts);
+        if (item is { Visible: true })
+            return;
+
+        _layout = DashboardLayoutEngine.ForceVisible(_layout, DashboardWidgetKeys.AttendanceLinkAlerts);
+        await SaveNowAsync();
+    }
+
+    private bool ClinicAllows(string widgetKey)
+    {
+        if (DashboardWidgetCatalog.TryGet(widgetKey, out var def) && def.Required)
+            return true;
+        if (_clinicEnabledKeys.Count == 0)
+            return true;
+        if (_clinicEnabledKeys.Contains(widgetKey, StringComparer.OrdinalIgnoreCase))
+            return true;
+        return string.Equals(widgetKey, DashboardWidgetKeys.AttendanceLinkAlerts, StringComparison.OrdinalIgnoreCase);
+    }
+
     private async Task RefreshWidgetTogglesAsync()
     {
         if (_layout == null) return;
@@ -424,11 +474,10 @@
         _widgetToggles.Clear();
         foreach (var def in DashboardWidgetCatalog.All)
         {
-            var item = _layout.Items.First(i => i.WidgetKey == def.Key);
+            var item = _layout.Items.FirstOrDefault(i => i.WidgetKey == def.Key);
+            if (item == null) continue;
             var allowed = PermissionService.HasPermission(user, def.Permission);
-            var clinicOk = _clinicEnabledKeys.Count == 0
-                || _clinicEnabledKeys.Contains(def.Key, StringComparer.OrdinalIgnoreCase)
-                || def.Required;
+            var clinicOk = ClinicAllows(def.Key);
             if (!allowed)
                 continue;
             if (!clinicOk && !item.Visible)

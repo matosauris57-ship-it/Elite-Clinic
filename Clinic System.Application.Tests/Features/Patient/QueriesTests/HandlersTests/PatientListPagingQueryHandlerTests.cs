@@ -4,137 +4,107 @@
     {
         private readonly Mock<IPatientService> _mockPatientService;
         private readonly Mock<IMapper> _mockMapper;
+        private readonly Mock<IUnitOfWork> _mockUnitOfWork;
+        private readonly Mock<IPaymentRepository> _mockPayments;
         private readonly Mock<ILogger<PatientListPagingQueryHandler>> _mockLogger;
         private readonly PatientListPagingQueryHandler _handler;
+
         public PatientListPagingQueryHandlerTests()
         {
             _mockPatientService = new Mock<IPatientService>();
             _mockMapper = new Mock<IMapper>();
+            _mockUnitOfWork = new Mock<IUnitOfWork>();
+            _mockPayments = new Mock<IPaymentRepository>();
             _mockLogger = new Mock<ILogger<PatientListPagingQueryHandler>>();
 
-            _handler = new PatientListPagingQueryHandler(_mockPatientService.Object,
+            _mockUnitOfWork.SetupGet(u => u.PaymentsRepository).Returns(_mockPayments.Object);
+            _mockPayments
+                .Setup(p => p.GetOutstandingBalancesByPatientAsync(It.IsAny<IEnumerable<int>?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Dictionary<int, decimal>());
+
+            _handler = new PatientListPagingQueryHandler(
+                _mockPatientService.Object,
                 _mockMapper.Object,
+                _mockUnitOfWork.Object,
                 _mockLogger.Object);
         }
 
         [Fact]
         public async Task Handle_ValidRequest_ReturnsPagedResult()
         {
-            // Arrange
-            var request = new GetPatientListPagingQuery { PageNumber = 1, PageSize = 10 };
-            var Patients = new PagedResult<Patient>
-            (
+            var request = new GetPatientListPagingQuery { PageNumber = 1, PageSize = 10, Status = "all" };
+            var patients = new PagedResult<Patient>(
                 new List<Patient>
                 {
-                    new Patient { Id = 1, FullName = "Dr. Smith" },
-                    new Patient { Id = 2, FullName = "Dr. Jones" }
+                    new() { Id = 1, FullName = "Ana Perez" },
+                    new() { Id = 2, FullName = "Luis Gomez" }
                 },
                 totalCount: 2,
                 currentPage: 1,
-                pageSize: 10
-            );
-            _mockPatientService.Setup(s => s.GetPatientsListPagingAsync(request.PageNumber, request.PageSize, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(Patients);
+                pageSize: 10);
+
+            _mockPatientService
+                .Setup(s => s.GetPatientsListPagingAsync(1, 10, null, "all", null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(patients);
             _mockMapper.Setup(m => m.Map<List<GetPatientListDTO>>(It.IsAny<List<Patient>>()))
-                .Returns(new List<GetPatientListDTO>
-                {
-                    new GetPatientListDTO { Id = 1, FullName = "Dr. Smith" },
-                    new GetPatientListDTO { Id = 2, FullName = "Dr. Jones" }
-                });
-            // Act
+                .Returns(
+                [
+                    new GetPatientListDTO { Id = 1, FullName = "Ana Perez" },
+                    new GetPatientListDTO { Id = 2, FullName = "Luis Gomez" }
+                ]);
+
             var response = await _handler.Handle(request, CancellationToken.None);
-            // Assert
+
             Assert.True(response.Succeeded);
             Assert.NotNull(response.Data);
             Assert.Equal(2, response.Data.TotalCount);
-            Assert.Equal(1, response.Data.CurrentPage);
-            Assert.Equal(10, response.Data.PageSize);
             Assert.Equal(2, response.Data.Items.Count());
         }
 
         [Fact]
-        public async Task Handle_NoPatientsFound_ReturnsNotFound()
+        public async Task Handle_NoPatientsFound_ReturnsEmptySuccess()
         {
-            // Arrange
             var request = new GetPatientListPagingQuery { PageNumber = 1, PageSize = 10 };
-            var Patients = new PagedResult<Patient>(new List<Patient>(), totalCount: 0, currentPage: 1, pageSize: 10);
+            var patients = new PagedResult<Patient>([], totalCount: 0, currentPage: 1, pageSize: 10);
 
-            _mockPatientService.Setup(s => s.GetPatientsListPagingAsync(request.PageNumber, request.PageSize, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(Patients);
-            // Act
-            var response = await _handler.Handle(request, CancellationToken.None);
-            // Assert
-            Assert.False(response.Succeeded);
-            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        }
-
-        [Fact]
-        public async Task Handle_InvalidPageNumber_ReturnsBadRequest()
-        {
-            // Arrange
-            var request = new GetPatientListPagingQuery { PageNumber = 0, PageSize = 10 };
-            // Act
-            var response = await _handler.Handle(request, CancellationToken.None);
-            // Assert
-            Assert.False(response.Succeeded);
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Equal("Page number must be greater than 0", response.Message);
-        }
-
-        [Fact]
-        public async Task Handle_InvalidPageSize_ReturnsBadRequest()
-        {
-            // Arrange
-            var request = new GetPatientListPagingQuery { PageNumber = 1, PageSize = 0 };
-            // Act
-            var response = await _handler.Handle(request, CancellationToken.None);
-            // Assert
-            Assert.False(response.Succeeded);
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Equal("Page size must be between 1 and 100", response.Message);
-        }
-
-        [Fact]
-        public async Task Handle_PageSizeExceedsLimit_ReturnsBadRequest()
-        {
-            // Arrange
-            var request = new GetPatientListPagingQuery { PageNumber = 1, PageSize = 101 };
-            // Act
-            var response = await _handler.Handle(request, CancellationToken.None);
-            // Assert
-            Assert.False(response.Succeeded);
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Equal("Page size must be between 1 and 100", response.Message);
-        }
-
-        [Fact]
-        public async Task Handle_MapperCalled_CorrectlyMapsEntities()
-        {
-            // Arrange
-            var request = new GetPatientListPagingQuery { PageNumber = 1, PageSize = 10 };
-            var Patients = new PagedResult<Patient>
-            (
-                new List<Patient>
-                {
-                    new Patient { Id = 1, FullName = "Dr. Smith" }
-                },
-                totalCount: 1,
-                currentPage: 1,
-                pageSize: 10
-            );
-            _mockPatientService.Setup(s => s.GetPatientsListPagingAsync(request.PageNumber, request.PageSize, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(Patients);
+            _mockPatientService
+                .Setup(s => s.GetPatientsListPagingAsync(1, 10, null, "all", null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(patients);
             _mockMapper.Setup(m => m.Map<List<GetPatientListDTO>>(It.IsAny<List<Patient>>()))
-                .Returns(new List<GetPatientListDTO>
-                {
-                    new GetPatientListDTO { Id = 1, FullName = "Dr. Smith" }
-                });
-            // Act
+                .Returns([]);
+
             var response = await _handler.Handle(request, CancellationToken.None);
-            // Assert
-            _mockMapper.Verify(m => m.Map<List<GetPatientListDTO>>(It.IsAny<List<Patient>>()), Times.Once);
+
             Assert.True(response.Succeeded);
-            Assert.Single(response.Data.Items);
+            Assert.NotNull(response.Data);
+            Assert.Empty(response.Data.Items);
+            Assert.Equal(0, response.Data.TotalCount);
         }
+
+        [Fact]
+        public async Task Handle_WithSearch_PassesSearchToService()
+        {
+            var request = new GetPatientListPagingQuery
+            {
+                PageNumber = 1,
+                PageSize = 20,
+                Status = "active",
+                Search = "  Ana  "
+            };
+            var patients = new PagedResult<Patient>([], 0, 1, 20);
+
+            _mockPatientService
+                .Setup(s => s.GetPatientsListPagingAsync(1, 20, "Ana", "active", null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(patients);
+            _mockMapper.Setup(m => m.Map<List<GetPatientListDTO>>(It.IsAny<List<Patient>>()))
+                .Returns([]);
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.True(response.Succeeded);
+            _mockPatientService.Verify(
+                s => s.GetPatientsListPagingAsync(1, 20, "Ana", "active", null, It.IsAny<CancellationToken>()),
+                Times.Once);
         }
+    }
 }

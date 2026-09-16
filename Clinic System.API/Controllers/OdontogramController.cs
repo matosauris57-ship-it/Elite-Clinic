@@ -71,5 +71,30 @@ namespace Clinic_System.API.Controllers
             });
             return NewResult(response);
         }
+
+        [HttpGet("entries/{id:long}")]
+        [Authorize(Policy = "odontograma.view+doctor+patient")]
+        public async Task<IActionResult> GetEntry(long id)
+        {
+            var response = await mediator.Send(new GetToothChartEntryQuery { Id = id });
+            return NewResult(response);
+        }
+
+        [HttpPut("entries/{id:long}")]
+        [Authorize(Policy = "odontograma.edit+doctor")]
+        public async Task<IActionResult> UpdateEntry(long id, [FromBody] UpdateToothChartEntryCommand command)
+        {
+            command.Id = id;
+            var response = await mediator.Send(command);
+            return NewResult(response);
+        }
+
+        [HttpDelete("entries/{id:long}")]
+        [Authorize(Policy = "odontograma.edit+doctor")]
+        public async Task<IActionResult> VoidEntry(long id)
+        {
+            var response = await mediator.Send(new VoidToothChartEntryCommand { Id = id });
+            return NewResult(response);
+        }
     }
 }

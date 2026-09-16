@@ -5,6 +5,7 @@ namespace Clinic_System.Core.Enums
         Draft = 0,
         Approved = 1,
         Rejected = 2,
-        Completed = 3
+        Completed = 3,
+        Issued = 4
     }
 }

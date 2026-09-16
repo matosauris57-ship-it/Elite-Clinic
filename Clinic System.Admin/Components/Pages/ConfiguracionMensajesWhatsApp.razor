@@ -2,7 +2,6 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject WhatsAppMessageSettingsService WhatsAppSettings
-@inject IJSRuntime JS
 
 <PageTitle>Mensajes WhatsApp — DentalCare Admin</PageTitle>
 
@@ -11,7 +10,7 @@
         <div class="command-titles">
             <a href="/configuracion" class="back-link-inline">← Configuración</a>
             <h1>Mensajes WhatsApp</h1>
-            <p>Plantillas que se abren al enviar un recordatorio o confirmación de cita</p>
+            <p>Plantillas de recordatorio y confirmación. Use negrita y cursiva; WhatsApp las aplica al enviar.</p>
         </div>
     </div>
 
@@ -43,26 +42,24 @@
 
         <div class="form-group">
             <label>Plantilla de recordatorio (Agenda)</label>
-            <textarea @ref="_reminderEditor"
-                      class="form-input"
-                      rows="4"
-                      @bind="_form.ReminderTemplate"
-                      @bind:event="oninput"
-                      @onfocus="() => SetActiveTemplate(WhatsAppMessageKind.Reminder)"></textarea>
+            <RichTextEditor @ref="_reminderEditor"
+                            Mode="@RichTextEditorMode.WhatsApp"
+                            AriaLabel="Plantilla de recordatorio"
+                            @bind-Value="_form.ReminderTemplate"
+                            OnFocus="() => SetActiveTemplate(WhatsAppMessageKind.Reminder)" />
             <div class="whatsapp-preview-label">Vista previa</div>
-            <div class="whatsapp-preview">@ReminderPreview</div>
+            <MessageHtmlPreview Html="@ReminderPreview" />
         </div>
 
         <div class="form-group">
             <label>Plantilla de confirmación (al agendar)</label>
-            <textarea @ref="_confirmationEditor"
-                      class="form-input"
-                      rows="4"
-                      @bind="_form.ConfirmationTemplate"
-                      @bind:event="oninput"
-                      @onfocus="() => SetActiveTemplate(WhatsAppMessageKind.Confirmation)"></textarea>
+            <RichTextEditor @ref="_confirmationEditor"
+                            Mode="@RichTextEditorMode.WhatsApp"
+                            AriaLabel="Plantilla de confirmación"
+                            @bind-Value="_form.ConfirmationTemplate"
+                            OnFocus="() => SetActiveTemplate(WhatsAppMessageKind.Confirmation)" />
             <div class="whatsapp-preview-label">Vista previa</div>
-            <div class="whatsapp-preview">@ConfirmationPreview</div>
+            <MessageHtmlPreview Html="@ConfirmationPreview" />
         </div>
 
         <button class="btn-primary" type="submit" disabled="@_saving">
@@ -75,8 +72,8 @@
     private static readonly string[] Placeholders = ["{nombre}", "{clinica}", "{fecha}", "{hora}", "{doctor}"];
 
     private WhatsAppMessageSettings _form = new();
-    private ElementReference _reminderEditor;
-    private ElementReference _confirmationEditor;
+    private RichTextEditor? _reminderEditor;
+    private RichTextEditor? _confirmationEditor;
     private WhatsAppMessageKind _activeTemplate = WhatsAppMessageKind.Reminder;
     private bool _saving;
     private string? _saveMessage;
@@ -106,21 +103,13 @@
             ? _confirmationEditor
             : _reminderEditor;
 
-        try
+        if (editor != null)
         {
-            var next = await JS.InvokeAsync<string?>("dentalCareUi.insertAtCursor", editor, token);
-            if (!string.IsNullOrEmpty(next))
-            {
-                if (_activeTemplate == WhatsAppMessageKind.Confirmation)
-                    _form.ConfirmationTemplate = next;
-                else
-                    _form.ReminderTemplate = next;
-            }
+            await editor.InsertTextAsync(token);
+            return;
         }
-        catch (JSException)
-        {
-            InsertPlaceholderFallback(token);
-        }
+
+        InsertPlaceholderFallback(token);
     }
 
     private void InsertPlaceholderFallback(string token)
@@ -137,7 +126,7 @@
         _saveMessage = null;
         _saveError = null;
 
-        if (string.IsNullOrWhiteSpace(_form.ReminderTemplate) || string.IsNullOrWhiteSpace(_form.ConfirmationTemplate))
+        if (MessageBodyFormatting.IsBlank(_form.ReminderTemplate) || MessageBodyFormatting.IsBlank(_form.ConfirmationTemplate))
         {
             _saveError = "Ambas plantillas son obligatorias.";
             _saving = false;

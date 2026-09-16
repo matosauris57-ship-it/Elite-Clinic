@@ -20,8 +20,20 @@ namespace Clinic_System.Data.Configurations
                 .HasMaxLength(50)
                 .IsRequired();
 
+            builder.Property(r => r.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .HasDefaultValue(PaymentReceiptKind.Payment)
+                .IsRequired();
+
             builder.Property(r => r.Notes).HasMaxLength(500);
             builder.Property(r => r.PaidAt).IsRequired();
+            builder.Property(r => r.IsVoided).HasDefaultValue(false).IsRequired();
+            builder.Property(r => r.VoidReason).HasMaxLength(500);
+
+            builder.Ignore(r => r.IsActive);
+            builder.Ignore(r => r.IsActivePayment);
+            builder.Ignore(r => r.IsActiveRefund);
 
             builder.HasOne(r => r.Payment)
                 .WithMany(p => p.Receipts)

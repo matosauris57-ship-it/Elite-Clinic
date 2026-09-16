@@ -4,9 +4,9 @@
     @if (EditMode)
     {
         <div class="widget-toolbar">
-            <button type="button" class="widget-drag-handle" title="Arrastrar widget" aria-label="Arrastrar @Title" draggable="false">
+            <div class="widget-drag-handle" title="Arrastrar widget" aria-label="Arrastrar @Title" role="button" tabindex="0">
                 <Icon Name="grip-vertical" Class="widget-tool-icon" />
-            </button>
+            </div>
             <span class="widget-toolbar-title">@Title</span>
             <div class="widget-toolbar-actions">
                 <button type="button" class="widget-tool-btn" title="Tamaño pequeño" aria-label="Tamaño pequeño" @onclick="ApplySmall">S</button>

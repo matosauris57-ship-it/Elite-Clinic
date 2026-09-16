@@ -16,7 +16,10 @@
                 , option => option.MapFrom(src => src.CreatedAt.ToString("dd/MM/yyyy-hh:mm")))
 
                 .ForMember(dest => dest.IsActive
-                , option => option.MapFrom(src => !src.IsDeleted));
+                , option => option.MapFrom(src => !src.IsDeleted))
+
+                .ForMember(dest => dest.OutstandingBalance
+                , option => option.Ignore());
         }
     }
 }

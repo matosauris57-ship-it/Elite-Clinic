@@ -4,5 +4,6 @@ namespace Clinic_System.Core.Interfaces.Repositories.IEntitiesRepository
     {
         Task<TreatmentPlan?> GetWithItemsAsync(int id, CancellationToken cancellationToken = default);
         Task<IEnumerable<TreatmentPlan>> GetByPatientIdAsync(int patientId, CancellationToken cancellationToken = default);
+        Task<PlanItem?> GetItemWithPlanAsync(int itemId, CancellationToken cancellationToken = default);
     }
 }

@@ -3,9 +3,13 @@ namespace Clinic_System.Application.Service.Interface
     public interface ITreatmentPlanService
     {
         Task<TreatmentPlan> CreateAsync(int patientId, string title, string? notes, DateTime? validUntil, decimal discountAmount, List<PlanItemInput> items, string? recordedByUserId, CancellationToken cancellationToken = default);
-        Task<TreatmentPlan> ApproveAsync(int planId, string? recordedByUserId, CancellationToken cancellationToken = default);
+        Task<TreatmentPlan> IssueAsync(int planId, string? recordedByUserId, CancellationToken cancellationToken = default);
+        Task<TreatmentPlan> ApproveAsync(int planId, string? recordedByUserId, string? acceptedByName = null, CancellationToken cancellationToken = default);
         Task<TreatmentPlan> RejectAsync(int planId, string? reason, string? recordedByUserId, CancellationToken cancellationToken = default);
         Task<TreatmentPlan> CompleteAsync(int planId, string? recordedByUserId, CancellationToken cancellationToken = default);
+        Task<TreatmentPlan> InvoiceAsync(int planId, string? recordedByUserId, decimal? amount = null, bool completedOnly = false, CancellationToken cancellationToken = default);
+        Task<TreatmentPlan> AcceptItemAsync(int itemId, string? recordedByUserId, CancellationToken cancellationToken = default);
+        Task<TreatmentPlan> RejectItemAsync(int itemId, string? recordedByUserId, CancellationToken cancellationToken = default);
         Task<TreatmentPlan?> GetByIdAsync(int planId, CancellationToken cancellationToken = default);
         Task<IEnumerable<TreatmentPlan>> GetByPatientIdAsync(int patientId, CancellationToken cancellationToken = default);
     }

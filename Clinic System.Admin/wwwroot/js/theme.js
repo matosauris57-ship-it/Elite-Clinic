@@ -90,6 +90,24 @@ window.dentalCareUi = {
         window.print();
     },
 
+    setConsentPrintDraft(payload) {
+        try {
+            localStorage.setItem('consentPrintDraft', JSON.stringify(payload ?? {}));
+        } catch {
+        }
+    },
+
+    takeConsentPrintDraft() {
+        try {
+            const raw = localStorage.getItem('consentPrintDraft');
+            if (!raw) return null;
+            localStorage.removeItem('consentPrintDraft');
+            return raw;
+        } catch {
+            return null;
+        }
+    },
+
     focusById(id) {
         const el = document.getElementById(id);
         if (!el) return;

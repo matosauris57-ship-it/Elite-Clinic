@@ -19,7 +19,9 @@
             // Name
             RuleFor(x => x.FullName)
                 .NotEmpty().WithMessage("Doctor Name is required")
-                .MaximumLength(100).WithMessage("Name must not exceed 100 characters");
+                .MaximumLength(100).WithMessage("Name must not exceed 100 characters")
+                .Must(PersonNameRules.IsValid)
+                .WithMessage(PersonNameRules.InvalidNameMessage);
 
             // Address & Specialization
             RuleFor(x => x.Address)
@@ -36,7 +38,7 @@
             // Phone (Format Only)
             RuleFor(x => x.Phone)
                 .NotEmpty().WithMessage("Phone number is required")
-                .Matches(@"^\+?[0-9]{10,15}$")
+                .Must(phone => PatientFieldLimits.IsValidPhone(phone, required: true))
                 .WithMessage("Phone number must contain 10–15 digits (numbers only, optional +)");
 
             // Email (Format Only)

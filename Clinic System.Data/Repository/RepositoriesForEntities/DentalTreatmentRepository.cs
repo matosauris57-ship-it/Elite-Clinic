@@ -30,9 +30,18 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
             DateTime? toDate,
             int pageNumber,
             int pageSize,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? doctorId = null)
         {
             var query = context.DentalTreatments.AsNoTracking();
+
+            if (doctorId.HasValue)
+            {
+                var scopedDoctorId = doctorId.Value;
+                query = query.Where(t =>
+                    (t.AppointmentId != null && t.Appointment!.DoctorId == scopedDoctorId)
+                    || context.Appointments.Any(a => a.PatientId == t.PatientId && a.DoctorId == scopedDoctorId));
+            }
 
             if (!string.IsNullOrWhiteSpace(search))
             {

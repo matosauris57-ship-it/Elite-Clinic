@@ -1,0 +1,120 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="rte @(Disabled ? "is-disabled" : null)">
+    <div class="rte-toolbar" role="toolbar" aria-label="Formato del mensaje">
+        <button type="button" class="rte-btn rte-btn-b" title="Negrita" disabled="@Disabled" @onclick='() => ExecAsync("bold")'>N</button>
+        <button type="button" class="rte-btn rte-btn-i" title="Cursiva" disabled="@Disabled" @onclick='() => ExecAsync("italic")'>C</button>
+        @if (Mode == RichTextEditorMode.Email)
+        {
+            <button type="button" class="rte-btn rte-btn-u" title="Subrayado" disabled="@Disabled" @onclick='() => ExecAsync("underline")'>S</button>
+        }
+        else
+        {
+            <button type="button" class="rte-btn rte-btn-s" title="Tachado" disabled="@Disabled" @onclick='() => ExecAsync("strikeThrough")'>T</button>
+        }
+        <span class="rte-sep"></span>
+        <button type="button" class="rte-btn" title="Lista" disabled="@Disabled" @onclick='() => ExecAsync("insertUnorderedList")'>•</button>
+        <button type="button" class="rte-btn" title="Lista numerada" disabled="@Disabled" @onclick='() => ExecAsync("insertOrderedList")'>1.</button>
+        @if (Mode == RichTextEditorMode.Email)
+        {
+            <span class="rte-sep"></span>
+            <button type="button" class="rte-btn" title="Alinear a la izquierda" disabled="@Disabled" @onclick='() => ExecAsync("justifyLeft")'>⟸</button>
+            <button type="button" class="rte-btn" title="Centrar" disabled="@Disabled" @onclick='() => ExecAsync("justifyCenter")'>≡</button>
+            <button type="button" class="rte-btn" title="Insertar enlace" disabled="@Disabled" @onclick='() => ExecAsync("createLink")'>🔗</button>
+        }
+    </div>
+    <div @ref="_surface"
+         class="rte-surface"
+         role="textbox"
+         aria-multiline="true"
+         aria-label="@AriaLabel"></div>
+    <p class="rte-hint">@Hint</p>
+</div>
+
+@code {
+    private readonly string _id = Guid.NewGuid().ToString("N");
+    private ElementReference _surface;
+    private DotNetObjectReference<RichTextEditor>? _self;
+    private bool _ready;
+    private bool _disabledApplied;
+    private string? _appliedValue;
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public EventCallback OnFocus { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public RichTextEditorMode Mode { get; set; } = RichTextEditorMode.Email;
+    [Parameter] public string AriaLabel { get; set; } = "Cuerpo del mensaje";
+
+    private string Hint => Mode == RichTextEditorMode.WhatsApp
+        ? "Negrita, cursiva y tachado se convierten al formato de WhatsApp al enviar."
+        : "El correo se enviará con este formato (negrita, listas, enlaces).";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("dentalCareRichText.init", _id, _surface, _self, Value ?? string.Empty, Disabled);
+            _ready = true;
+            _appliedValue = Value;
+            _disabledApplied = Disabled;
+            return;
+        }
+
+        if (!_ready)
+            return;
+
+        if (_disabledApplied != Disabled)
+        {
+            await JS.InvokeVoidAsync("dentalCareRichText.setDisabled", _id, Disabled);
+            _disabledApplied = Disabled;
+        }
+
+        if (!string.Equals(_appliedValue, Value, StringComparison.Ordinal))
+        {
+            await JS.InvokeVoidAsync("dentalCareRichText.setHtml", _id, Value ?? string.Empty);
+            _appliedValue = Value;
+        }
+    }
+
+    public async Task InsertTextAsync(string text)
+    {
+        if (!_ready || Disabled || string.IsNullOrEmpty(text))
+            return;
+        await JS.InvokeVoidAsync("dentalCareRichText.insertText", _id, text);
+    }
+
+    [JSInvokable]
+    public async Task OnHtmlChanged(string html)
+    {
+        var sanitized = MessageBodyFormatting.Sanitize(html);
+        _appliedValue = sanitized;
+        await ValueChanged.InvokeAsync(sanitized);
+    }
+
+    [JSInvokable]
+    public Task OnEditorFocus() => OnFocus.InvokeAsync();
+
+    private async Task ExecAsync(string command)
+    {
+        if (!_ready || Disabled)
+            return;
+        await JS.InvokeVoidAsync("dentalCareRichText.exec", _id, command);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_ready)
+                await JS.InvokeVoidAsync("dentalCareRichText.dispose", _id);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+}

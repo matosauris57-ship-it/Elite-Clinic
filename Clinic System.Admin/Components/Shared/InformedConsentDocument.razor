@@ -1,0 +1,102 @@
+@using System.Globalization
+@inject ClinicProfileService ClinicProfile
+
+<article class="invoice-document informed-consent-document">
+    <header class="invoice-letterhead">
+        <div class="invoice-brand">
+            @if (!string.IsNullOrWhiteSpace(Clinic.DisplayLogoUrl))
+            {
+                <img class="invoice-logo" src="@Clinic.DisplayLogoUrl" alt="@Clinic.Name" />
+            }
+            <div class="invoice-brand-copy">
+                <h1>@Clinic.Name</h1>
+                <p class="invoice-contact">
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Address)) { <span>@Clinic.Address</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Phone)) { <span>Tel. @Clinic.Phone</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Email)) { <span>@Clinic.Email</span> }
+                </p>
+            </div>
+        </div>
+        <aside class="invoice-meta">
+            <p class="invoice-kicker">Consentimiento informado</p>
+            <p class="invoice-meta-line">@SignedOn.ToString("dd/MM/yyyy", Culture)</p>
+        </aside>
+    </header>
+
+    <section class="clinical-document-heading">
+        <span>Expediente clínico</span>
+        <h2>@Title</h2>
+    </section>
+
+    <section class="invoice-parties">
+        <p><span>Paciente</span> <strong>@PatientName</strong>
+            @if (!string.IsNullOrWhiteSpace(PatientNationalId))
+            {
+                <span class="invoice-party-extra">Céd. @PatientNationalId</span>
+            }
+        </p>
+        <p><span>Odontólogo</span> <strong>@(DoctorName ?? "________________________")</strong></p>
+        @if (ToothNumber.HasValue)
+        {
+            <p><span>Pieza dental</span> <strong>@ToothNumber</strong></p>
+        }
+    </section>
+
+    <section class="consent-body-prose">
+        @foreach (var paragraph in BodyParagraphs)
+        {
+            <p>@paragraph</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Notes))
+        {
+            <p><strong>Notas / aclaraciones:</strong> @Notes</p>
+        }
+    </section>
+
+    <section class="consent-signatures">
+        <div class="consent-sign-block">
+            <div class="consent-sign-line"></div>
+            <p>Firma del paciente o representante legal</p>
+            <p class="consent-sign-meta">Nombre: ________________________________</p>
+            <p class="consent-sign-meta">Fecha: @SignedOn.ToString("dd/MM/yyyy", Culture)</p>
+        </div>
+        <div class="consent-sign-block">
+            @if (!string.IsNullOrWhiteSpace(DoctorSignatureImageUrl))
+            {
+                <img class="doctor-signature-print consent-doctor-signature" src="@DoctorSignatureImageUrl" alt="Firma del odontólogo" />
+            }
+            else
+            {
+                <div class="consent-sign-line"></div>
+            }
+            <p>Firma del odontólogo</p>
+            <p class="consent-sign-meta">Nombre: @(DoctorName ?? "________________________________")</p>
+            <p class="consent-sign-meta">Fecha: @SignedOn.ToString("dd/MM/yyyy", Culture)</p>
+        </div>
+    </section>
+</article>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Consentimiento informado";
+    [Parameter] public string PatientName { get; set; } = "Paciente";
+    [Parameter] public string? PatientNationalId { get; set; }
+    [Parameter] public string? DoctorName { get; set; }
+    [Parameter] public string? DoctorSignatureImageUrl { get; set; }
+    [Parameter] public int? ToothNumber { get; set; }
+    [Parameter] public DateTime SignedOn { get; set; } = DateTime.Today;
+    [Parameter] public string BodyText { get; set; } = "";
+    [Parameter] public string? Notes { get; set; }
+
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-DO");
+    private ClinicProfile Clinic => ClinicProfile.Get();
+
+    private IEnumerable<string> BodyParagraphs =>
+        (BodyText ?? "")
+            .Replace("\r\n", "\n")
+            .Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .SelectMany(block => block.Contains('\n')
+                ? block.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                : [block])
+            .Where(p => !string.IsNullOrWhiteSpace(p));
+}

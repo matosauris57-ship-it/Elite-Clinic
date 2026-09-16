@@ -1,3 +1,5 @@
+using FluentValidation.Results;
+
 namespace Clinic_System.Application.Features.Patients.Commands.Validators
 {
     public class UpdatePatientValidator : AbstractValidator<UpdatePatientCommand>
@@ -10,28 +12,35 @@ namespace Clinic_System.Application.Features.Patients.Commands.Validators
 
             RuleFor(x => x.Id).NotEmpty().WithMessage("Patient ID is required for update.");
 
-
-            // تقسيم القواعد لتكون منظمة
             ApplyValidationsRules();
             ApplyCustomValidationsRules();
         }
         public void ApplyValidationsRules()
         {
-            // Name
             RuleFor(x => x.FullName)
-                .MaximumLength(100).WithMessage("Name must not exceed 100 characters")
+                .MaximumLength(PatientFieldLimits.FullName).WithMessage($"Name must not exceed {PatientFieldLimits.FullName} characters")
+                .Must(PersonNameRules.IsValid).WithMessage(PersonNameRules.InvalidNameMessage)
                 .When(x => !string.IsNullOrEmpty(x.FullName));
 
-            // Address & Specialization
             RuleFor(x => x.Address)
-                .MaximumLength(200).WithMessage("Address must not exceed 100 characters")
+                .MaximumLength(PatientFieldLimits.Address).WithMessage($"Address must not exceed {PatientFieldLimits.Address} characters")
                 .When(x => !string.IsNullOrEmpty(x.Address));
 
-            // Phone (Format Only)
             RuleFor(x => x.Phone)
-                .Matches(@"^\+?[0-9]{10,15}$")
+                .Must(phone => PatientFieldLimits.IsValidPhone(phone, required: false))
                 .When(x => !string.IsNullOrEmpty(x.Phone))
                 .WithMessage("Phone number must contain 10–15 digits (numbers only, optional +)");
+
+            RuleFor(x => x.NationalId)
+                .MaximumLength(PatientFieldLimits.NationalId)
+                .Must(PatientFieldLimits.IsValidNationalId)
+                .WithMessage("National ID format is invalid")
+                .When(x => !string.IsNullOrWhiteSpace(x.NationalId));
+
+            RuleFor(x => x.Email)
+                .MaximumLength(PatientFieldLimits.Email)
+                .When(x => !string.IsNullOrWhiteSpace(x.Email))
+                .WithMessage($"Email must not exceed {PatientFieldLimits.Email} characters");
 
             RuleFor(x => x.DateOfBirth)
                 .LessThan(DateTime.Today)
@@ -48,23 +57,35 @@ namespace Clinic_System.Application.Features.Patients.Commands.Validators
 
         public void ApplyCustomValidationsRules()
         {
-            // 3. Check Phone Uniqueness (Using UnitOfWork -> Doctor Repo)
             RuleFor(x => x.Phone)
                 .MustAsync(async (command, phone, cancellationToken) =>
                 {
-                    // Search in Doctors table
-                    // تأكد أن لديك ميثود FindAsync أو استخدم AnyAsync لو متاحة
                     var existingDoctor = await _unitOfWork.DoctorsRepository.FindAsync(d => d.Phone == phone);
                     var existingPatient = await _unitOfWork.PatientsRepository.FindAsync(d => d.Phone == phone);
-                    
+
                     bool phoneUsedByOther =
                         existingDoctor.Any()
                         || existingPatient.Any(d => d.Id != command.Id);
 
-                    return !phoneUsedByOther; // Valid if no one else uses it
+                    return !phoneUsedByOther;
                 })
                 .WithMessage("Phone number is already exists")
                 .When(x => !string.IsNullOrEmpty(x.Phone));
+
+            RuleFor(x => x.NationalId)
+                .CustomAsync(async (nationalId, context, _) =>
+                {
+                    var command = (UpdatePatientCommand)context.InstanceToValidate;
+                    var existing = await PatientNationalIdRules.FindDuplicateAsync(_unitOfWork, nationalId, command.Id);
+                    if (existing != null)
+                    {
+                        context.AddFailure(new ValidationFailure(nameof(UpdatePatientCommand.NationalId), "National ID is already exists")
+                        {
+                            CustomState = existing.Id
+                        });
+                    }
+                })
+                .When(x => !string.IsNullOrWhiteSpace(x.NationalId));
 
             RuleFor(x => x.Email)
                 .Custom((email, context) =>

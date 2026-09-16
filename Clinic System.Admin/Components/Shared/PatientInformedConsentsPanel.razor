@@ -1,0 +1,506 @@
+@inject PatientInformedConsentService Consents
+@inject InformedConsentTemplateSettingsService TemplateSettings
+@inject DoctorMaintenanceService DoctorService
+@inject AuthService AuthService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject PermissionService PermissionService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using Clinic_System.Core.Catalog
+@using Clinic_System.Core.Enums
+@using System.Security.Claims
+
+<section class="rx-panel consent-panel">
+    <div class="clinical-section-heading">
+        <div>
+            <h3>Consentimientos informados</h3>
+            <p>Imprima el documento, recoja la firma manuscrita y suba el escaneo al expediente.</p>
+        </div>
+        <div class="consent-heading-actions">
+            <a class="btn-outline" href="/configuracion/consentimientos">Plantillas</a>
+            @if (CanEdit)
+            {
+                <button class="btn-primary" type="button" disabled="@_saving" @onclick="StartNew">Nuevo consentimiento</button>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="wizard-success">@_message</div>
+    }
+
+    @if (_composing)
+    {
+        <div class="consent-compose-shell">
+            <div class="consent-compose-top">
+                <div>
+                    <h4>Registrar consentimiento</h4>
+                    <p>Edite el texto si lo necesita. Al guardar la plantilla, ese texto se usará siempre para este tipo.</p>
+                </div>
+                <ol class="consent-steps" aria-label="Pasos">
+                    <li>Elegir tipo</li>
+                    <li>Revisar texto</li>
+                    <li>Imprimir y firmar</li>
+                    <li>Subir escaneo</li>
+                </ol>
+            </div>
+
+            <div class="consent-compose-grid">
+                <div class="consent-compose-main">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="consent-type">Tipo de consentimiento</label>
+                            <select id="consent-type" class="form-input" @bind="_consentType" @bind:after="OnTypeChanged">
+                                @foreach (var template in InformedConsentCatalog.Templates)
+                                {
+                                    <option value="@template.Type">@template.Title</option>
+                                }
+                            </select>
+                            @if (!string.IsNullOrWhiteSpace(_purpose))
+                            {
+                                <span class="form-hint">@_purpose</span>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label for="consent-signed">Fecha de firma</label>
+                            <input id="consent-signed" class="form-input" type="date" @bind="_signedOn" />
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="consent-doctor">Odontólogo *</label>
+                            <select id="consent-doctor" class="form-input" @bind="_doctorId" disabled="@(!CanSelectDoctor)">
+                                @if (CanSelectDoctor)
+                                {
+                                    <option value="0">Seleccione odontólogo</option>
+                                }
+                                @foreach (var doctor in _doctors)
+                                {
+                                    <option value="@doctor.Id">@doctor.FullName</option>
+                                }
+                            </select>
+                            @if (!CanSelectDoctor)
+                            {
+                                <small class="rx-hint">Su usuario de odontólogo queda asignado automáticamente.</small>
+                            }
+                            else if (SelectedDoctor != null && !string.IsNullOrWhiteSpace(SelectedDoctor.SignatureImageUrl))
+                            {
+                                <small class="rx-hint">Se incluirá la firma registrada del odontólogo al imprimir.</small>
+                            }
+                            else if (_doctorId > 0)
+                            {
+                                <small class="rx-hint">Este odontólogo no tiene firma cargada; quedará espacio para firmar a mano.</small>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label for="consent-tooth">Pieza (opcional)</label>
+                            <input id="consent-tooth" class="form-input" type="number" min="11" max="85" @bind="_toothNumber" />
+                        </div>
+                    </div>
+
+                    @if (SelectedDoctor != null && !string.IsNullOrWhiteSpace(SelectedDoctor.SignatureImageUrl))
+                    {
+                        <div class="consent-signature-preview">
+                            <span>Firma del odontólogo</span>
+                            <img src="@SelectedDoctor.SignatureImageUrl" alt="Firma de @SelectedDoctor.FullName" />
+                        </div>
+                    }
+
+                    <div class="form-group consent-body-group">
+                        <div class="consent-body-label-row">
+                            <label for="consent-body">Texto del consentimiento</label>
+                            <div class="consent-body-tools">
+                                <button type="button" class="btn-outline btn-compact" disabled="@_saving" @onclick="RestoreDefaultBody">Restaurar predeterminado</button>
+                                <button type="button" class="btn-outline btn-compact" disabled="@_saving" @onclick="SaveTemplateAsync">Guardar como plantilla</button>
+                            </div>
+                        </div>
+                        <textarea id="consent-body"
+                                  class="form-input consent-body-editor"
+                                  rows="14"
+                                  maxlength="8000"
+                                  @bind="_bodyText"
+                                  @bind:event="oninput"
+                                  placeholder="Texto completo del consentimiento informado..."></textarea>
+                        <span class="form-hint">Un solo bloque continuo, sin secciones. Lo que edite aquí se imprime y se archiva.</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="consent-notes">Notas / aclaraciones (opcional)</label>
+                        <textarea id="consent-notes" class="form-input" rows="2" @bind="_notes" maxlength="1000"
+                                  placeholder="Particularidades del caso, alcance del uso de imágenes..."></textarea>
+                    </div>
+                </div>
+
+                <aside class="consent-compose-side">
+                    <div class="consent-upload-card">
+                        <h5>Documento firmado</h5>
+                        <p>Escanee o fotografíe el consentimiento ya firmado por el paciente.</p>
+                        @if (_pendingFile == null)
+                        {
+                            <label class="btn-primary clinic-logo-upload consent-upload-btn">
+                                Seleccionar escaneo o foto
+                                <InputFile OnChange="OnFileSelected" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,image/*,application/pdf" disabled="@_saving" />
+                            </label>
+                        }
+                        else
+                        {
+                            <div class="consent-file-chip">
+                                <strong>@_pendingFile.Name</strong>
+                                <span>@FormatSize(_pendingFile.Size)</span>
+                            </div>
+                            <button type="button" class="btn-outline" disabled="@_saving" @onclick="ClearFile">Cambiar archivo</button>
+                        }
+                        <p class="form-hint">JPG, PNG, WEBP, GIF, PDF o Word. Máximo 20 MB.</p>
+                    </div>
+
+                    <div class="consent-compose-actions">
+                        <button type="button" class="btn-outline" disabled="@_saving" @onclick="CancelCompose">Cancelar</button>
+                        <button type="button" class="btn-outline" disabled="@(_saving || !CanPrintOrSave)" @onclick="PrintAsync">Imprimir para firmar</button>
+                        <button type="button" class="btn-primary" disabled="@(_saving || _pendingFile == null || !CanPrintOrSave)" @onclick="SaveAsync">
+                            @(_saving ? "Guardando..." : "Guardar en el expediente")
+                        </button>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando consentimientos..." />
+    }
+    else if (_items.Count == 0 && !_composing)
+    {
+        <div class="maintenance-empty">
+            <p>Este paciente aún no tiene consentimientos informados registrados.</p>
+        </div>
+    }
+    else if (_items.Count > 0)
+    {
+        <div class="attachment-grid">
+            @foreach (var item in _items)
+            {
+                <article class="attachment-card">
+                    @if (item.IsImage)
+                    {
+                        <a class="attachment-thumb" href="@FileUrl(item.Id)" target="_blank" rel="noopener" title="Ver escaneo">
+                            <img src="@FileUrl(item.Id)" alt="@item.Title" />
+                        </a>
+                    }
+                    else
+                    {
+                        <a class="attachment-thumb is-file" href="@FileUrl(item.Id)" target="_blank" rel="noopener" title="Abrir archivo firmado">
+                            <Icon Name="@(item.IsPdf ? "file-bar-chart" : "clipboard-list")" Class="attachment-file-icon" StrokeWidth="1.6" />
+                        </a>
+                    }
+                    <div class="attachment-card-body">
+                        <strong>@item.Title</strong>
+                        <p>
+                            Firmado: @item.DateDisplay
+                            @if (item.ToothNumber.HasValue)
+                            {
+                                <text> · Pieza @item.ToothNumber</text>
+                            }
+                        </p>
+                        @if (!string.IsNullOrWhiteSpace(item.DoctorName))
+                        {
+                            <p>Dr(a). @item.DoctorName</p>
+                        }
+                        <p>@item.OriginalFileName · @FormatSize(item.FileSizeBytes)</p>
+                        @if (!string.IsNullOrWhiteSpace(item.Notes))
+                        {
+                            <p>@item.Notes</p>
+                        }
+                    </div>
+                    <div class="rx-history-actions">
+                        <a class="btn-outline" href="@FileUrl(item.Id)" target="_blank" rel="noopener">Ver firmado</a>
+                        @if (CanEdit)
+                        {
+                            <button type="button" class="btn-outline" disabled="@_saving" @onclick="() => DeleteAsync(item)">Eliminar</button>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public string PatientName { get; set; } = "Paciente";
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private readonly List<PatientInformedConsentItem> _items = [];
+    private readonly List<DoctorListItem> _doctors = [];
+    private InformedConsentType _consentType = InformedConsentType.EvaluationDiagnosis;
+    private string _purpose = "";
+    private string _bodyText = "";
+    private IBrowserFile? _pendingFile;
+    private DateTime _signedOn = DateTime.Today;
+    private int _doctorId;
+    private int? _currentDoctorId;
+    private bool _isDoctorUser;
+    private bool _canAssignAnyDoctor;
+    private int? _toothNumber;
+    private string? _notes;
+    private int _loadedPatientId;
+    private bool _composing;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _message;
+
+    private bool CanSelectDoctor => CanEdit && (!_isDoctorUser || _canAssignAnyDoctor);
+    private bool CanPrintOrSave => _doctorId > 0 && !string.IsNullOrWhiteSpace(_bodyText);
+    private DoctorListItem? SelectedDoctor => _doctors.FirstOrDefault(d => d.Id == _doctorId);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedPatientId == PatientId)
+            return;
+        _loadedPatientId = PatientId;
+        await LoadDoctorsAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadDoctorsAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _isDoctorUser = user.IsInRole("Doctor");
+        _currentDoctorId = PermissionService.GetDoctorId(user);
+        _canAssignAnyDoctor = user.IsInRole("Admin")
+            || PermissionService.HasPermission(user, "medicos.view");
+
+        var (doctors, _) = await AuthService.WithTokenRetryAsync(() => DoctorService.GetDoctorsAsync(), AuthService.IsTokenError);
+        _doctors.Clear();
+        _doctors.AddRange(doctors.Where(d => d.IsActive).OrderBy(d => d.FullName));
+        EnsureCurrentDoctorOption(user);
+        AssignLockedDoctor();
+    }
+
+    private void EnsureCurrentDoctorOption(ClaimsPrincipal user)
+    {
+        if (CanSelectDoctor || !_currentDoctorId.HasValue)
+            return;
+
+        if (_doctors.Any(d => d.Id == _currentDoctorId.Value))
+            return;
+
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        var mine = _doctors.FirstOrDefault(d =>
+            !string.IsNullOrWhiteSpace(userId)
+            && string.Equals(d.ApplicationUserId, userId, StringComparison.OrdinalIgnoreCase));
+        if (mine != null)
+        {
+            _currentDoctorId = mine.Id;
+            return;
+        }
+
+        _doctors.Add(new DoctorListItem
+        {
+            Id = _currentDoctorId.Value,
+            FullName = $"Odontólogo actual #{_currentDoctorId.Value}",
+            IsActive = true
+        });
+    }
+
+    private void AssignLockedDoctor()
+    {
+        if (CanSelectDoctor)
+            return;
+
+        if (_currentDoctorId is > 0)
+            _doctorId = _currentDoctorId.Value;
+        else if (_doctors.Count == 1)
+            _doctorId = _doctors[0].Id;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var (items, error) = await AuthService.WithTokenRetryAsync(() => Consents.ListAsync(PatientId), AuthService.IsTokenError);
+        _items.Clear();
+        _items.AddRange(items);
+        _error = error;
+        _loading = false;
+    }
+
+    private void StartNew()
+    {
+        _message = null;
+        _error = null;
+        _composing = true;
+        _pendingFile = null;
+        _signedOn = DateTime.Today;
+        _toothNumber = null;
+        _notes = null;
+        _consentType = InformedConsentType.EvaluationDiagnosis;
+        _doctorId = CanSelectDoctor ? 0 : _currentDoctorId ?? 0;
+        AssignLockedDoctor();
+        OnTypeChanged();
+    }
+
+    private void OnTypeChanged()
+    {
+        var catalog = InformedConsentCatalog.GetOrDefault(_consentType);
+        _purpose = catalog.Purpose;
+        _bodyText = TemplateSettings.GetBody(_consentType);
+    }
+
+    private void RestoreDefaultBody()
+    {
+        TemplateSettings.ResetBody(_consentType);
+        _bodyText = InformedConsentCatalog.NormalizeBody(InformedConsentCatalog.GetOrDefault(_consentType).BodyText);
+        _message = "Texto restaurado al predeterminado del sistema.";
+    }
+
+    private void SaveTemplateAsync()
+    {
+        try
+        {
+            TemplateSettings.SaveBody(_consentType, _bodyText);
+            _message = "Plantilla guardada. Se usará automáticamente la próxima vez.";
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void CancelCompose()
+    {
+        _composing = false;
+        _pendingFile = null;
+    }
+
+    private void ClearFile() => _pendingFile = null;
+
+    private void OnFileSelected(InputFileChangeEventArgs args)
+    {
+        _error = null;
+        _message = null;
+        var file = args.File;
+        if (file.Size > PatientInformedConsentService.MaxFileBytes)
+        {
+            _error = "El archivo no puede superar 20 MB.";
+            _pendingFile = null;
+            return;
+        }
+
+        _pendingFile = file;
+    }
+
+    private bool ValidateDoctorSelection()
+    {
+        AssignLockedDoctor();
+        if (_doctorId > 0)
+            return true;
+
+        _error = "Debe seleccionar el odontólogo.";
+        return false;
+    }
+
+    private async Task PrintAsync()
+    {
+        if (!ValidateDoctorSelection() || string.IsNullOrWhiteSpace(_bodyText))
+            return;
+
+        var doctor = SelectedDoctor;
+        var title = InformedConsentCatalog.GetOrDefault(_consentType).Title;
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareUi.setConsentPrintDraft", new
+            {
+                patientId = PatientId,
+                type = (int)_consentType,
+                title,
+                bodyText = _bodyText,
+                notes = _notes,
+                doctorName = doctor?.FullName,
+                doctorSignatureImageUrl = doctor?.SignatureImageUrl,
+                toothNumber = _toothNumber,
+                signedOn = _signedOn.ToString("yyyy-MM-dd")
+            });
+        }
+        catch
+        {
+        }
+
+        var url = Navigation.ToAbsoluteUri($"/pacientes/{PatientId}/consentimientos/imprimir?tipo={(int)_consentType}&fecha={_signedOn:yyyy-MM-dd}").ToString();
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_pendingFile == null || string.IsNullOrWhiteSpace(_bodyText) || !ValidateDoctorSelection())
+            return;
+
+        _saving = true;
+        _error = null;
+        _message = null;
+
+        var title = InformedConsentCatalog.GetOrDefault(_consentType).Title;
+        var (item, error) = await AuthService.WithTokenRetryAsync(
+            () => Consents.UploadAsync(
+                PatientId,
+                _pendingFile,
+                _consentType,
+                title,
+                _bodyText,
+                _notes,
+                _toothNumber,
+                _doctorId,
+                _signedOn),
+            AuthService.IsTokenError);
+
+        _saving = false;
+        if (error != null || item == null)
+        {
+            _error = error ?? "No se pudo guardar el consentimiento.";
+            return;
+        }
+
+        _items.Insert(0, item);
+        _composing = false;
+        _pendingFile = null;
+        _message = "Consentimiento firmado guardado en el expediente.";
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task DeleteAsync(PatientInformedConsentItem item)
+    {
+        _saving = true;
+        _error = null;
+        var (ok, error) = await AuthService.WithTokenRetryAsync(
+            () => Consents.DeleteAsync(PatientId, item.Id),
+            AuthService.IsTokenError);
+        _saving = false;
+        if (!ok)
+        {
+            _error = error ?? "No se pudo eliminar el consentimiento.";
+            return;
+        }
+
+        _items.RemoveAll(x => x.Id == item.Id);
+        _message = "Consentimiento eliminado del expediente.";
+        await OnChanged.InvokeAsync();
+    }
+
+    private string FileUrl(int consentId) => $"/pacientes/{PatientId}/consentimientos/{consentId}/archivo";
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:0.#} KB";
+        return $"{bytes / (1024.0 * 1024.0):0.#} MB";
+    }
+}

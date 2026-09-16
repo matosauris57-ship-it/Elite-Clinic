@@ -1,0 +1,29 @@
+@page "/acceso-denegado"
+@layout LoginLayout
+@attribute [AllowAnonymous]
+@inject ClinicProfileService ClinicProfile
+
+<PageTitle>Acceso denegado — @_clinic.Name</PageTitle>
+
+<div class="login-stage">
+    <section class="login-panel" style="margin: auto;">
+        <div class="login-panel-head">
+            <p class="login-kicker">Permisos</p>
+            <h2>Acceso denegado</h2>
+            <p>Su cuenta inició sesión, pero no tiene permiso para abrir esa página. Pida a un administrador que le asigne módulos (por ejemplo agenda o pacientes) y vuelva a entrar.</p>
+        </div>
+        <div class="login-forgot-actions">
+            <a class="login-btn" href="/login">Ir al inicio de sesión</a>
+            <a class="btn-outline login-secondary-btn" href="/auth/logout">Cerrar sesión</a>
+        </div>
+    </section>
+</div>
+
+@code {
+    private ClinicProfile _clinic = new();
+
+    protected override void OnInitialized()
+    {
+        _clinic = ClinicProfile.Get();
+    }
+}

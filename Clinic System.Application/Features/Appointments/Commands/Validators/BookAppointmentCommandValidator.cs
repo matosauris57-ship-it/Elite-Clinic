@@ -23,7 +23,10 @@ namespace Clinic_System.Application.Features.Appointments.Commands.Validators
             RuleFor(x => x.DoctorId)
                 .GreaterThan(0)
                 .MustAsync(DoctorExists)
-                .WithMessage("Doctor not found");
+                .WithMessage("Doctor not found")
+                .Must(doctorId => !currentUserService.RestrictsToOwnDoctorData
+                    || currentUserService.DoctorId == doctorId)
+                .WithMessage("Solo puede agendar citas para sí mismo.");
 
             RuleFor(x => x.PatientId)
                 .GreaterThan(0)

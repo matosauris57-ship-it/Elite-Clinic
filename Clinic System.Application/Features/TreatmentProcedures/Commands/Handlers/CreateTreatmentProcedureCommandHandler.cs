@@ -28,6 +28,8 @@ namespace Clinic_System.Application.Features.TreatmentProcedures.Commands.Handle
                 request.PricingMode,
                 request.DurationMinutes,
                 request.IsActive,
+                request.Target,
+                request.ToothKindFilter,
                 cancellationToken);
 
             await unitOfWork.SaveAsync(cancellationToken);

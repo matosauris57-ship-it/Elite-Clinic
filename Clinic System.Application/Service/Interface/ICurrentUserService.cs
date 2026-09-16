@@ -8,6 +8,8 @@ namespace Clinic_System.Application.Service.Interface
         int? PatientId { get; }
         bool IsAdmin { get; }
         bool IsStaff { get; }
+        bool CanViewAllClinicData { get; }
+        bool RestrictsToOwnDoctorData { get; }
         Task<List<string>> GetCurrentUserRolesAsync();
         bool HasPermission(string permission);
     }

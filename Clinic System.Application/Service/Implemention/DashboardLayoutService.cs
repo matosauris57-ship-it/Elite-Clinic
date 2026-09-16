@@ -22,7 +22,8 @@ public class DashboardLayoutService : IDashboardLayoutService
     public async Task<DashboardLayoutResponseDTO> GetUserLayoutAsync(CancellationToken cancellationToken = default)
     {
         var clinic = await GetOrCreateClinicAsync(cancellationToken);
-        var clinicDoc = DashboardLayoutEngine.ParseOrDefault(clinic.LayoutJson);
+        var clinicStored = DashboardLayoutEngine.ParseOrDefault(clinic.LayoutJson);
+        var clinicDoc = DashboardLayoutEngine.Normalize(clinicStored);
         var userId = RequireUserId();
         var userEntity = await _unitOfWork.DashboardLayoutsRepository.GetByUserIdAsync(userId, cancellationToken);
         var isUser = userEntity != null;
@@ -31,8 +32,10 @@ public class DashboardLayoutService : IDashboardLayoutService
             : DashboardLayoutEngine.ParseOrDefault(userEntity.LayoutJson);
 
         var merged = DashboardLayoutEngine.FilterByPermissions(
-            DashboardLayoutEngine.ApplyClinicAvailability(userDoc, clinicDoc),
+            DashboardLayoutEngine.ApplyClinicAvailability(userDoc, clinicStored),
             _currentUser.HasPermission);
+
+        merged = EnsureAttendanceLinkWidget(merged, clinicDoc);
 
         return new DashboardLayoutResponseDTO
         {
@@ -42,13 +45,33 @@ public class DashboardLayoutService : IDashboardLayoutService
         };
     }
 
+    private DashboardLayoutDocument EnsureAttendanceLinkWidget(DashboardLayoutDocument layout, DashboardLayoutDocument clinicDoc)
+    {
+        if (!_currentUser.HasPermission("agenda.view"))
+            return layout;
+
+        var clinicItem = clinicDoc.Items.FirstOrDefault(i =>
+            string.Equals(i.WidgetKey, DashboardWidgetKeys.AttendanceLinkAlerts, StringComparison.OrdinalIgnoreCase));
+        var clinicAllows = clinicItem?.Visible != false;
+
+        if (!clinicAllows)
+            return layout;
+
+        var item = layout.Items.FirstOrDefault(i =>
+            string.Equals(i.WidgetKey, DashboardWidgetKeys.AttendanceLinkAlerts, StringComparison.OrdinalIgnoreCase));
+        if (item is { Visible: true })
+            return layout;
+
+        return DashboardLayoutEngine.ForceVisible(layout, DashboardWidgetKeys.AttendanceLinkAlerts);
+    }
+
     public async Task<DashboardLayoutResponseDTO> SaveUserLayoutAsync(DashboardLayoutDocument layout, CancellationToken cancellationToken = default)
     {
         var userId = RequireUserId();
         var clinic = await GetOrCreateClinicAsync(cancellationToken);
-        var clinicDoc = DashboardLayoutEngine.ParseOrDefault(clinic.LayoutJson);
+        var clinicStored = DashboardLayoutEngine.ParseOrDefault(clinic.LayoutJson);
         var sanitized = DashboardLayoutEngine.FilterByPermissions(
-            DashboardLayoutEngine.ApplyClinicAvailability(layout, clinicDoc),
+            DashboardLayoutEngine.ApplyClinicAvailability(layout, clinicStored),
             _currentUser.HasPermission);
 
         var entity = await _unitOfWork.DashboardLayoutsRepository.GetByUserIdAsync(userId, cancellationToken);
@@ -183,6 +206,39 @@ public class DashboardLayoutService : IDashboardLayoutService
 
         var count = await _unitOfWork.PeriodontalExamsRepository.CountAsync(e => e.RecordedSiteCount == 0, cancellationToken);
         return new PeriodontalIncompleteStatsDTO { IncompleteExams = count };
+    }
+
+    public async Task<List<AttendanceLinkAlertDTO>> GetAttendanceLinkAlertsAsync(DateTime since, int take, CancellationToken cancellationToken = default)
+    {
+        if (!_currentUser.HasPermission("agenda.view"))
+            throw new UnauthorizedException("No autorizado para consultar la agenda.");
+
+        take = Math.Clamp(take, 5, 50);
+        var appointments = await _unitOfWork.AppointmentsRepository.GetRecentAttendanceLinkResponsesAsync(since, take, cancellationToken);
+        return appointments.Select(a =>
+        {
+            var accepted = a.AttendanceLinkAccepted ?? false;
+            var respondedAt = a.AttendanceLinkRespondedAt ?? a.CancelledAt ?? a.UpdatedAt ?? a.CreatedAt;
+            var comment = a.AttendanceLinkComment ?? a.CancellationComment;
+            var procedure = a.PlanItem != null
+                ? a.PlanItem.ProcedureName
+                : a.TreatmentProcedure?.Name;
+            return new AttendanceLinkAlertDTO
+            {
+                AppointmentId = a.Id,
+                PatientId = a.PatientId,
+                PatientName = a.Patient?.FullName ?? "Paciente",
+                PatientPhone = a.Patient?.Phone,
+                DoctorName = a.Doctor?.FullName ?? "Médico",
+                AppointmentDate = a.AppointmentDate,
+                Status = a.Status.ToString(),
+                Accepted = accepted,
+                RespondedAt = respondedAt,
+                Comment = comment,
+                ProcedureName = procedure,
+                ToothNumber = a.ToothNumber
+            };
+        }).ToList();
     }
 
     private async Task<DashboardLayout> GetOrCreateClinicAsync(CancellationToken cancellationToken)

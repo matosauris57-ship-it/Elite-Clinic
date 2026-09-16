@@ -65,7 +65,13 @@ public static class DashboardLayoutEngine
         DashboardLayoutDocument userLayout,
         DashboardLayoutDocument clinicLayout)
     {
-        var clinicVisible = clinicLayout.Items
+        var storedClinicKeys = clinicLayout.Items
+            .Where(i => !string.IsNullOrWhiteSpace(i.WidgetKey))
+            .Select(i => i.WidgetKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var clinicNormalized = Normalize(clinicLayout);
+        var clinicVisible = clinicNormalized.Items
             .Where(i => i.Visible)
             .Select(i => i.WidgetKey)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -73,9 +79,39 @@ public static class DashboardLayoutEngine
         foreach (var definition in DashboardWidgetCatalog.All.Where(d => d.Required))
             clinicVisible.Add(definition.Key);
 
+        var userHadKeys = userLayout.Items
+            .Where(i => !string.IsNullOrWhiteSpace(i.WidgetKey))
+            .Select(i => i.WidgetKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var defaults = DashboardWidgetCatalog.CreateDefaultLayout();
         var normalized = Normalize(userLayout);
         foreach (var item in normalized.Items)
         {
+            if (!storedClinicKeys.Contains(item.WidgetKey))
+            {
+                var fallback = defaults.Items.First(i => i.WidgetKey == item.WidgetKey);
+                var shouldShow = fallback.Visible
+                    || (DashboardWidgetCatalog.TryGet(item.WidgetKey, out var created) && created.Required);
+                if (!userHadKeys.Contains(item.WidgetKey))
+                {
+                    item.Visible = shouldShow;
+                    if (item.Visible)
+                    {
+                        item.X = fallback.X;
+                        item.Y = fallback.Y;
+                        item.W = fallback.W;
+                        item.H = fallback.H;
+                        PlaceIfNeeded(normalized, item);
+                    }
+                }
+                else if (shouldShow)
+                {
+                    item.Visible = true;
+                }
+                continue;
+            }
+
             if (!clinicVisible.Contains(item.WidgetKey) &&
                 DashboardWidgetCatalog.TryGet(item.WidgetKey, out var def) &&
                 !def.Required)
@@ -117,7 +153,14 @@ public static class DashboardLayoutEngine
         IEnumerable<DashboardWidgetPlacement> positions)
     {
         var normalized = Normalize(layout);
-        var map = positions.ToDictionary(p => p.Id, StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, DashboardWidgetPlacement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pos in positions)
+        {
+            if (!string.IsNullOrWhiteSpace(pos.Id))
+                map[pos.Id] = pos;
+            if (!string.IsNullOrWhiteSpace(pos.WidgetKey))
+                map[pos.WidgetKey] = pos;
+        }
         foreach (var item in normalized.Items)
         {
             if (!map.TryGetValue(item.Id, out var pos) && !map.TryGetValue(item.WidgetKey, out pos))
@@ -129,6 +172,28 @@ public static class DashboardLayoutEngine
         }
 
         return Normalize(normalized);
+    }
+
+    public static DashboardLayoutDocument ForceVisible(DashboardLayoutDocument layout, string widgetKey)
+    {
+        var normalized = SetVisible(layout, widgetKey, true);
+        var item = normalized.Items.FirstOrDefault(i =>
+            string.Equals(i.WidgetKey, widgetKey, StringComparison.OrdinalIgnoreCase));
+        if (item == null)
+            return normalized;
+
+        var anchor = normalized.Items.FirstOrDefault(i =>
+            i.Visible && string.Equals(i.WidgetKey, DashboardWidgetKeys.SmartAlerts, StringComparison.OrdinalIgnoreCase));
+        if (anchor != null)
+        {
+            item.X = anchor.X;
+            item.Y = anchor.Y + anchor.H;
+            var maxW = Math.Max(1, DashboardWidgetCatalog.Columns - item.X);
+            item.W = Math.Clamp(Math.Max(anchor.W, 4), 3, maxW);
+        }
+
+        PlaceIfNeeded(normalized, item);
+        return normalized;
     }
 
     public static DashboardLayoutDocument SetVisible(DashboardLayoutDocument layout, string widgetKey, bool visible)

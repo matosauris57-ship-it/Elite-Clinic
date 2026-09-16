@@ -8,7 +8,8 @@ public class DashboardQueryHandlers :
     IRequestHandler<GetClinicDashboardConfigQuery, Response<DashboardClinicConfigDTO>>,
     IRequestHandler<GetPatientDashboardStatsQuery, Response<PatientDashboardStatsDTO>>,
     IRequestHandler<GetRecentClinicalActivityQuery, Response<List<RecentClinicalActivityItemDTO>>>,
-    IRequestHandler<GetPeriodontalIncompleteStatsQuery, Response<PeriodontalIncompleteStatsDTO>>
+    IRequestHandler<GetPeriodontalIncompleteStatsQuery, Response<PeriodontalIncompleteStatsDTO>>,
+    IRequestHandler<GetAttendanceLinkAlertsQuery, Response<List<AttendanceLinkAlertDTO>>>
 {
     private readonly IDashboardLayoutService _service;
 
@@ -66,6 +67,22 @@ public class DashboardQueryHandlers :
             return Unauthorized<PeriodontalIncompleteStatsDTO>("No autorizado para consultar periodontogramas.");
 
         var data = await _service.GetPeriodontalIncompleteAsync(cancellationToken);
+        return Success(data);
+    }
+
+    public async Task<Response<List<AttendanceLinkAlertDTO>>> Handle(GetAttendanceLinkAlertsQuery request, CancellationToken cancellationToken)
+    {
+        if (!_currentUserService.HasPermission("agenda.view"))
+            return Unauthorized<List<AttendanceLinkAlertDTO>>("No autorizado para consultar la agenda.");
+
+        var since = request.Period switch
+        {
+            "24h" => DateTime.Now.AddHours(-24),
+            "7d" => DateTime.Today.AddDays(-7),
+            "30d" => DateTime.Today.AddDays(-30),
+            _ => DateTime.Today.AddDays(-14)
+        };
+        var data = await _service.GetAttendanceLinkAlertsAsync(since, request.Take, cancellationToken);
         return Success(data);
     }
 }

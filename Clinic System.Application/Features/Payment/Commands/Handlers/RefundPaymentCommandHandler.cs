@@ -21,7 +21,8 @@ namespace Clinic_System.Application.Features.Payment.Commands.Handlers
         {
             try
             {
-                await paymentService.RefundAsync(request.PaymentId, request.Reason, cancellationToken);
+                await paymentService.RefundAsync(
+                    request.PaymentId, request.Reason, Money.Resolve(request.AmountInput, request.Amount), cancellationToken);
                 await unitOfWork.SaveAsync(cancellationToken);
 
                 var payment = await unitOfWork.PaymentsRepository.GetPaymentDetailsByIdAsync(request.PaymentId);

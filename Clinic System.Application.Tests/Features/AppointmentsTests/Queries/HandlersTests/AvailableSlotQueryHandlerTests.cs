@@ -5,15 +5,20 @@
         private readonly Mock<IAppointmentService> _mockAppointmentService;
         private readonly Mock<IMapper> _mockMapper;
         private readonly Mock<ILogger<AvailableSlotQueryHandler>> _mockLogger;
+        private readonly Mock<ICurrentUserService> _mockCurrentUser;
         private readonly AvailableSlotQueryHandler _handler;
         public AvailableSlotQueryHandlerTests()
         {
             _mockAppointmentService = new Mock<IAppointmentService>();
             _mockMapper = new Mock<IMapper>();
             _mockLogger = new Mock<ILogger<AvailableSlotQueryHandler>>();
+            _mockCurrentUser = new Mock<ICurrentUserService>();
 
-            _handler = new AvailableSlotQueryHandler(_mockAppointmentService.Object,
-                _mockMapper.Object, _mockLogger.Object);
+            _handler = new AvailableSlotQueryHandler(
+                _mockCurrentUser.Object,
+                _mockAppointmentService.Object,
+                _mockMapper.Object,
+                _mockLogger.Object);
         }
 
         [Fact]

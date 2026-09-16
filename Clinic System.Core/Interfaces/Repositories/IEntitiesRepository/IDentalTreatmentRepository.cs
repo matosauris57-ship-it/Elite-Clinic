@@ -11,7 +11,8 @@ namespace Clinic_System.Core.Interfaces.Repositories.IEntitiesRepository
             DateTime? toDate,
             int pageNumber,
             int pageSize,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellationToken = default,
+            int? doctorId = null);
         Task<DentalTreatment?> GetByIdWithPatientAsync(int id, CancellationToken cancellationToken = default);
     }
 }

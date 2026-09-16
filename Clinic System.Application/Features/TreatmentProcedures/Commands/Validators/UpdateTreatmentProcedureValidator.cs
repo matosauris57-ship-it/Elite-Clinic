@@ -15,6 +15,8 @@ namespace Clinic_System.Application.Features.TreatmentProcedures.Commands.Valida
                 .When(x => x.PricingMode == TreatmentPricingMode.Fixed)
                 .WithMessage("Indique un precio fijo mayor a cero.");
             RuleFor(x => x.DurationMinutes).GreaterThan(0);
+            RuleFor(x => x.Target).IsInEnum();
+            RuleFor(x => x.ToothKindFilter).IsInEnum();
             RuleFor(x => x.DoctorPrices)
                 .Must(prices => prices.Select(p => p.DoctorId).Distinct().Count() == prices.Count)
                 .WithMessage("Each doctor can have only one price per procedure.");

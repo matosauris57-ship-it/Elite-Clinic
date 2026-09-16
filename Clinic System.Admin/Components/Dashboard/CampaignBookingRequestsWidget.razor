@@ -1,0 +1,42 @@
+<div class="widget alerts-widget dash-panel attendance-link-widget">
+    <div class="widget-head">
+        <div>
+            <h3>Solicitudes de campaña</h3>
+            <p class="dash-panel-sub">Pendientes de confirmar desde el enlace del correo</p>
+        </div>
+        <span class="widget-pill">@Items.Count</span>
+    </div>
+
+    <div class="alert-cards">
+        @if (Items.Count == 0)
+        {
+            <div class="dash-empty">
+                <Icon Name="inbox" Class="dash-empty-icon" />
+                <p>No hay solicitudes pendientes.</p>
+            </div>
+        }
+        @foreach (var item in Items.Take(8))
+        {
+            <div class="alert-card severity-warning">
+                <div class="alert-card-top">
+                    <span class="alert-severity-tag">PENDIENTE</span>
+                    <span class="alert-card-time">@item.RequestedAt.ToString("dd MMM HH:mm")</span>
+                </div>
+                <div class="alert-card-title">@(item.PatientName ?? $"Paciente #{item.PatientId}")</div>
+                <div class="alert-card-desc">
+                    @item.RequestedAppointmentAt.ToString("dd/MM/yyyy hh:mm tt")
+                    · @(item.RequestedDoctorName ?? "Médico")
+                    · @(item.ServiceName ?? "Servicio")
+                </div>
+                <NavLink class="alert-action-btn" href="/campanas/solicitudes">
+                    Revisar
+                    <Icon Name="chevron-right" Class="alert-action-icon" StrokeWidth="2" />
+                </NavLink>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<CampaignAppointmentRequestItem> Items { get; set; } = [];
+}

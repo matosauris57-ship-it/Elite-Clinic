@@ -14,4 +14,5 @@ public interface IDashboardLayoutService
     Task<PatientDashboardStatsDTO> GetPatientStatsAsync(CancellationToken cancellationToken = default);
     Task<List<RecentClinicalActivityItemDTO>> GetRecentActivityAsync(DateTime since, int take, CancellationToken cancellationToken = default);
     Task<PeriodontalIncompleteStatsDTO> GetPeriodontalIncompleteAsync(CancellationToken cancellationToken = default);
+    Task<List<AttendanceLinkAlertDTO>> GetAttendanceLinkAlertsAsync(DateTime since, int take, CancellationToken cancellationToken = default);
 }

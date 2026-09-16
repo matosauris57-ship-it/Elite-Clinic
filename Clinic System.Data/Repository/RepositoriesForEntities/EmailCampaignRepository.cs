@@ -41,4 +41,15 @@ public class EmailCampaignRepository : GenericRepository<EmailCampaign>, IEmailC
     {
         await context.Set<EmailCampaignRecipient>().AddRangeAsync(recipients, cancellationToken);
     }
+
+    public async Task ClearRecipientsAsync(int campaignId, CancellationToken cancellationToken = default)
+    {
+        var existing = await context.EmailCampaignRecipients
+            .Where(x => x.EmailCampaignId == campaignId)
+            .ToListAsync(cancellationToken);
+        if (existing.Count == 0)
+            return;
+
+        context.EmailCampaignRecipients.RemoveRange(existing);
+    }
 }

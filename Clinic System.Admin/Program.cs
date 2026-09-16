@@ -15,6 +15,10 @@ builder.Services.Configure<ClinicSettings>(builder.Configuration.GetSection("Cli
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(options =>
+{
+    options.MaximumReceiveMessageSize = 25 * 1024 * 1024;
+});
 
 builder.Services.AddMemoryCache();
 builder.Services.AddDataProtection();
@@ -26,6 +30,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     .AddCookie(options =>
     {
         options.LoginPath = "/login";
+        options.AccessDeniedPath = "/acceso-denegado";
     });
 builder.Services.AddAuthorization();
 builder.Services.AddAdminPermissionAuthorization();
@@ -48,6 +53,9 @@ builder.Services.AddScoped<ToothChartService>();
 builder.Services.AddScoped<PeriodontalExamService>();
 builder.Services.AddScoped<PatientPrescriptionService>();
 builder.Services.AddScoped<PatientMedicalCertificateService>();
+builder.Services.AddScoped<PatientClinicalAttachmentService>();
+builder.Services.AddScoped<PatientInformedConsentService>();
+builder.Services.AddSingleton<InformedConsentTemplateSettingsService>();
 builder.Services.AddScoped<TreatmentProcedureMaintenanceService>();
 builder.Services.AddScoped<ClinicalTreatmentMaintenanceService>();
 builder.Services.AddScoped<InventoryMaintenanceService>();
@@ -58,6 +66,7 @@ builder.Services.AddScoped<BillingMaintenanceService>();
 builder.Services.AddScoped<ReportMaintenanceService>();
 builder.Services.AddScoped<PermissionService>();
 builder.Services.AddScoped<AccessControlMaintenanceService>();
+builder.Services.AddScoped<PasswordRecoveryMaintenanceService>();
 builder.Services.AddSingleton<ClinicProfileService>();
 builder.Services.AddSingleton<WhatsAppMessageSettingsService>();
 builder.Services.AddSingleton<EmailMessageSettingsService>();
@@ -101,7 +110,8 @@ builder.Services.AddScoped<AuthenticatedApiClient>(sp =>
 
     return new AuthenticatedApiClient(new HttpClient(authHandler)
     {
-        BaseAddress = new Uri(apiUrl)
+        BaseAddress = new Uri(apiUrl),
+        Timeout = TimeSpan.FromMinutes(5)
     });
 });
 
@@ -116,6 +126,10 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+app.MapGet("/Account/AccessDenied", () => Results.Redirect("/acceso-denegado"))
+    .AllowAnonymous()
+    .DisableAntiforgery();
 
 app.MapGet("/auth/complete", async (string key, IMemoryCache cache, HttpContext httpContext) =>
 {
@@ -150,7 +164,7 @@ app.MapGet("/auth/complete", async (string key, IMemoryCache cache, HttpContext 
 
     httpContext.RequestServices.GetRequiredService<ApiSessionCookieService>().Write(data);
 
-    return Results.Redirect("/");
+    return Results.Redirect(PermissionService.ResolveLandingPath(data.Roles, data.Permissions));
 }).DisableAntiforgery();
 
 app.MapGet("/auth/logout", async (HttpContext httpContext, IMemoryCache cache) =>
@@ -175,6 +189,36 @@ app.MapGet("/auth/logout", async (HttpContext httpContext, IMemoryCache cache) =
 
     return Results.Redirect("/login");
 }).AllowAnonymous().DisableAntiforgery();
+
+app.MapGet("/pacientes/{patientId:int}/adjuntos/{attachmentId:int}/archivo", async (
+    int patientId,
+    int attachmentId,
+    PatientClinicalAttachmentService attachments,
+    CancellationToken cancellationToken) =>
+{
+    var (stream, contentType, fileName, error) = await attachments.OpenFileAsync(patientId, attachmentId, cancellationToken);
+    if (stream == null)
+        return Results.NotFound();
+
+    var inline = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(contentType, "application/pdf", StringComparison.OrdinalIgnoreCase);
+    return Results.Stream(stream, contentType, fileDownloadName: inline ? null : fileName, enableRangeProcessing: false);
+}).RequireAuthorization("pacientes.view").DisableAntiforgery();
+
+app.MapGet("/pacientes/{patientId:int}/consentimientos/{consentId:int}/archivo", async (
+    int patientId,
+    int consentId,
+    PatientInformedConsentService consents,
+    CancellationToken cancellationToken) =>
+{
+    var (stream, contentType, fileName, error) = await consents.OpenFileAsync(patientId, consentId, cancellationToken);
+    if (stream == null)
+        return Results.NotFound();
+
+    var inline = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(contentType, "application/pdf", StringComparison.OrdinalIgnoreCase);
+    return Results.Stream(stream, contentType, fileDownloadName: inline ? null : fileName, enableRangeProcessing: false);
+}).RequireAuthorization("pacientes.view").DisableAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

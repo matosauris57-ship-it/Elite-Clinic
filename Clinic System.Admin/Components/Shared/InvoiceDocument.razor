@@ -1,6 +1,6 @@
 @inject ClinicProfileService ClinicProfile
 
-<article class="invoice-document @(ShowLineDetails ? "is-detailed" : "is-summary")">
+<article class="invoice-document @(ShowLineDetails ? "is-detailed" : "is-summary") format-@FormatKey">
     <header class="invoice-letterhead">
         <div class="invoice-brand">
             @if (!string.IsNullOrWhiteSpace(Clinic.DisplayLogoUrl))
@@ -18,7 +18,7 @@
                     {
                         <span>Tel. @Clinic.Phone</span>
                     }
-                    @if (!string.IsNullOrWhiteSpace(Clinic.Email))
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Email) && !IsTicket)
                     {
                         <span>@Clinic.Email</span>
                     }
@@ -33,7 +33,11 @@
             <p class="invoice-kicker">Factura N.º @Payment.PaymentId</p>
             <span class="invoice-status @StatusCss">@Payment.PaymentStatusDisplay</span>
             <p class="invoice-meta-line">@FormatDate(Payment.PaymentDate)</p>
-            @if (!string.IsNullOrWhiteSpace(Payment.AppointmentDate))
+            @if (!IsNarrowTicket && Payment.TreatmentPlanId is int planId)
+            {
+                <p class="invoice-meta-line">Plan #@planId@(string.IsNullOrWhiteSpace(Payment.TreatmentPlanTitle) ? "" : $" · {Payment.TreatmentPlanTitle}")</p>
+            }
+            @if (!IsNarrowTicket && !string.IsNullOrWhiteSpace(Payment.AppointmentDate) && Payment.AppointmentId > 0)
             {
                 <p class="invoice-meta-line">Cita #@Payment.AppointmentId · @FormatDate(Payment.AppointmentDate)</p>
             }
@@ -46,7 +50,7 @@
 
     <section class="invoice-parties">
         <p><span>Paciente</span> <strong>@Payment.PatientName</strong>
-            @if (!string.IsNullOrWhiteSpace(Payment.PatientPhone))
+            @if (!string.IsNullOrWhiteSpace(Payment.PatientPhone) && !IsNarrowTicket)
             {
                 <span class="invoice-party-extra">@Payment.PatientPhone</span>
             }
@@ -55,62 +59,127 @@
                 <span class="invoice-party-extra">Céd. @Payment.PatientNationalId</span>
             }
         </p>
-        <p><span>Médico</span> <strong>@Payment.DoctorName</strong>
-            @if (!string.IsNullOrWhiteSpace(Payment.DoctorSpecialization))
-            {
-                <span class="invoice-party-extra">@Payment.DoctorSpecialization</span>
-            }
-        </p>
+        @if (!string.IsNullOrWhiteSpace(Payment.DoctorName))
+        {
+            <p><span>Médico</span> <strong>@Payment.DoctorName</strong>
+                @if (!string.IsNullOrWhiteSpace(Payment.DoctorSpecialization) && !IsTicket)
+                {
+                    <span class="invoice-party-extra">@Payment.DoctorSpecialization</span>
+                }
+            </p>
+        }
     </section>
 
     @if (ShowLineDetails)
     {
-        <table class="invoice-lines">
-            <thead>
-                <tr>
-                    <th>Descripción</th>
-                    <th>Pieza</th>
-                    <th>Cant.</th>
-                    <th>P. unitario</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (Lines.Count > 0)
-                {
-                    @foreach (var line in Lines)
+        @if (IsTicket)
+        {
+            <table class="invoice-lines invoice-lines-ticket">
+                <thead>
+                    <tr>
+                        <th>Descripción</th>
+                        @if (!IsNarrowTicket)
+                        {
+                            <th>Cant.</th>
+                        }
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Lines.Count > 0)
+                    {
+                        @foreach (var line in Lines)
+                        {
+                            <tr>
+                                <td>
+                                    @line.Description
+                                    @if (line.ToothNumber is int tooth)
+                                    {
+                                        <span class="invoice-line-extra">Pieza @tooth</span>
+                                    }
+                                </td>
+                                @if (!IsNarrowTicket)
+                                {
+                                    <td>@line.Quantity</td>
+                                }
+                                <td>@line.LineTotalDisplay</td>
+                            </tr>
+                        }
+                    }
+                    else if (HasAmount)
                     {
                         <tr>
-                            <td>@line.Description</td>
-                            <td>@(line.ToothNumber?.ToString() ?? "—")</td>
-                            <td>@line.Quantity</td>
-                            <td>@line.UnitPriceDisplay</td>
-                            <td>@line.LineTotalDisplay</td>
+                            <td>Servicios odontológicos</td>
+                            @if (!IsNarrowTicket)
+                            {
+                                <td>1</td>
+                            }
+                            <td>@Payment.AmountDisplay</td>
                         </tr>
                     }
-                }
-                else if (HasAmount)
-                {
+                    else
+                    {
+                        <tr>
+                            <td>Pendiente de desglose</td>
+                            @if (!IsNarrowTicket)
+                            {
+                                <td>—</td>
+                            }
+                            <td>—</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <table class="invoice-lines">
+                <thead>
                     <tr>
-                        <td>Servicios odontológicos</td>
-                        <td>—</td>
-                        <td>1</td>
-                        <td>@Payment.AmountDisplay</td>
-                        <td>@Payment.AmountDisplay</td>
+                        <th>Descripción</th>
+                        <th>Pieza</th>
+                        <th>Cant.</th>
+                        <th>P. unitario</th>
+                        <th>Total</th>
                     </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td>Pendiente de desglose</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td>—</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    @if (Lines.Count > 0)
+                    {
+                        @foreach (var line in Lines)
+                        {
+                            <tr>
+                                <td>@line.Description</td>
+                                <td>@(line.ToothNumber?.ToString() ?? "—")</td>
+                                <td>@line.Quantity</td>
+                                <td>@line.UnitPriceDisplay</td>
+                                <td>@line.LineTotalDisplay</td>
+                            </tr>
+                        }
+                    }
+                    else if (HasAmount)
+                    {
+                        <tr>
+                            <td>Servicios odontológicos</td>
+                            <td>—</td>
+                            <td>1</td>
+                            <td>@Payment.AmountDisplay</td>
+                            <td>@Payment.AmountDisplay</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        <tr>
+                            <td>Pendiente de desglose</td>
+                            <td>—</td>
+                            <td>—</td>
+                            <td>—</td>
+                            <td>—</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
     }
     else
     {
@@ -132,18 +201,25 @@
 
     <footer class="invoice-totals">
         <div class="invoice-footnote">
-            @if (!string.IsNullOrWhiteSpace(Payment.Notes) && Payment.Notes != "N/A")
+            @if (!string.IsNullOrWhiteSpace(Payment.Notes) && Payment.Notes != "N/A" && !IsNarrowTicket)
             {
                 <p class="invoice-notes"><span>Notas</span> @Payment.Notes</p>
             }
             <p class="invoice-thanks">Gracias por su visita.</p>
         </div>
         <dl>
-            @if (ShowLineDetails)
+            @if (ShowLineDetails && !IsNarrowTicket)
             {
                 <div>
                     <dt>Subtotal</dt>
-                    <dd>@Payment.AmountDisplay</dd>
+                    <dd>@(string.IsNullOrWhiteSpace(Payment.SubtotalDisplay) ? Payment.AmountDisplay : Payment.SubtotalDisplay)</dd>
+                </div>
+            }
+            @if (Payment.DiscountAmount > 0)
+            {
+                <div>
+                    <dt>Descuento</dt>
+                    <dd>@Payment.DiscountAmountDisplay</dd>
                 </div>
             }
             <div class="invoice-grand">
@@ -155,7 +231,7 @@
                 <dd>@Payment.AmountCollectedDisplay</dd>
             </div>
             <div>
-                <dt>Saldo</dt>
+                <dt>Total para saldar</dt>
                 <dd>@Payment.BalanceDisplay</dd>
             </div>
         </dl>
@@ -165,11 +241,14 @@
     {
         <section class="invoice-receipts">
             <p class="invoice-kicker">Abonos</p>
-            <table class="invoice-lines">
+            <table class="invoice-lines @(IsTicket ? "invoice-lines-ticket" : null)">
                 <thead>
                     <tr>
                         <th>Fecha</th>
-                        <th>Método</th>
+                        @if (!IsNarrowTicket)
+                        {
+                            <th>Método</th>
+                        }
                         <th>Monto</th>
                     </tr>
                 </thead>
@@ -177,8 +256,11 @@
                     @foreach (var receipt in Payment.Receipts)
                     {
                         <tr>
-                            <td>@FormatDate(receipt.PaidAt)</td>
-                            <td>@receipt.PaymentMethodDisplay</td>
+                            <td>@FormatDate(receipt.PaidAt, shortDate: IsTicket)</td>
+                            @if (!IsNarrowTicket)
+                            {
+                                <td>@(string.IsNullOrWhiteSpace(receipt.KindDisplay) ? receipt.PaymentMethodDisplay : $"{receipt.KindDisplay} · {receipt.PaymentMethodDisplay}")@(receipt.IsVoided ? " · Anulado" : "")</td>
+                            }
                             <td>@receipt.AmountDisplay</td>
                         </tr>
                     }
@@ -198,8 +280,14 @@
     [Parameter]
     public bool ShowLineDetails { get; set; } = true;
 
+    [Parameter]
+    public string Format { get; set; } = "carta";
+
     private ClinicProfile Clinic => ClinicProfile.Get();
     private bool HasAmount => Payment.Amount > 0.01m;
+    private string FormatKey => NormalizeFormat(Format);
+    private bool IsTicket => FormatKey is "80mm" or "58mm";
+    private bool IsNarrowTicket => FormatKey == "58mm";
 
     private string StatusCss => Payment.PaymentStatus switch
     {
@@ -212,8 +300,29 @@
         _ => string.Empty
     };
 
-    private static string FormatDate(string? value) =>
-        DateTime.TryParse(value, out var date)
-            ? date.ToString("dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture)
-            : string.IsNullOrWhiteSpace(value) ? "—" : value;
+    private static string NormalizeFormat(string? formato)
+    {
+        if (string.Equals(formato, "80mm", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "80", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "ticket", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "ticket80", StringComparison.OrdinalIgnoreCase))
+            return "80mm";
+
+        if (string.Equals(formato, "58mm", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "58", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "ticket58", StringComparison.OrdinalIgnoreCase))
+            return "58mm";
+
+        return "carta";
+    }
+
+    private static string FormatDate(string? value, bool shortDate = false)
+    {
+        if (!DateTime.TryParse(value, out var date))
+            return string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+        return shortDate
+            ? date.ToString("dd/MM/yy HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+            : date.ToString("dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+    }
 }

@@ -3,23 +3,24 @@
     public class UpdateDoctorValidator : AbstractValidator<UpdateDoctorCommand>
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IIdentityService _identityService;
 
-        public UpdateDoctorValidator(IUnitOfWork unitOfWork)
+        public UpdateDoctorValidator(IUnitOfWork unitOfWork, IIdentityService identityService)
         {
             _unitOfWork = unitOfWork;
+            _identityService = identityService;
 
-            RuleFor(x => x.Id).NotEmpty().WithMessage("Doctor ID is required for update.");
-
-
-            // تقسيم القواعد لتكون منظمة
             ApplyValidationsRules();
             ApplyCustomValidationsRules();
         }
         public void ApplyValidationsRules()
         {
+            RuleFor(x => x.Id).NotEmpty().WithMessage("Doctor ID is required for update.");
+
             // Name
             RuleFor(x => x.FullName)
                 .MaximumLength(100).WithMessage("Name must not exceed 100 characters")
+                .Must(PersonNameRules.IsValid).WithMessage(PersonNameRules.InvalidNameMessage)
                 .When(x => !string.IsNullOrEmpty(x.FullName));
 
             // Address & Specialization
@@ -38,9 +39,26 @@
 
             // Phone (Format Only)
             RuleFor(x => x.Phone)
-                .Matches(@"^\+?[0-9]{10,15}$")
+                .Must(phone => PatientFieldLimits.IsValidPhone(phone, required: false))
                 .When(x => !string.IsNullOrEmpty(x.Phone))
                 .WithMessage("Phone number must contain 10–15 digits (numbers only, optional +)");
+
+            RuleFor(x => x.Email)
+                .EmailAddress().WithMessage("Invalid email format")
+                .When(x => !string.IsNullOrWhiteSpace(x.Email));
+
+            RuleFor(x => x.UserName)
+                .Matches(@"^(?=.*\d)[A-Za-z][A-Za-z0-9_]*$")
+                .WithMessage("Username must start with a letter and contain at least one number.")
+                .When(x => !string.IsNullOrWhiteSpace(x.UserName));
+
+            RuleFor(x => x.Password)
+                .PasswordRule()
+                .When(x => !string.IsNullOrWhiteSpace(x.Password));
+
+            RuleFor(x => x.ConfirmPassword)
+                .Equal(x => x.Password).WithMessage("Password and Confirm Password do not match")
+                .When(x => !string.IsNullOrWhiteSpace(x.Password));
         }
 
         public void ApplyCustomValidationsRules()
@@ -62,6 +80,24 @@
                 })
                 .WithMessage("Phone number is already exists")
                 .When(x => !string.IsNullOrEmpty(x.Phone));
+
+            RuleFor(x => x.Email)
+                .MustAsync(async (command, email, cancellationToken) =>
+                {
+                    var doctor = await _unitOfWork.DoctorsRepository.GetByIdAsync(command.Id, cancellationToken);
+                    return await _identityService.IsEmailUniqueAsync(email, doctor?.ApplicationUserId, cancellationToken);
+                })
+                .WithMessage("Email is already exists")
+                .When(x => !string.IsNullOrWhiteSpace(x.Email));
+
+            RuleFor(x => x.UserName)
+                .MustAsync(async (command, userName, cancellationToken) =>
+                {
+                    var doctor = await _unitOfWork.DoctorsRepository.GetByIdAsync(command.Id, cancellationToken);
+                    return await _identityService.IsUserNameUniqueAsync(userName, doctor?.ApplicationUserId, cancellationToken);
+                })
+                .WithMessage("Username is already exists")
+                .When(x => !string.IsNullOrWhiteSpace(x.UserName));
         }
 
         private static bool BeValidSignatureDataUrl(string? value)

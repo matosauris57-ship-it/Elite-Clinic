@@ -1,0 +1,23 @@
+@if (WhatsApp)
+{
+    <div class="whatsapp-preview">@(string.IsNullOrWhiteSpace(Html) ? EmptyText : MessageBodyFormatting.ToWhatsApp(Html))</div>
+}
+else
+{
+    <div class="whatsapp-preview message-preview-html">
+        @if (string.IsNullOrWhiteSpace(Html))
+        {
+            @EmptyText
+        }
+        else
+        {
+            @((MarkupString)MessageBodyFormatting.ToPreviewHtml(Html))
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? Html { get; set; }
+    [Parameter] public bool WhatsApp { get; set; }
+    [Parameter] public string EmptyText { get; set; } = "Escriba el mensaje para ver la vista previa.";
+}

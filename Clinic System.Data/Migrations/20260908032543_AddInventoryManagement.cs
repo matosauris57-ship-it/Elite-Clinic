@@ -224,51 +224,125 @@ namespace Clinic_System.Data.Migrations
                 column: "DentalTreatmentId",
                 unique: true);
 
-            var seedDate = new DateTime(2026, 9, 8, 0, 0, 0, DateTimeKind.Utc);
+            // Seed is idempotent: local DBs may already have Id 13 used by another procedure.
+            migrationBuilder.Sql("""
+                DECLARE @seedDate datetime2 = '2026-09-08T00:00:00.0000000Z';
 
-            migrationBuilder.InsertData(
-                table: "TreatmentProcedures",
-                columns: new[] { "Id", "Code", "Category", "Name", "Price", "DurationMinutes", "IsActive", "IsDeleted", "CreatedAt" },
-                values: new object[] { 13, "restauracion-resina", "RESTAURATIVA", "Restauración con resina", 2500m, 45, true, false, seedDate });
+                IF NOT EXISTS (SELECT 1 FROM [TreatmentProcedures] WHERE [Code] = N'restauracion-resina')
+                BEGIN
+                    INSERT INTO [TreatmentProcedures]
+                        ([Code], [Category], [Name], [Price], [DurationMinutes], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES
+                        (N'restauracion-resina', N'RESTAURATIVA', N'Restauración con resina', 2500.0, 45, CAST(1 AS bit), CAST(0 AS bit), @seedDate);
+                END
 
-            migrationBuilder.InsertData(
-                table: "InventoryItems",
-                columns: new[] { "Id", "Sku", "Name", "Category", "Unit", "QuantityOnHand", "MinimumStock", "IsActive", "IsDeleted", "CreatedAt" },
-                values: new object[,]
-                {
-                    { 1, "resina-a2", "Resina A2", "MATERIALES", "u", 50m, 10m, true, false, seedDate },
-                    { 2, "anestesia", "Anestesia", "MEDICAMENTOS", "u", 100m, 20m, true, false, seedDate },
-                    { 3, "aguja", "Aguja", "CONSUMIBLES", "u", 200m, 50m, true, false, seedDate },
-                    { 4, "guantes", "Guantes", "CONSUMIBLES", "u", 500m, 100m, true, false, seedDate },
-                    { 5, "microbrush", "Microbrush", "CONSUMIBLES", "u", 300m, 50m, true, false, seedDate },
-                    { 6, "acido-grabador", "Ácido grabador", "MATERIALES", "ml", 50m, 10m, true, false, seedDate },
-                    { 7, "adhesivo", "Adhesivo", "MATERIALES", "ml", 40m, 8m, true, false, seedDate },
-                    { 8, "pasta-profilaxis", "Pasta profilaxis", "MATERIALES", "g", 100m, 20m, true, false, seedDate }
-                });
+                DECLARE @resinaProcId int =
+                    (SELECT TOP (1) [Id] FROM [TreatmentProcedures] WHERE [Code] = N'restauracion-resina' ORDER BY [Id]);
 
-            migrationBuilder.InsertData(
-                table: "ProcedureMaterials",
-                columns: new[] { "Id", "TreatmentProcedureId", "InventoryItemId", "DefaultQuantity", "IsOptional", "SortOrder", "CreatedAt" },
-                values: new object[,]
-                {
-                    { 1, 13, 1, 1m, false, 1, seedDate },
-                    { 2, 13, 2, 1m, false, 2, seedDate },
-                    { 3, 13, 3, 1m, false, 3, seedDate },
-                    { 4, 13, 4, 1m, false, 4, seedDate },
-                    { 5, 13, 5, 2m, false, 5, seedDate },
-                    { 6, 13, 6, 0.2m, false, 6, seedDate },
-                    { 7, 13, 7, 0.1m, false, 7, seedDate },
-                    { 8, 1, 4, 1m, false, 1, seedDate },
-                    { 9, 1, 8, 2m, false, 2, seedDate }
-                });
+                IF NOT EXISTS (SELECT 1 FROM [InventoryItems] WHERE [Sku] = N'resina-a2')
+                    INSERT INTO [InventoryItems]
+                        ([Sku], [Name], [Category], [Unit], [QuantityOnHand], [MinimumStock], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES (N'resina-a2', N'Resina A2', N'MATERIALES', N'u', 50, 10, 1, 0, @seedDate);
+                IF NOT EXISTS (SELECT 1 FROM [InventoryItems] WHERE [Sku] = N'anestesia')
+                    INSERT INTO [InventoryItems]
+                        ([Sku], [Name], [Category], [Unit], [QuantityOnHand], [MinimumStock], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES (N'anestesia', N'Anestesia', N'MEDICAMENTOS', N'u', 100, 20, 1, 0, @seedDate);
+                IF NOT EXISTS (SELECT 1 FROM [InventoryItems] WHERE [Sku] = N'aguja')
+                    INSERT INTO [InventoryItems]
+                        ([Sku], [Name], [Category], [Unit], [QuantityOnHand], [MinimumStock], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES (N'aguja', N'Aguja', N'CONSUMIBLES', N'u', 200, 50, 1, 0, @seedDate);
+                IF NOT EXISTS (SELECT 1 FROM [InventoryItems] WHERE [Sku] = N'guantes')
+                    INSERT INTO [InventoryItems]
+                        ([Sku], [Name], [Category], [Unit], [QuantityOnHand], [MinimumStock], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES (N'guantes', N'Guantes', N'CONSUMIBLES', N'u', 500, 100, 1, 0, @seedDate);
+                IF NOT EXISTS (SELECT 1 FROM [InventoryItems] WHERE [Sku] = N'microbrush')
+                    INSERT INTO [InventoryItems]
+                        ([Sku], [Name], [Category], [Unit], [QuantityOnHand], [MinimumStock], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES (N'microbrush', N'Microbrush', N'CONSUMIBLES', N'u', 300, 50, 1, 0, @seedDate);
+                IF NOT EXISTS (SELECT 1 FROM [InventoryItems] WHERE [Sku] = N'acido-grabador')
+                    INSERT INTO [InventoryItems]
+                        ([Sku], [Name], [Category], [Unit], [QuantityOnHand], [MinimumStock], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES (N'acido-grabador', N'Ácido grabador', N'MATERIALES', N'ml', 50, 10, 1, 0, @seedDate);
+                IF NOT EXISTS (SELECT 1 FROM [InventoryItems] WHERE [Sku] = N'adhesivo')
+                    INSERT INTO [InventoryItems]
+                        ([Sku], [Name], [Category], [Unit], [QuantityOnHand], [MinimumStock], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES (N'adhesivo', N'Adhesivo', N'MATERIALES', N'ml', 40, 8, 1, 0, @seedDate);
+                IF NOT EXISTS (SELECT 1 FROM [InventoryItems] WHERE [Sku] = N'pasta-profilaxis')
+                    INSERT INTO [InventoryItems]
+                        ([Sku], [Name], [Category], [Unit], [QuantityOnHand], [MinimumStock], [IsActive], [IsDeleted], [CreatedAt])
+                    VALUES (N'pasta-profilaxis', N'Pasta profilaxis', N'MATERIALES', N'g', 100, 20, 1, 0, @seedDate);
+
+                DECLARE @itemResina int = (SELECT [Id] FROM [InventoryItems] WHERE [Sku] = N'resina-a2');
+                DECLARE @itemAnestesia int = (SELECT [Id] FROM [InventoryItems] WHERE [Sku] = N'anestesia');
+                DECLARE @itemAguja int = (SELECT [Id] FROM [InventoryItems] WHERE [Sku] = N'aguja');
+                DECLARE @itemGuantes int = (SELECT [Id] FROM [InventoryItems] WHERE [Sku] = N'guantes');
+                DECLARE @itemMicrobrush int = (SELECT [Id] FROM [InventoryItems] WHERE [Sku] = N'microbrush');
+                DECLARE @itemAcido int = (SELECT [Id] FROM [InventoryItems] WHERE [Sku] = N'acido-grabador');
+                DECLARE @itemAdhesivo int = (SELECT [Id] FROM [InventoryItems] WHERE [Sku] = N'adhesivo');
+                DECLARE @itemPasta int = (SELECT [Id] FROM [InventoryItems] WHERE [Sku] = N'pasta-profilaxis');
+                DECLARE @profilaxisProcId int =
+                    (SELECT TOP (1) [Id] FROM [TreatmentProcedures] WHERE [Id] = 1 OR [Code] LIKE N'%profil%' ORDER BY CASE WHEN [Id] = 1 THEN 0 ELSE 1 END, [Id]);
+
+                IF @resinaProcId IS NOT NULL AND @itemResina IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @resinaProcId AND [InventoryItemId] = @itemResina)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@resinaProcId, @itemResina, 1, 0, 1, @seedDate);
+                IF @resinaProcId IS NOT NULL AND @itemAnestesia IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @resinaProcId AND [InventoryItemId] = @itemAnestesia)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@resinaProcId, @itemAnestesia, 1, 0, 2, @seedDate);
+                IF @resinaProcId IS NOT NULL AND @itemAguja IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @resinaProcId AND [InventoryItemId] = @itemAguja)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@resinaProcId, @itemAguja, 1, 0, 3, @seedDate);
+                IF @resinaProcId IS NOT NULL AND @itemGuantes IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @resinaProcId AND [InventoryItemId] = @itemGuantes)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@resinaProcId, @itemGuantes, 1, 0, 4, @seedDate);
+                IF @resinaProcId IS NOT NULL AND @itemMicrobrush IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @resinaProcId AND [InventoryItemId] = @itemMicrobrush)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@resinaProcId, @itemMicrobrush, 2, 0, 5, @seedDate);
+                IF @resinaProcId IS NOT NULL AND @itemAcido IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @resinaProcId AND [InventoryItemId] = @itemAcido)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@resinaProcId, @itemAcido, 0.2, 0, 6, @seedDate);
+                IF @resinaProcId IS NOT NULL AND @itemAdhesivo IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @resinaProcId AND [InventoryItemId] = @itemAdhesivo)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@resinaProcId, @itemAdhesivo, 0.1, 0, 7, @seedDate);
+
+                IF @profilaxisProcId IS NOT NULL AND @itemGuantes IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @profilaxisProcId AND [InventoryItemId] = @itemGuantes)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@profilaxisProcId, @itemGuantes, 1, 0, 1, @seedDate);
+                IF @profilaxisProcId IS NOT NULL AND @itemPasta IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM [ProcedureMaterials] WHERE [TreatmentProcedureId] = @profilaxisProcId AND [InventoryItemId] = @itemPasta)
+                    INSERT INTO [ProcedureMaterials] ([TreatmentProcedureId], [InventoryItemId], [DefaultQuantity], [IsOptional], [SortOrder], [CreatedAt])
+                    VALUES (@profilaxisProcId, @itemPasta, 2, 0, 2, @seedDate);
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("DELETE FROM [ProcedureMaterials] WHERE [Id] BETWEEN 1 AND 9");
-            migrationBuilder.Sql("DELETE FROM [InventoryItems] WHERE [Id] BETWEEN 1 AND 8");
-            migrationBuilder.Sql("DELETE FROM [TreatmentProcedures] WHERE [Id] = 13");
+            migrationBuilder.Sql("""
+                DELETE pm
+                FROM [ProcedureMaterials] pm
+                INNER JOIN [InventoryItems] i ON i.[Id] = pm.[InventoryItemId]
+                WHERE i.[Sku] IN (
+                    N'resina-a2', N'anestesia', N'aguja', N'guantes',
+                    N'microbrush', N'acido-grabador', N'adhesivo', N'pasta-profilaxis');
+
+                DELETE FROM [InventoryItems]
+                WHERE [Sku] IN (
+                    N'resina-a2', N'anestesia', N'aguja', N'guantes',
+                    N'microbrush', N'acido-grabador', N'adhesivo', N'pasta-profilaxis');
+
+                DELETE FROM [TreatmentProcedures]
+                WHERE [Code] = N'restauracion-resina'
+                  AND [Name] = N'Restauración con resina';
+                """);
 
             migrationBuilder.DropTable(
                 name: "ProcedureMaterials");

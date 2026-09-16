@@ -1,0 +1,110 @@
+@page "/configuracion/consentimientos"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "configuracion.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Clinic_System.Core.Catalog
+@using Clinic_System.Core.Enums
+@inject InformedConsentTemplateSettingsService TemplateSettings
+
+<PageTitle>Plantillas de consentimientos — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/configuracion" class="back-link-inline">← Configuración</a>
+            <h1>Plantillas de consentimientos</h1>
+            <p>Defina el texto continuo de cada consentimiento. Ese texto se usará automáticamente al registrar uno nuevo.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_saveMessage))
+    {
+        <div class="wizard-success">@_saveMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(_saveError))
+    {
+        <div class="wizard-error">@_saveError</div>
+    }
+
+    <div class="consent-templates-layout">
+        <aside class="consent-templates-nav" aria-label="Tipos de consentimiento">
+            @foreach (var template in InformedConsentCatalog.Templates)
+            {
+                <button type="button"
+                        class="consent-template-nav-item @(_selectedType == template.Type ? "is-active" : "")"
+                        @onclick="() => SelectType(template.Type)">
+                    <strong>@template.Title</strong>
+                    <span>@template.Purpose</span>
+                </button>
+            }
+        </aside>
+
+        <form class="new-patient-form consent-template-editor" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+            <div class="form-group">
+                <label>@_selectedTitle</label>
+                <p class="form-hint">@_selectedPurpose</p>
+                <textarea class="form-input consent-body-editor"
+                          rows="18"
+                          maxlength="8000"
+                          @bind="_bodyText"
+                          @bind:event="oninput"
+                          placeholder="Texto completo del consentimiento..."></textarea>
+            </div>
+            <div class="modal-actions rx-actions">
+                <button type="button" class="btn-outline" disabled="@_saving" @onclick="RestoreDefault">Restaurar predeterminado</button>
+                <button class="btn-primary" type="submit" disabled="@_saving">
+                    @(_saving ? "Guardando..." : "Guardar plantilla")
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@code {
+    private InformedConsentType _selectedType = InformedConsentType.EvaluationDiagnosis;
+    private string _selectedTitle = "";
+    private string _selectedPurpose = "";
+    private string _bodyText = "";
+    private bool _saving;
+    private string? _saveMessage;
+    private string? _saveError;
+
+    protected override void OnInitialized() => SelectType(InformedConsentType.EvaluationDiagnosis);
+
+    private void SelectType(InformedConsentType type)
+    {
+        var catalog = InformedConsentCatalog.GetOrDefault(type);
+        _selectedType = type;
+        _selectedTitle = catalog.Title;
+        _selectedPurpose = catalog.Purpose;
+        _bodyText = TemplateSettings.GetBody(type);
+        _saveMessage = null;
+        _saveError = null;
+    }
+
+    private void RestoreDefault()
+    {
+        TemplateSettings.ResetBody(_selectedType);
+        _bodyText = InformedConsentCatalog.NormalizeBody(InformedConsentCatalog.GetOrDefault(_selectedType).BodyText);
+        _saveMessage = "Texto restaurado al predeterminado. Pulse Guardar si desea fijarlo.";
+        _saveError = null;
+    }
+
+    private Task SaveAsync()
+    {
+        _saving = true;
+        _saveMessage = null;
+        _saveError = null;
+        try
+        {
+            TemplateSettings.SaveBody(_selectedType, _bodyText);
+            _saveMessage = "Plantilla guardada. Se usará automáticamente en nuevos consentimientos de este tipo.";
+        }
+        catch (Exception ex)
+        {
+            _saveError = ex.Message;
+        }
+
+        _saving = false;
+        return Task.CompletedTask;
+    }
+}

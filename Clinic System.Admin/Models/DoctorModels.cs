@@ -13,7 +13,9 @@ public class DoctorListItem
     public string? ApplicationUserId { get; set; }
     public string? Email { get; set; }
     public string? SignatureImageUrl { get; set; }
+    public string? UserName { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool CanViewAllClinicData { get; set; }
 }
 
 public class CreateDoctorRequest
@@ -29,6 +31,7 @@ public class CreateDoctorRequest
     public string Password { get; set; } = string.Empty;
     public string ConfirmPassword { get; set; } = string.Empty;
     public string? SignatureImageUrl { get; set; }
+    public bool CanViewAllClinicData { get; set; }
 }
 
 public class UpdateDoctorRequest
@@ -40,6 +43,11 @@ public class UpdateDoctorRequest
     public string Specialization { get; set; } = string.Empty;
     public string? SignatureImageUrl { get; set; }
     public bool ClearSignatureImage { get; set; }
+    public bool CanViewAllClinicData { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
 }
 
 public class CreatedDoctorResponse

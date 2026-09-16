@@ -12,6 +12,8 @@ namespace Clinic_System.Data.Configurations
 
             builder.Property(p => p.Category).IsRequired().HasMaxLength(80);
             builder.Property(p => p.Name).IsRequired().HasMaxLength(200);
+            builder.Property(p => p.Target).HasConversion<int>().IsRequired();
+            builder.Property(p => p.ToothKindFilter).HasConversion<int>().IsRequired();
             builder.Property(p => p.Price).HasColumnType("decimal(18,2)");
             builder.Property(p => p.PricingMode)
                 .HasConversion<int>()

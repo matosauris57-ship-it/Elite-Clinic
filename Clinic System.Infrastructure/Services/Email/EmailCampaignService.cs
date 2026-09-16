@@ -1,5 +1,6 @@
 using Clinic_System.Application.DTOs.EmailCampaigns;
 using Clinic_System.Core.Enums;
+using Clinic_System.Core.Messaging;
 using Clinic_System.Core.Validation;
 using Hangfire;
 using MailKit.Net.Smtp;
@@ -110,9 +111,10 @@ public class EmailCampaignService : IEmailCampaignService
         var campaign = await _unitOfWork.EmailCampaignsRepository.GetTrackedAsync(id, cancellationToken);
         if (campaign == null)
             return (null, "No se encontró la campaña.");
-        if (campaign.Status != EmailCampaignStatus.Draft)
-            return (null, "La campaña ya fue iniciada.");
+        if (campaign.Status is not (EmailCampaignStatus.Draft or EmailCampaignStatus.Completed))
+            return (null, "Solo se puede iniciar una campaña en borrador o volver a iniciar una completada.");
 
+        var restarting = campaign.Status == EmailCampaignStatus.Completed;
         var audience = await _unitOfWork.PatientsRepository.GetEmailCampaignAudienceAsync(cancellationToken);
         var recipients = new List<EmailCampaignRecipient>();
         foreach (var patient in audience)
@@ -133,6 +135,9 @@ public class EmailCampaignService : IEmailCampaignService
         if (recipients.Count == 0)
             return (null, "No hay pacientes con correo válido para esta campaña.");
 
+        if (restarting)
+            await _unitOfWork.EmailCampaignsRepository.ClearRecipientsAsync(campaign.Id, cancellationToken);
+
         await _unitOfWork.EmailCampaignsRepository.AddRecipientsAsync(recipients, cancellationToken);
         campaign.Status = EmailCampaignStatus.Running;
         campaign.StartedAt = DateTime.Now;
@@ -144,7 +149,12 @@ public class EmailCampaignService : IEmailCampaignService
         _unitOfWork.EmailCampaignsRepository.Update(campaign);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        _logger.LogInformation("Campaña {CampaignId} iniciada con {Count} destinatarios.", campaign.Id, recipients.Count);
+        _logger.LogInformation(
+            restarting
+                ? "Campaña {CampaignId} reiniciada con {Count} destinatarios."
+                : "Campaña {CampaignId} iniciada con {Count} destinatarios.",
+            campaign.Id,
+            recipients.Count);
         return (await GetAsync(id, cancellationToken), null);
     }
 
@@ -328,7 +338,7 @@ public class EmailCampaignService : IEmailCampaignService
             return "Indique el asunto del correo.";
         if (request.Subject.Trim().Length > EmailCampaignLimits.SubjectMaxLength)
             return $"El asunto no puede superar {EmailCampaignLimits.SubjectMaxLength} caracteres.";
-        if (string.IsNullOrWhiteSpace(request.Body))
+        if (MessageBodyFormatting.IsBlank(request.Body))
             return "Escriba el mensaje.";
         if (request.Body.Trim().Length > EmailCampaignLimits.BodyMaxLength)
             return $"El mensaje no puede superar {EmailCampaignLimits.BodyMaxLength} caracteres.";

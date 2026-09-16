@@ -73,14 +73,7 @@ namespace Clinic_System.API.Controllers
             return Ok(new
             {
                 succeeded = true,
-                data = new
-                {
-                    appointment.Id,
-                    patientName = appointment.Patient.FullName,
-                    doctorName = appointment.Doctor.FullName,
-                    appointmentDate = appointment.AppointmentDate,
-                    status = appointment.Status.ToString()
-                }
+                data = ToPublicDetails(appointment)
             });
         }
 
@@ -96,23 +89,25 @@ namespace Clinic_System.API.Controllers
             if (appointment == null)
                 return NotFound(new { succeeded = false, message = "La cita ya no está disponible." });
 
+            if (appointment.AttendanceLinkRespondedAt != null || !CanRespondViaLink(appointment.Status))
+            {
+                return Ok(new
+                {
+                    succeeded = true,
+                    message = SavedResponseMessage(appointment),
+                    data = ToPublicDetails(appointment)
+                });
+            }
+
             var action = request.Action?.Trim().ToLowerInvariant();
             try
             {
                 if (action == "confirm")
-                {
-                    if (appointment.Status is not AppointmentStatus.Completed and not AppointmentStatus.Cancelled and not AppointmentStatus.NoShow)
-                        appointment.Confirm();
-                }
+                    appointment.RespondViaAttendanceLink(true, request.Comment);
                 else if (action == "decline")
-                {
-                    if (appointment.Status is not AppointmentStatus.Completed and not AppointmentStatus.Cancelled and not AppointmentStatus.NoShow)
-                        appointment.Cancel();
-                }
+                    appointment.RespondViaAttendanceLink(false, request.Comment);
                 else
-                {
                     return BadRequest(new { succeeded = false, message = "Respuesta no válida." });
-                }
 
                 await _db.SaveChangesAsync(cancellationToken);
             }
@@ -127,12 +122,35 @@ namespace Clinic_System.API.Controllers
                 message = action == "confirm"
                     ? "Asistencia confirmada. ¡Gracias!"
                     : "Hemos registrado que no podrá asistir.",
-                data = new
-                {
-                    status = appointment.Status.ToString()
-                }
+                data = ToPublicDetails(appointment)
             });
         }
+
+        private static bool CanRespondViaLink(AppointmentStatus status) =>
+            status is AppointmentStatus.Pending or AppointmentStatus.Rescheduled;
+
+        private static string SavedResponseMessage(Appointment appointment)
+        {
+            if (appointment.AttendanceLinkAccepted == true)
+                return "Su asistencia ya estaba confirmada.";
+            if (appointment.AttendanceLinkAccepted == false)
+                return "Ya habíamos registrado que no podrá asistir.";
+            return "Esta cita ya tiene una respuesta registrada.";
+        }
+
+        private static object ToPublicDetails(Appointment appointment) => new
+        {
+            appointment.Id,
+            patientName = appointment.Patient.FullName,
+            doctorName = appointment.Doctor.FullName,
+            appointmentDate = appointment.AppointmentDate,
+            status = appointment.Status.ToString(),
+            canRespond = appointment.AttendanceLinkRespondedAt == null && CanRespondViaLink(appointment.Status),
+            alreadyResponded = appointment.AttendanceLinkRespondedAt != null,
+            accepted = appointment.AttendanceLinkAccepted,
+            comment = appointment.AttendanceLinkComment,
+            respondedAt = appointment.AttendanceLinkRespondedAt
+        };
 
         private async Task<Appointment?> FindAppointmentAsync(AttendanceTokenPayload payload, CancellationToken cancellationToken) =>
             await _db.Appointments
@@ -167,5 +185,6 @@ namespace Clinic_System.API.Controllers
     {
         public string Token { get; set; } = string.Empty;
         public string Action { get; set; } = string.Empty;
+        public string? Comment { get; set; }
     }
 }

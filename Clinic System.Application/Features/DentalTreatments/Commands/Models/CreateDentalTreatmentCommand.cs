@@ -8,6 +8,7 @@ namespace Clinic_System.Application.Features.DentalTreatments.Commands.Models
         public decimal Cost { get; set; }
         public int? AppointmentId { get; set; }
         public int? ToothNumber { get; set; }
+        public List<int> ToothNumbers { get; set; } = [];
         public ToothSurface? ToothSurface { get; set; }
         public string? ProcedureDetails { get; set; }
         public string? MedicalNotes { get; set; }

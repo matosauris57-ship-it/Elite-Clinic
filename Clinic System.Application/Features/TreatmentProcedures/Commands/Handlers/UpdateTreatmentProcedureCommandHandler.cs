@@ -29,6 +29,8 @@ namespace Clinic_System.Application.Features.TreatmentProcedures.Commands.Handle
                 request.PricingMode,
                 request.DurationMinutes,
                 request.IsActive,
+                request.Target,
+                request.ToothKindFilter,
                 cancellationToken);
 
             await treatmentProcedureService.ReplaceDoctorPricesAsync(procedure.Id, request.DoctorPrices, cancellationToken);

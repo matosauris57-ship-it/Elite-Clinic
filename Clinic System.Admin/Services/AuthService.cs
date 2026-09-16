@@ -107,6 +107,36 @@ public class AuthService
         }
     }
 
+    public async Task<(bool Success, string? Error, string? Message)> RequestPasswordRecoveryAsync(string identifier, string? comment)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ClinicApiLogin");
+            var response = await client.PostAsJsonAsync("/api/authentication/forgot-password", new
+            {
+                Identifier = identifier.Trim(),
+                Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim()
+            });
+
+            if ((int)response.StatusCode == 429)
+                return (false, ApiConnectionMessages.RateLimitedMessage, null);
+
+            var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<string>>(JsonOptions);
+            if (apiResponse?.Succeeded == true)
+                return (true, null, apiResponse.Data ?? apiResponse.Message);
+
+            return (false, apiResponse?.Message ?? "No se pudo enviar la solicitud.", null);
+        }
+        catch (Exception ex) when (ApiConnectionMessages.IsConnectionFailure(ex))
+        {
+            return (false, ApiConnectionMessages.ApiUnavailable(_apiSettings.ApiBaseUrl), null);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message, null);
+        }
+    }
+
     public async Task LogoutAsync()
     {
         var authState = await _authStateProvider.GetAuthenticationStateAsync();

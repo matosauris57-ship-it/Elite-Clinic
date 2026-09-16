@@ -212,5 +212,28 @@ namespace Clinic_System.Application.Tests.Features.Patients.CommandsTests.Valida
             var result = await _validator.TestValidateAsync(command);
             result.ShouldNotHaveValidationErrorFor(c => c.DateOfBirth);
         }
+
+        [Fact]
+        public async Task NationalId_WhenUsedByAnotherPatient_ShouldHaveValidationError()
+        {
+            var command = new UpdatePatientCommand { Id = 1, NationalId = "001-0000000-1" };
+            _mockPatientRepo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Patient, bool>>>()))
+                .ReturnsAsync(new List<Patient> { new() { Id = 2, NationalId = "00100000001" } });
+
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldHaveValidationErrorFor(c => c.NationalId)
+                .WithErrorMessage("National ID is already exists");
+        }
+
+        [Fact]
+        public async Task NationalId_WhenBelongsToSamePatient_ShouldNotHaveValidationError()
+        {
+            var command = new UpdatePatientCommand { Id = 2, NationalId = "001-0000000-1" };
+            _mockPatientRepo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Patient, bool>>>()))
+                .ReturnsAsync(new List<Patient> { new() { Id = 2, NationalId = "00100000001" } });
+
+            var result = await _validator.TestValidateAsync(command);
+            result.ShouldNotHaveValidationErrorFor(c => c.NationalId);
+        }
     }
 }

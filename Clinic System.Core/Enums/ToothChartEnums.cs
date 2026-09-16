@@ -69,7 +69,9 @@ public enum DentalClinicalEventType
     Treatment = 2,
     ClinicalNote = 3,
     PeriodontalExam = 4,
-    Prescription = 5
+    Prescription = 5,
+    Attachment = 6,
+    InformedConsent = 7
 }
 
 public enum BridgeRole

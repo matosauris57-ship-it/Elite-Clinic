@@ -20,4 +20,11 @@ public static class BillingCopy
         PaymentStatus.Cancelled => "Cancelado",
         _ => status.ToString()
     };
+
+    public static string ReceiptKind(PaymentReceiptKind kind) => kind switch
+    {
+        PaymentReceiptKind.Payment => "Abono",
+        PaymentReceiptKind.Refund => "Reembolso",
+        _ => kind.ToString()
+    };
 }

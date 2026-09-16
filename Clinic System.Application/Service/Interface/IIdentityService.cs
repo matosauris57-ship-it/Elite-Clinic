@@ -7,6 +7,7 @@ namespace Clinic_System.Application.Service.Interface
         Task<IReadOnlyDictionary<string, string>> GetUserDisplayNamesAsync(IEnumerable<string> userIds, CancellationToken cancellationToken = default);
         Task<string> CreateUserAsync(string userName, string email, string password, string role, CancellationToken cancellationToken = default);
         Task<bool> UpdateUserProfileAsync(string userId, string newEmail, string newUserName, string currentPassword, bool isAdmin, CancellationToken cancellationToken = default);
+        Task<(bool Success, string? Error)> UpdateManagedUserAccountAsync(string userId, string? userName, string? email, string? newPassword, CancellationToken cancellationToken = default);
         Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword, bool isAdmin, CancellationToken cancellationToken = default);
         Task<bool> IsEmailUniqueAsync(string email, string? excludeUserId = null, CancellationToken cancellationToken = default);
         Task<bool> IsUserNameUniqueAsync(string userName, string? excludeUserId = null, CancellationToken cancellationToken = default);         Task<bool> SoftDeleteUserAsync(string userId, CancellationToken cancellationToken = default);
@@ -23,5 +24,6 @@ namespace Clinic_System.Application.Service.Interface
         Task<(string Email, string UserName)> GetUserEmailAndUserNameAsync(string userId, CancellationToken cancellationToken = default);
         Task<(bool Exists, string Id, string UserName, List<string> Roles)> GetUserDetailsByEmailForGoogleAsync(string email);
         Task<string> CreateUserForGoogleAsync(string userName, string email, string role, CancellationToken cancellationToken = default);
+        Task<PasswordRecoveryAccountMatch?> FindAccountForRecoveryAsync(string identifier, CancellationToken cancellationToken = default);
     }
 }

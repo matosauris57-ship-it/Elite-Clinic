@@ -52,6 +52,12 @@ public class DashboardData
     public bool PatientsRestricted { get; set; }
     public bool HistoryRestricted { get; set; }
     public bool PeriodontalRestricted { get; set; }
+    public List<AttendanceLinkAlertItem> AttendanceLinkAlerts { get; set; } = [];
+    public string? AttendanceLinkError { get; set; }
+    public bool AttendanceLinkRestricted { get; set; }
+    public List<CampaignAppointmentRequestItem> CampaignBookingRequests { get; set; } = [];
+    public string? CampaignBookingError { get; set; }
+    public bool CampaignBookingRestricted { get; set; }
 }
 
 public class DashboardWaitingItem

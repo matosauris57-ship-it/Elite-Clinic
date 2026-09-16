@@ -1,0 +1,88 @@
+@page "/pacientes/{PatientId:int}/presupuesto/{PlanId:int}/imprimir"
+@layout PrintLayout
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "pacientes.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject TreatmentPlanMaintenanceService PlanService
+@inject IJSRuntime JS
+
+<PageTitle>Presupuesto #@PlanId</PageTitle>
+
+<div class="invoice-print-page">
+    <div class="invoice-print-toolbar no-print">
+        <a class="btn-outline" href="/pacientes/@PatientId?tab=planes">Volver a la ficha</a>
+        <div class="invoice-print-modes">
+            <a class="@(!ShowAcceptance ? "btn-primary" : "btn-outline")" href="@ModeUrl(false)">Cotización</a>
+            <a class="@(ShowAcceptance ? "btn-primary" : "btn-outline")" href="@ModeUrl(true)">Con aceptación</a>
+        </div>
+        <button class="btn-primary" disabled="@_loading" @onclick="PrintAsync">Imprimir</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_loading || _plan == null)
+    {
+        <AnimatedLoader Message="Cargando presupuesto..." />
+    }
+    else
+    {
+        <QuoteDocument Plan="_plan" ShowAcceptance="ShowAcceptance" />
+    }
+</div>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public int PlanId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "firma")]
+    public string? Firma { get; set; }
+
+    private TreatmentPlanListItem? _plan;
+    private bool _loading = true;
+    private string? _error;
+
+    private bool ShowAcceptance
+    {
+        get
+        {
+            if (string.Equals(Firma, "0", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (string.Equals(Firma, "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Firma, "si", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Firma, "true", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return _plan?.Status is "Approved" or "Completed";
+        }
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var (item, error) = await PlanService.GetByIdAsync(PlanId);
+        _plan = item;
+        _error = error;
+        if (_plan == null && string.IsNullOrWhiteSpace(_error))
+            _error = "No se encontró el presupuesto.";
+        else if (_plan != null && _plan.PatientId != PatientId)
+            _error = "El presupuesto no corresponde a este paciente.";
+        _loading = false;
+    }
+
+    private string ModeUrl(bool acceptance) =>
+        $"/pacientes/{PatientId}/presupuesto/{PlanId}/imprimir?firma={(acceptance ? "1" : "0")}";
+
+    private async Task PrintAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareUi.printPage");
+        }
+        catch
+        {
+        }
+    }
+}

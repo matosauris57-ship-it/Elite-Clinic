@@ -11,7 +11,8 @@ namespace Clinic_System.Application.Features.Payment.Queries.Models
         public DateTime? FromDate { get; set; }  // من يوم كذا
         public DateTime? ToDate { get; set; }    // ليوم كذا
         public PaymentMethod? Method { get; set; } // هاتلي الكاش بس
-        public PaymentStatus? Status { get; set; } // هاتلي الـ Paid بس
+        public PaymentStatus? Status { get; set; } // Paid, Pending, etc.
+        public bool OutstandingOnly { get; set; }
         public string? Search { get; set; }
     }
 }

@@ -56,6 +56,31 @@ public sealed class PermissionAuthorizationHandler : AuthorizationHandler<Permis
     }
 }
 
+public sealed class AnyPermissionAuthorizationHandler : AuthorizationHandler<AnyPermissionRequirement>
+{
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, AnyPermissionRequirement requirement)
+    {
+        if (AdminRoleAuthorization.IsAdminUser(context.User))
+        {
+            context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+
+        foreach (var permission in requirement.Permissions)
+        {
+            if (context.User.HasClaim(c =>
+                    c.Type == AdminPermissionCatalog.ClaimType &&
+                    string.Equals(c.Value, permission, StringComparison.OrdinalIgnoreCase)))
+            {
+                context.Succeed(requirement);
+                return Task.CompletedTask;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class AdminPanelAccessRequirement : IAuthorizationRequirement;
 
 public sealed class AdminPanelAccessHandler : AuthorizationHandler<AdminPanelAccessRequirement>

@@ -1,4 +1,5 @@
 using Clinic_System.Core.Entities;
+using Clinic_System.Core.Validation;
 
 namespace Clinic_System.API.Controllers
 {
@@ -40,6 +41,10 @@ namespace Clinic_System.API.Controllers
             if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Phone) || string.IsNullOrWhiteSpace(request.Relationship))
                 return BadRequest(new { succeeded = false, message = "Nombre, teléfono y parentesco son obligatorios." });
 
+            var contactError = ValidateEmergencyContact(request);
+            if (contactError != null)
+                return BadRequest(new { succeeded = false, message = contactError });
+
             var patient = await _db.Patients.AnyAsync(p => p.Id == patientId, ct);
             if (!patient)
                 return NotFound(new { succeeded = false, message = "Paciente no encontrado." });
@@ -73,6 +78,10 @@ namespace Clinic_System.API.Controllers
             if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Phone) || string.IsNullOrWhiteSpace(request.Relationship))
                 return BadRequest(new { succeeded = false, message = "Nombre, teléfono y parentesco son obligatorios." });
 
+            var contactError = ValidateEmergencyContact(request);
+            if (contactError != null)
+                return BadRequest(new { succeeded = false, message = contactError });
+
             contact.FullName = request.FullName.Trim();
             contact.Phone = request.Phone.Trim();
             contact.Relationship = request.Relationship.Trim();
@@ -94,6 +103,24 @@ namespace Clinic_System.API.Controllers
             await _db.SaveChangesAsync(ct);
 
             return Ok(new { succeeded = true, message = "Contacto eliminado." });
+        }
+
+        private static string? ValidateEmergencyContact(EmergencyContactRequest request)
+        {
+            var nameError = PersonNameRules.Validate(request.FullName);
+            if (nameError != null)
+                return nameError;
+
+            if (!PatientFieldLimits.IsValidPhone(request.Phone, required: true))
+                return "El teléfono debe tener entre 10 y 15 dígitos.";
+
+            if (request.Relationship.Length > 80)
+                return "El parentesco admite máximo 80 caracteres.";
+
+            if (request.Notes?.Length > 300)
+                return "Las notas admiten máximo 300 caracteres.";
+
+            return null;
         }
     }
 

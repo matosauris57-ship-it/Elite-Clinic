@@ -71,6 +71,7 @@
                     <tr>
                         <th>Nombre</th>
                         <th>Especialización</th>
+                        <th>Alcance</th>
                         <th>Teléfono</th>
                         <th>Género</th>
                         <th>Firma</th>
@@ -90,6 +91,7 @@
                                 </div>
                             </td>
                             <td>@doctor.Specialization</td>
+                            <td>@(doctor.CanViewAllClinicData ? "Toda la clínica" : "Solo sus datos")</td>
                             <td>@doctor.Phone</td>
                             <td>@FormatGender(doctor.Gender)</td>
                             <td>
@@ -150,7 +152,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Nombre completo</label>
-                            <input class="form-input" @bind="_editForm.FullName" />
+                            <input class="form-input" maxlength="100" @bind="_editForm.FullName" />
                         </div>
                         <div class="form-group">
                             <label>Especialización</label>
@@ -178,6 +180,53 @@
                         </div>
                         <SignaturePreview ImageUrl="_editForm.SignatureImageUrl" OnClear="ClearEditSignature" />
                     </div>
+                    @if (_canEdit)
+                    {
+                        <div class="modal-section">
+                            <h3>Cuenta de acceso</h3>
+                            <p class="access-hint">Puedes actualizar el usuario, el correo y, si hace falta, una contraseña nueva.</p>
+                            <div class="new-patient-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Usuario</label>
+                                        <input class="form-input" @bind="_editForm.UserName" placeholder="doctor1" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Correo electrónico</label>
+                                        <input class="form-input" type="email" @bind="_editForm.Email" placeholder="doctor@clinic.com" />
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Nueva contraseña (opcional)</label>
+                                        <input class="form-input" type="password" @bind="_editForm.Password" autocomplete="new-password" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Confirmar contraseña</label>
+                                        <input class="form-input" type="password" @bind="_editForm.ConfirmPassword" autocomplete="new-password" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    <div class="form-group">
+                        <label>Alcance de datos clínicos</label>
+                        <p class="access-hint">Aunque tenga permisos de agenda o tratamientos, esto limita si ve citas y listados de otros médicos. El directorio de pacientes es siempre de toda la clínica.</p>
+                        <div class="data-scope-options">
+                            <label class="data-scope-card @(!_editForm.CanViewAllClinicData ? "is-on" : "")">
+                                <input type="radio" name="edit-data-scope" checked="@(!_editForm.CanViewAllClinicData)"
+                                       @onchange='_ => _editForm.CanViewAllClinicData = false' />
+                                <strong>Solo sus datos</strong>
+                                <span>Ve todos los pacientes, pero la agenda, citas y listados clínicos solo de este médico. Solo puede agendarse a sí mismo.</span>
+                            </label>
+                            <label class="data-scope-card @(_editForm.CanViewAllClinicData ? "is-on" : "")">
+                                <input type="radio" name="edit-data-scope" checked="@_editForm.CanViewAllClinicData"
+                                       @onchange='_ => _editForm.CanViewAllClinicData = true' />
+                                <strong>Todos los médicos</strong>
+                                <span>Puede ver y operar sobre citas y datos clínicos de toda la clínica, según los módulos asignados.</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
             }
             else
@@ -188,7 +237,7 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Nombre completo</label>
-                                <input class="form-input" @bind="_createForm.FullName" placeholder="Dr. Ana García" />
+                                <input class="form-input" maxlength="100" @bind="_createForm.FullName" placeholder="Dr. Ana García" />
                             </div>
                             <div class="form-group">
                                 <label>Especialización</label>
@@ -261,6 +310,25 @@
                                 <input class="form-input" type="password" @bind="_createForm.ConfirmPassword" />
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Alcance de datos clínicos</h3>
+                    <p class="access-hint">Los permisos de módulos (agenda, pacientes, tratamientos, etc.) siguen siendo necesarios. El listado de pacientes es de toda la clínica; esto solo limita citas y datos de otros médicos.</p>
+                    <div class="data-scope-options">
+                        <label class="data-scope-card @(!_createForm.CanViewAllClinicData ? "is-on" : "")">
+                            <input type="radio" name="create-data-scope" checked="@(!_createForm.CanViewAllClinicData)"
+                                   @onchange='_ => _createForm.CanViewAllClinicData = false' />
+                            <strong>Solo sus datos</strong>
+                            <span>Verá todos los pacientes, pero solo sus citas; podrá agendar únicamente para sí mismo. No verá la agenda ni los listados de otros médicos.</span>
+                        </label>
+                        <label class="data-scope-card @(_createForm.CanViewAllClinicData ? "is-on" : "")">
+                            <input type="radio" name="create-data-scope" checked="@_createForm.CanViewAllClinicData"
+                                   @onchange='_ => _createForm.CanViewAllClinicData = true' />
+                            <strong>Todos los médicos</strong>
+                            <span>Podrá ver agenda, citas y datos clínicos de todos los médicos, según los permisos de módulos que se le asignen.</span>
+                        </label>
                     </div>
                 </div>
             }
@@ -424,7 +492,7 @@
         _showFormModal = true;
     }
 
-    private void OpenEditModal(DoctorListItem doctor)
+    private async Task OpenEditModal(DoctorListItem doctor)
     {
         _isEditMode = true;
         _formError = null;
@@ -436,9 +504,26 @@
             Phone = doctor.Phone,
             Address = doctor.Address,
             Specialization = doctor.Specialization,
-            SignatureImageUrl = doctor.SignatureImageUrl
+            SignatureImageUrl = doctor.SignatureImageUrl,
+            CanViewAllClinicData = doctor.CanViewAllClinicData,
+            UserName = doctor.UserName ?? string.Empty,
+            Email = doctor.Email ?? string.Empty,
+            Password = string.Empty,
+            ConfirmPassword = string.Empty
         };
         _showFormModal = true;
+
+        if (_canEdit)
+        {
+            var (detail, _) = await DoctorService.GetDoctorByIdAsync(doctor.Id);
+            if (detail != null)
+            {
+                _editForm.UserName = detail.UserName ?? _editForm.UserName;
+                _editForm.Email = detail.Email ?? _editForm.Email;
+                _editForm.Address = string.IsNullOrWhiteSpace(detail.Address) ? _editForm.Address : detail.Address;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
     }
 
     private void CloseFormModal()
@@ -495,6 +580,55 @@
                 return;
             }
 
+            var editNameError = PersonNameRules.Validate(_editForm.FullName);
+            if (editNameError != null)
+            {
+                _formError = editNameError;
+                _saving = false;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_editForm.Phone) && !PatientFieldLimits.IsValidPhone(_editForm.Phone, required: false))
+            {
+                _formError = $"El teléfono debe tener entre {PatientFieldLimits.PhoneMinDigits} y {PatientFieldLimits.PhoneMaxDigits} dígitos.";
+                _saving = false;
+                return;
+            }
+
+            if (_canEdit)
+            {
+                if (string.IsNullOrWhiteSpace(_editForm.UserName))
+                {
+                    _formError = "El usuario es obligatorio.";
+                    _saving = false;
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(_editForm.Email))
+                {
+                    _formError = "El correo es obligatorio.";
+                    _saving = false;
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(_editForm.Password))
+                {
+                    if (_editForm.Password.Length < 6)
+                    {
+                        _formError = "La contraseña debe tener al menos 6 caracteres.";
+                        _saving = false;
+                        return;
+                    }
+
+                    if (_editForm.Password != _editForm.ConfirmPassword)
+                    {
+                        _formError = "Las contraseñas no coinciden.";
+                        _saving = false;
+                        return;
+                    }
+                }
+            }
+
             var (success, error) = await DoctorService.UpdateDoctorAsync(_editingId, _editForm);
             if (!success)
             {
@@ -529,10 +663,13 @@
 
     private string? ValidateCreateForm()
     {
-        if (string.IsNullOrWhiteSpace(_createForm.FullName)) return "El nombre es obligatorio.";
+        var nameError = PersonNameRules.Validate(_createForm.FullName);
+        if (nameError != null) return nameError;
         if (string.IsNullOrWhiteSpace(_createForm.Specialization)) return "La especialización es obligatoria.";
-        if (string.IsNullOrWhiteSpace(_createForm.Phone)) return "El teléfono es obligatorio.";
+        if (!PatientFieldLimits.IsValidPhone(_createForm.Phone, required: true))
+            return $"El teléfono debe tener entre {PatientFieldLimits.PhoneMinDigits} y {PatientFieldLimits.PhoneMaxDigits} dígitos.";
         if (string.IsNullOrWhiteSpace(_createForm.Address)) return "La dirección es obligatoria.";
+        if (_createForm.Address.Length > PatientFieldLimits.Address) return $"La dirección admite máximo {PatientFieldLimits.Address} caracteres.";
         if (string.IsNullOrWhiteSpace(_createForm.UserName)) return "El usuario es obligatorio.";
         if (string.IsNullOrWhiteSpace(_createForm.Email)) return "El correo es obligatorio.";
         if (string.IsNullOrWhiteSpace(_createForm.Password)) return "La contraseña es obligatoria.";

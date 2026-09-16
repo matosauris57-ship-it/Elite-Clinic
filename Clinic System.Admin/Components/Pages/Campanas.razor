@@ -13,16 +13,19 @@
     <div class="maintenance-header command-header">
         <div class="command-titles">
             <h1>Campañas de correo</h1>
-            <p>Avisos a pacientes con correo, en lotes de 15 cada 15 minutos</p>
+            <p>Avisos a pacientes con correo, en lotes de 15 cada 15 minutos. Las citas del enlace llegan como solicitudes para confirmar.</p>
         </div>
-        @if (_canCreate)
-        {
-            <div class="command-actions">
+        <div class="command-actions">
+            <a class="btn-outline" href="/campanas/solicitudes">
+                <Icon Name="inbox" Class="btn-svg" /> Solicitudes
+            </a>
+            @if (_canCreate)
+            {
                 <button class="btn-primary" @onclick="StartNew">
                     <Icon Name="plus" Class="btn-svg" /> Nueva campaña
                 </button>
-            </div>
-        }
+            }
+        </div>
     </div>
 
     @if (!string.IsNullOrEmpty(_notice))
@@ -63,7 +66,7 @@
                 {
                     <text> Configure el SMTP en <a href="/configuracion/clinica">Datos de la clínica</a> antes de iniciar.</text>
                 }
-                <text> Cada correo incluye un enlace para agendar en cualquier horario (configure la URL pública del portal en Datos de la clínica).</text>
+                <text> Cada correo incluye un enlace para solicitar cita (configure la URL pública del portal y los destinatarios de aviso en Solicitudes → Destinatarios).</text>
             </p>
         </div>
     }
@@ -101,21 +104,18 @@
             </div>
             <div class="form-group">
                 <label>Mensaje</label>
-                <textarea @ref="_bodyEditor"
-                          class="form-input"
-                          rows="7"
-                          maxlength="4000"
-                          placeholder="Hola {nombre}, le escribimos de {clinica}..."
-                          @bind="_form.Body"
-                          @bind:event="oninput"
-                          @onfocus="() => _activeField = CampaignField.Body"></textarea>
+                <RichTextEditor @ref="_bodyEditor"
+                                AriaLabel="Mensaje de la campaña"
+                                Value="_form.Body"
+                                ValueChanged="OnBodyChanged"
+                                OnFocus="() => _activeField = CampaignField.Body" />
                 <span class="form-hint">
                     El sistema añade un pie con los datos de la clínica y, si configuró la URL pública,
                     un enlace para que el paciente agende en cualquier horario ({enlace_cita}).
                 </span>
             </div>
             <div class="whatsapp-preview-label">Vista previa</div>
-            <div class="whatsapp-preview">@PreviewBody</div>
+            <MessageHtmlPreview Html="@PreviewBody" />
             <div class="patient-detail-actions campaign-form-actions">
                 <button class="btn-outline" type="button" @onclick="CancelForm">Cancelar</button>
                 <button class="btn-primary" type="submit" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar borrador")</button>
@@ -160,6 +160,10 @@
                                     <button class="btn-table" @onclick="() => EditDraft(item)">Editar</button>
                                     <button class="btn-table" @onclick="() => StartAsync(item.Id)">Iniciar</button>
                                 }
+                                @if (_canEdit && item.Status == "Completed")
+                                {
+                                    <button class="btn-table" @onclick="() => AskRestart(item)">Iniciar nuevamente</button>
+                                }
                                 @if (_canEdit && item.Status == "Running")
                                 {
                                     <button class="btn-table" @onclick="() => PauseAsync(item.Id)">Pausar</button>
@@ -185,7 +189,7 @@
         <div class="campaign-detail">
             <h2>@_selected.Name</h2>
             <p class="form-hint">Asunto: @_selected.Subject</p>
-            <div class="whatsapp-preview">@_selected.Body</div>
+            <MessageHtmlPreview Html="@_selected.Body" />
             @if (_selected.RecentRecipients.Count > 0)
             {
                 <h3>Últimos envíos</h3>
@@ -221,6 +225,28 @@
     }
 </div>
 
+@if (_restartCampaign != null)
+{
+    <div class="modal-overlay" @onclick="DeclineRestart">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Iniciar nuevamente</h2>
+                <button class="modal-close" @onclick="DeclineRestart">×</button>
+            </div>
+            <p class="modal-confirm-text">
+                ¿Está seguro de que quiere iniciar nuevamente la campaña «@_restartCampaign.Name»?
+                Se volverá a enviar a la audiencia actual con correo válido.
+            </p>
+            <div class="modal-actions">
+                <button class="btn-outline" disabled="@_saving" @onclick="DeclineRestart">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="ConfirmRestartAsync">
+                    @(_saving ? "Iniciando..." : "Sí, iniciar nuevamente")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private static readonly string[] Placeholders = ["{nombre}", "{clinica}", "{enlace_cita}"];
 
@@ -231,7 +257,7 @@
     private EmailCampaignDetail? _selected;
     private EmailCampaignForm _form = new();
     private ElementReference _subjectEditor;
-    private ElementReference _bodyEditor;
+    private RichTextEditor? _bodyEditor;
     private CampaignField _activeField = CampaignField.Body;
     private int? _editingId;
     private bool _showForm;
@@ -241,6 +267,7 @@
     private bool _canEdit;
     private string? _notice;
     private string? _error;
+    private EmailCampaignListItem? _restartCampaign;
 
     private string _activeFieldLabel =>
         _activeField == CampaignField.Subject ? "Asunto" : "Mensaje";
@@ -254,22 +281,42 @@
         get
         {
             var sampleLink = "https://tu-portal/agendar-campana?token=…";
-            var body = (_form.Body ?? string.Empty)
-                .Replace("{nombre}", "Aurileidy Matos", StringComparison.OrdinalIgnoreCase)
-                .Replace("{clinica}", ClinicName, StringComparison.OrdinalIgnoreCase)
-                .Replace("{enlace_cita}", sampleLink, StringComparison.OrdinalIgnoreCase)
-                .Trim();
-            if (string.IsNullOrWhiteSpace(body))
-                return "Escriba el mensaje para ver la vista previa.";
-            var footer = "\n\n—\n" + ClinicName;
-            if (!body.Contains(sampleLink, StringComparison.OrdinalIgnoreCase))
+            var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                footer += "\n\nPara agendar su cita en el horario que más le convenga (cualquier día y hora disponible):\n"
-                    + sampleLink;
-            }
-            footer += "\nEste aviso se envía solo a pacientes de la clínica.";
-            return body + footer;
+                ["{nombre}"] = "Aurileidy Matos",
+                ["{clinica}"] = ClinicName,
+                ["{enlace_cita}"] = sampleLink
+            };
+            var body = MessageBodyFormatting.ApplyTokens(_form.Body ?? string.Empty, tokens);
+            if (MessageBodyFormatting.IsBlank(body))
+                return string.Empty;
+            return AppendPreviewFooter(body, sampleLink);
         }
+    }
+
+    private string AppendPreviewFooter(string body, string sampleLink)
+    {
+        if (MessageBodyFormatting.LooksLikeHtml(body))
+        {
+            var extra = body.Contains(sampleLink, StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : "<br>Para agendar su cita en el horario que más le convenga (cualquier día y hora disponible):<br>"
+                    + System.Net.WebUtility.HtmlEncode(sampleLink);
+            return body
+                + "<p style=\"margin-top:1.2em;color:#666;font-size:13px\">—<br>"
+                + System.Net.WebUtility.HtmlEncode(ClinicName)
+                + extra
+                + "<br>Este aviso se envía solo a pacientes de la clínica.</p>";
+        }
+
+        var footer = "\n\n—\n" + ClinicName;
+        if (!body.Contains(sampleLink, StringComparison.OrdinalIgnoreCase))
+        {
+            footer += "\n\nPara agendar su cita en el horario que más le convenga (cualquier día y hora disponible):\n"
+                + sampleLink;
+        }
+        footer += "\nEste aviso se envía solo a pacientes de la clínica.";
+        return body + footer;
     }
 
     protected override async Task OnInitializedAsync()
@@ -340,26 +387,28 @@
         _activeField = CampaignField.Body;
     }
 
+    private void OnBodyChanged(string value) => _form.Body = value;
+
     private async Task InsertPlaceholderAsync(string token)
     {
-        var editor = _activeField == CampaignField.Subject ? _subjectEditor : _bodyEditor;
+        if (_activeField == CampaignField.Body)
+        {
+            if (_bodyEditor != null)
+                await _bodyEditor.InsertTextAsync(token);
+            else
+                _form.Body += token;
+            return;
+        }
+
         try
         {
-            var next = await JS.InvokeAsync<string?>("dentalCareUi.insertAtCursor", editor, token);
+            var next = await JS.InvokeAsync<string?>("dentalCareUi.insertAtCursor", _subjectEditor, token);
             if (!string.IsNullOrEmpty(next))
-            {
-                if (_activeField == CampaignField.Subject)
-                    _form.Subject = next;
-                else
-                    _form.Body = next;
-            }
+                _form.Subject = next;
         }
         catch (JSException)
         {
-            if (_activeField == CampaignField.Subject)
-                _form.Subject += token;
-            else
-                _form.Body += token;
+            _form.Subject += token;
         }
     }
 
@@ -390,6 +439,35 @@
         _selected = selected;
         _notice = "Campaña en curso. El sistema enviará 15 correos cada 15 minutos.";
     }, "iniciar");
+
+    private void AskRestart(EmailCampaignListItem item)
+    {
+        ClearNotice();
+        _restartCampaign = item;
+    }
+
+    private void DeclineRestart()
+    {
+        if (_saving)
+            return;
+        _restartCampaign = null;
+    }
+
+    private async Task ConfirmRestartAsync()
+    {
+        if (_restartCampaign == null || _saving)
+            return;
+
+        var id = _restartCampaign.Id;
+        _saving = true;
+        await RunAsync(() => Campaigns.StartAsync(id), selected =>
+        {
+            _selected = selected;
+            _notice = "Campaña reiniciada. El sistema enviará 15 correos cada 15 minutos.";
+            _restartCampaign = null;
+        }, "reiniciar");
+        _saving = false;
+    }
 
     private Task PauseAsync(int id) => RunAsync(() => Campaigns.PauseAsync(id), selected =>
     {

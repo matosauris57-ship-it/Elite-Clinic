@@ -3,7 +3,6 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject EmailMessageSettingsService EmailSettings
 @inject AppointmentBookingService BookingService
-@inject IJSRuntime JS
 
 <PageTitle>Mensajes de correo — DentalCare Admin</PageTitle>
 
@@ -12,7 +11,7 @@
         <div class="command-titles">
             <a href="/configuracion" class="back-link-inline">← Configuración</a>
             <h1>Mensajes de correo</h1>
-            <p>Recordatorios automáticos, confirmación al agendar y felicitación de cumpleaños</p>
+            <p>Seleccione el texto y use la barra para negrita, cursiva y listas. Pulse una variable para insertarla.</p>
         </div>
     </div>
 
@@ -69,14 +68,12 @@
         </div>
         <div class="form-group">
             <label>Cuerpo del recordatorio</label>
-            <textarea @ref="_reminderEditor"
-                      class="form-input"
-                      rows="4"
-                      @bind="_form.ReminderTemplate"
-                      @bind:event="oninput"
-                      @onfocus="() => SetActiveTemplate(EmailMessageKind.Reminder)"></textarea>
+            <RichTextEditor @ref="_reminderEditor"
+                            AriaLabel="Cuerpo del recordatorio"
+                            @bind-Value="_form.ReminderTemplate"
+                            OnFocus="() => SetActiveTemplate(EmailMessageKind.Reminder)" />
             <div class="whatsapp-preview-label">Vista previa</div>
-            <div class="whatsapp-preview">@ReminderPreview</div>
+            <MessageHtmlPreview Html="@ReminderPreview" />
         </div>
 
         <div class="form-group">
@@ -85,14 +82,12 @@
         </div>
         <div class="form-group">
             <label>Cuerpo de confirmación</label>
-            <textarea @ref="_confirmationEditor"
-                      class="form-input"
-                      rows="4"
-                      @bind="_form.ConfirmationTemplate"
-                      @bind:event="oninput"
-                      @onfocus="() => SetActiveTemplate(EmailMessageKind.Confirmation)"></textarea>
+            <RichTextEditor @ref="_confirmationEditor"
+                            AriaLabel="Cuerpo de confirmación"
+                            @bind-Value="_form.ConfirmationTemplate"
+                            OnFocus="() => SetActiveTemplate(EmailMessageKind.Confirmation)" />
             <div class="whatsapp-preview-label">Vista previa</div>
-            <div class="whatsapp-preview">@ConfirmationPreview</div>
+            <MessageHtmlPreview Html="@ConfirmationPreview" />
         </div>
 
         <div class="clinic-hours-card">
@@ -110,15 +105,13 @@
             </div>
             <div class="form-group">
                 <label>Cuerpo de cumpleaños</label>
-                <textarea @ref="_birthdayEditor"
-                          class="form-input"
-                          rows="4"
-                          disabled="@(!_form.BirthdayEnabled)"
-                          @bind="_form.BirthdayTemplate"
-                          @bind:event="oninput"
-                          @onfocus="() => SetActiveTemplate(EmailMessageKind.Birthday)"></textarea>
+                <RichTextEditor @ref="_birthdayEditor"
+                                AriaLabel="Cuerpo de cumpleaños"
+                                Disabled="@(!_form.BirthdayEnabled)"
+                                @bind-Value="_form.BirthdayTemplate"
+                                OnFocus="() => SetActiveTemplate(EmailMessageKind.Birthday)" />
                 <div class="whatsapp-preview-label">Vista previa</div>
-                <div class="whatsapp-preview">@BirthdayPreview</div>
+                <MessageHtmlPreview Html="@BirthdayPreview" />
             </div>
         </div>
 
@@ -133,9 +126,9 @@
     private static readonly string[] BirthdayPlaceholders = ["{nombre}", "{clinica}", "{edad}"];
 
     private EmailMessageSettings _form = new();
-    private ElementReference _reminderEditor;
-    private ElementReference _confirmationEditor;
-    private ElementReference _birthdayEditor;
+    private RichTextEditor? _reminderEditor;
+    private RichTextEditor? _confirmationEditor;
+    private RichTextEditor? _birthdayEditor;
     private EmailMessageKind _activeTemplate = EmailMessageKind.Reminder;
     private bool _saving;
     private string? _saveMessage;
@@ -185,21 +178,18 @@
             _ => _reminderEditor
         };
 
-        try
+        if (editor != null)
         {
-            var next = await JS.InvokeAsync<string?>("dentalCareUi.insertAtCursor", editor, token);
-            if (!string.IsNullOrEmpty(next))
-                AssignBody(next);
+            await editor.InsertTextAsync(token);
+            return;
         }
-        catch (JSException)
+
+        AssignBody((_activeTemplate switch
         {
-            AssignBody((_activeTemplate switch
-            {
-                EmailMessageKind.Confirmation => _form.ConfirmationTemplate,
-                EmailMessageKind.Birthday => _form.BirthdayTemplate,
-                _ => _form.ReminderTemplate
-            }) + token);
-        }
+            EmailMessageKind.Confirmation => _form.ConfirmationTemplate,
+            EmailMessageKind.Birthday => _form.BirthdayTemplate,
+            _ => _form.ReminderTemplate
+        }) + token);
     }
 
     private void AssignBody(string value)
@@ -222,8 +212,8 @@
         _form.SameDaySendTime = _sameDayTime.ToTimeSpan();
         _form.BirthdaySendTime = _birthdayTime.ToTimeSpan();
 
-        if (string.IsNullOrWhiteSpace(_form.ReminderTemplate)
-            || string.IsNullOrWhiteSpace(_form.ConfirmationTemplate)
+        if (MessageBodyFormatting.IsBlank(_form.ReminderTemplate)
+            || MessageBodyFormatting.IsBlank(_form.ConfirmationTemplate)
             || string.IsNullOrWhiteSpace(_form.ReminderSubject)
             || string.IsNullOrWhiteSpace(_form.ConfirmationSubject))
         {
@@ -233,7 +223,7 @@
         }
 
         if (_form.BirthdayEnabled
-            && (string.IsNullOrWhiteSpace(_form.BirthdaySubject) || string.IsNullOrWhiteSpace(_form.BirthdayTemplate)))
+            && (string.IsNullOrWhiteSpace(_form.BirthdaySubject) || MessageBodyFormatting.IsBlank(_form.BirthdayTemplate)))
         {
             _saveError = "Si activa cumpleaños, el asunto y el cuerpo son obligatorios.";
             _saving = false;

@@ -212,6 +212,27 @@ public class AccessControlMaintenanceService
         }
     }
 
+    public async Task<(bool Success, string? Error)> SetUserPasswordAsync(string userId, string newPassword, string confirmPassword)
+    {
+        try
+        {
+            using var response = await Client.PutAsJsonAsync(
+                $"/api/access/users/{Uri.EscapeDataString(userId)}/password",
+                new SetUserPasswordRequest
+                {
+                    NewPassword = newPassword,
+                    ConfirmPassword = confirmPassword
+                });
+
+            var (_, error) = await ParseApiResponseAsync<string>(response);
+            return error == null ? (true, null) : (false, error);
+        }
+        catch (Exception ex)
+        {
+            return (false, FormatConnectionError(ex) ?? ex.Message);
+        }
+    }
+
     private static async Task<(T? Data, string? Error)> ParseApiResponseAsync<T>(HttpResponseMessage response)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)

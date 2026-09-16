@@ -114,6 +114,7 @@ public class ToothChartService : IToothChartService
     {
         var entries = await unitOfWork.ToothChartEntriesRepository.GetByPatientAsync(patientId, cancellationToken);
         var filtered = entries.Where(x =>
+            !x.IsVoided &&
             (!quadrant.HasValue || FdiToothNumber.Quadrant(x.ToothNumber) == quadrant) &&
             (string.IsNullOrWhiteSpace(dentition) ||
              (dentition.Equals("permanent", StringComparison.OrdinalIgnoreCase) && FdiToothNumber.IsPermanent(x.ToothNumber)) ||
@@ -144,5 +145,144 @@ public class ToothChartService : IToothChartService
         }.Where(x => x != null);
         var text = string.Join(" | ", lines);
         return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    public Task<ToothChartEntry?> GetEntryAsync(long id, CancellationToken cancellationToken = default) =>
+        unitOfWork.ToothChartEntriesRepository.GetByCondition(x => x.Id == id, cancellationToken);
+
+    public async Task<ToothChartEntry> UpdateEntryAsync(
+        long id,
+        ToothSurface surface,
+        ToothChartPhase phase,
+        ToothCondition condition,
+        ToothSeverity? severity,
+        string? notes,
+        RestorationMaterial? restorationMaterial,
+        CariesType? cariesType,
+        IcdasCode? icdas,
+        string? clinicalDiagnosis,
+        string? proposedTreatment,
+        CancellationToken cancellationToken = default)
+    {
+        var entry = await unitOfWork.ToothChartEntriesRepository.GetByCondition(x => x.Id == id, cancellationToken)
+            ?? throw new NotFoundException($"No se encontró el hallazgo {id}.");
+        if (entry.IsVoided)
+            throw new InvalidOperationException("No se puede editar un hallazgo anulado.");
+
+        entry.Surface = surface;
+        entry.Phase = phase;
+        entry.Condition = condition;
+        entry.RestorationMaterial = restorationMaterial;
+        entry.CariesType = condition == ToothCondition.Caries ? cariesType : null;
+        entry.Icdas = condition == ToothCondition.Caries ? icdas : null;
+        entry.Severity = severity;
+        entry.ClinicalDiagnosis = clinicalDiagnosis;
+        entry.ProposedTreatment = proposedTreatment;
+        entry.Notes = notes;
+        if (condition != ToothCondition.Bridge)
+        {
+            entry.BridgeSpanId = null;
+            entry.BridgeRole = null;
+        }
+
+        unitOfWork.ToothChartEntriesRepository.Update(entry, cancellationToken);
+
+        var summary = await unitOfWork.ToothRecordsRepository.GetByPatientAndToothAsync(entry.PatientId, entry.ToothNumber, cancellationToken);
+        if (summary != null)
+        {
+            if (phase == ToothChartPhase.Diagnosis)
+                summary.UpdateDiagnosis(condition, notes);
+            else
+                summary.UpdateTreatment(condition);
+            unitOfWork.ToothRecordsRepository.Update(summary, cancellationToken);
+        }
+
+        var linked = await FindLinkedEventAsync(entry, cancellationToken);
+        if (linked != null)
+        {
+            linked.Phase = phase;
+            linked.Title = ToothChartEventText.BuildTitle(phase, entry.ToothNumber, surface, condition, restorationMaterial, cariesType, icdas);
+            linked.Description = BuildDescription(clinicalDiagnosis, proposedTreatment, notes);
+            linked.ReferenceId = entry.Id.ToString();
+            unitOfWork.DentalClinicalEventsRepository.Update(linked, cancellationToken);
+        }
+
+        return entry;
+    }
+
+    public async Task VoidEntryAsync(
+        long id,
+        string? voidedByUserId,
+        string? reason = null,
+        CancellationToken cancellationToken = default)
+    {
+        var entry = await unitOfWork.ToothChartEntriesRepository.GetByCondition(x => x.Id == id, cancellationToken)
+            ?? throw new NotFoundException($"No se encontró el hallazgo {id}.");
+
+        entry.Void(voidedByUserId, reason);
+        unitOfWork.ToothChartEntriesRepository.Update(entry, cancellationToken);
+
+        var linked = await FindLinkedEventAsync(entry, cancellationToken);
+        if (linked != null)
+        {
+            linked.Void(voidedByUserId);
+            linked.ReferenceId = entry.Id.ToString();
+            unitOfWork.DentalClinicalEventsRepository.Update(linked, cancellationToken);
+        }
+
+        await RebuildToothSummaryAsync(entry.PatientId, entry.ToothNumber, entry.Id, cancellationToken);
+    }
+
+    private async Task RebuildToothSummaryAsync(
+        int patientId,
+        int toothNumber,
+        long excludedEntryId,
+        CancellationToken cancellationToken)
+    {
+        var remaining = (await unitOfWork.ToothChartEntriesRepository.FindAsync(
+            x => x.PatientId == patientId
+                 && x.ToothNumber == toothNumber
+                 && !x.IsVoided
+                 && x.Id != excludedEntryId,
+            cancellationToken)).ToList();
+
+        var summary = await unitOfWork.ToothRecordsRepository.GetByPatientAndToothAsync(patientId, toothNumber, cancellationToken);
+        if (summary == null)
+            return;
+
+        var latestDiagnosis = remaining
+            .Where(x => x.Phase == ToothChartPhase.Diagnosis)
+            .OrderByDescending(x => x.RecordedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        var latestTreatment = remaining
+            .Where(x => x.Phase != ToothChartPhase.Diagnosis)
+            .OrderByDescending(x => x.RecordedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+
+        summary.UpdateDiagnosis(latestDiagnosis?.Condition ?? ToothCondition.Healthy, latestDiagnosis?.Notes);
+        summary.UpdateTreatment(latestTreatment?.Condition);
+        unitOfWork.ToothRecordsRepository.Update(summary, cancellationToken);
+    }
+
+    private async Task<DentalClinicalEvent?> FindLinkedEventAsync(ToothChartEntry entry, CancellationToken cancellationToken)
+    {
+        var byId = await unitOfWork.DentalClinicalEventsRepository.GetByCondition(
+            e => e.PatientId == entry.PatientId
+                 && e.Type == DentalClinicalEventType.OdontogramEntry
+                 && e.ReferenceId == entry.Id.ToString(),
+            cancellationToken);
+        if (byId != null)
+            return byId;
+
+        var events = await unitOfWork.DentalClinicalEventsRepository.FindAsync(
+            e => e.PatientId == entry.PatientId
+                 && e.ToothNumber == entry.ToothNumber
+                 && e.Type == DentalClinicalEventType.OdontogramEntry,
+            cancellationToken);
+        return events
+            .OrderBy(e => Math.Abs((e.RecordedAt - entry.RecordedAt).TotalMilliseconds))
+            .FirstOrDefault(e => Math.Abs((e.RecordedAt - entry.RecordedAt).TotalSeconds) < 3);
     }
 }

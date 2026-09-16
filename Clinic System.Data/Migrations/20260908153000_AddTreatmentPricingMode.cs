@@ -12,28 +12,38 @@ namespace Clinic_System.Data.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "PricingMode",
-                table: "TreatmentProcedures",
-                type: "int",
-                nullable: false,
-                defaultValue: 1);
+            // Idempotent: EnsureRequiredSchemaAsync may have already added PricingMode in local DBs.
+            migrationBuilder.Sql("""
+                IF COL_LENGTH(N'dbo.TreatmentProcedures', N'PricingMode') IS NULL
+                BEGIN
+                    ALTER TABLE [TreatmentProcedures] ADD [PricingMode] int NOT NULL
+                        CONSTRAINT [DF_TreatmentProcedures_PricingMode] DEFAULT (1);
+                END
 
-            migrationBuilder.AddCheckConstraint(
-                name: "CK_TreatmentProcedures_PricingMode",
-                table: "TreatmentProcedures",
-                sql: "[PricingMode] IN (0, 1, 2)");
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.check_constraints
+                    WHERE name = N'CK_TreatmentProcedures_PricingMode')
+                BEGIN
+                    ALTER TABLE [TreatmentProcedures] ADD CONSTRAINT [CK_TreatmentProcedures_PricingMode]
+                        CHECK ([PricingMode] IN (0, 1, 2));
+                END
+                """);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropCheckConstraint(
-                name: "CK_TreatmentProcedures_PricingMode",
-                table: "TreatmentProcedures");
+            migrationBuilder.Sql("""
+                IF EXISTS (
+                    SELECT 1 FROM sys.check_constraints
+                    WHERE name = N'CK_TreatmentProcedures_PricingMode')
+                    ALTER TABLE [TreatmentProcedures] DROP CONSTRAINT [CK_TreatmentProcedures_PricingMode];
 
-            migrationBuilder.DropColumn(
-                name: "PricingMode",
-                table: "TreatmentProcedures");
+                IF OBJECT_ID(N'dbo.DF_TreatmentProcedures_PricingMode', N'D') IS NOT NULL
+                    ALTER TABLE [TreatmentProcedures] DROP CONSTRAINT [DF_TreatmentProcedures_PricingMode];
+
+                IF COL_LENGTH(N'dbo.TreatmentProcedures', N'PricingMode') IS NOT NULL
+                    ALTER TABLE [TreatmentProcedures] DROP COLUMN [PricingMode];
+                """);
         }
     }
 }

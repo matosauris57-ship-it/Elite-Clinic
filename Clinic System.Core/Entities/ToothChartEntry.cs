@@ -22,4 +22,19 @@ public class ToothChartEntry
     public virtual BridgeRole? BridgeRole { get; set; }
     public virtual string? RecordedByUserId { get; set; }
     public virtual DateTime RecordedAt { get; set; }
+    public virtual bool IsVoided { get; set; }
+    public virtual DateTime? VoidedAt { get; set; }
+    public virtual string? VoidedByUserId { get; set; }
+    public virtual string? VoidReason { get; set; }
+
+    public void Void(string? voidedByUserId, string? reason = null)
+    {
+        if (IsVoided)
+            throw new InvalidOperationException("Este hallazgo ya está anulado.");
+
+        IsVoided = true;
+        VoidedAt = DateTime.UtcNow;
+        VoidedByUserId = voidedByUserId;
+        VoidReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+    }
 }

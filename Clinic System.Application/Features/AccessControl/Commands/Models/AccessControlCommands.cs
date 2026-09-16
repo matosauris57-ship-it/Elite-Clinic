@@ -35,3 +35,10 @@ public class SetUserLockoutCommand : IRequest<Response<string>>
     public string UserId { get; set; } = string.Empty;
     public bool LockoutEnabled { get; set; }
 }
+
+public class SetUserPasswordCommand : IRequest<Response<string>>
+{
+    public string UserId { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
+}

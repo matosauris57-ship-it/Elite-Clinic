@@ -83,4 +83,12 @@ public class DashboardController : AppControllerBase
         var response = await mediator.Send(new GetPeriodontalIncompleteStatsQuery(), cancellationToken);
         return NewResult(response);
     }
+
+    [HttpGet("attendance-link-alerts")]
+    [Authorize(Policy = "agenda.view")]
+    public async Task<IActionResult> AttendanceLinkAlerts([FromQuery] GetAttendanceLinkAlertsQuery query, CancellationToken cancellationToken)
+    {
+        var response = await mediator.Send(query, cancellationToken);
+        return NewResult(response);
+    }
 }

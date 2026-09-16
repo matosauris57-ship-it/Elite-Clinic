@@ -31,4 +31,26 @@ public interface IToothChartService
         int patientId,
         int? toothNumber,
         CancellationToken cancellationToken = default);
+
+    Task<ToothChartEntry?> GetEntryAsync(long id, CancellationToken cancellationToken = default);
+
+    Task<ToothChartEntry> UpdateEntryAsync(
+        long id,
+        ToothSurface surface,
+        ToothChartPhase phase,
+        ToothCondition condition,
+        ToothSeverity? severity,
+        string? notes,
+        RestorationMaterial? restorationMaterial,
+        CariesType? cariesType,
+        IcdasCode? icdas,
+        string? clinicalDiagnosis,
+        string? proposedTreatment,
+        CancellationToken cancellationToken = default);
+
+    Task VoidEntryAsync(
+        long id,
+        string? voidedByUserId,
+        string? reason = null,
+        CancellationToken cancellationToken = default);
 }

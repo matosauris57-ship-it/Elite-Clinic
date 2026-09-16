@@ -84,5 +84,23 @@ namespace Clinic_System.API.Controllers
             var response = await mediator.Send(command);
             return NewResult(response);
         }
+
+        [HttpPut("{id:int}/discount")]
+        [Authorize(Policy = "facturacion.edit")]
+        public async Task<IActionResult> ApplyDiscount(int id, [FromBody] ApplyInvoiceDiscountCommand command)
+        {
+            command.PaymentId = id;
+            return NewResult(await mediator.Send(command));
+        }
+
+        [HttpPut("{id:int}/receipts/{receiptId:int}/void")]
+        [Authorize(Policy = "facturacion.edit")]
+        public async Task<IActionResult> VoidReceipt(int id, int receiptId, [FromBody] VoidPaymentReceiptCommand? command)
+        {
+            command ??= new VoidPaymentReceiptCommand();
+            command.PaymentId = id;
+            command.ReceiptId = receiptId;
+            return NewResult(await mediator.Send(command));
+        }
     }
 }

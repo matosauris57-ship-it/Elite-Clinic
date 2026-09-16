@@ -39,7 +39,8 @@ namespace Clinic_System.Application.Features.DentalTreatments.Queries.Handlers
                 request.ToDate,
                 pageNumber,
                 pageSize,
-                cancellationToken);
+                cancellationToken,
+                ApplyDoctorScope(null));
 
             var resultPageSize = pageSize > 0 ? pageSize : Math.Max(totalCount, 1);
             var totalPages = (int)Math.Ceiling(totalCount / (double)resultPageSize);

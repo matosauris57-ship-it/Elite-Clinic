@@ -13,6 +13,8 @@ namespace Clinic_System.Application.DTOs.Dental
         public string PriceRangeDisplay { get; set; } = string.Empty;
         public string PricingModeDisplay { get; set; } = string.Empty;
         public int DurationMinutes { get; set; }
+        public TreatmentProcedureTarget Target { get; set; } = TreatmentProcedureTarget.PerTooth;
+        public TreatmentToothKindFilter ToothKindFilter { get; set; } = TreatmentToothKindFilter.Any;
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<DoctorProcedurePriceDTO> DoctorPrices { get; set; } = [];

@@ -46,6 +46,7 @@ namespace Clinic_System.Data.Repository.UnitOfWork
         IStockMovementRepository StockMovementsRepo;
         ITreatmentMaterialConsumptionRepository TreatmentMaterialConsumptionsRepo;
         IClinicReportRepository ClinicReportsRepo;
+        IPasswordRecoveryRequestRepository PasswordRecoveryRequestsRepo;
 
         public IRefreshTokenRepository RefreshTokensRepository
         {
@@ -317,6 +318,15 @@ namespace Clinic_System.Data.Repository.UnitOfWork
             {
                 ClinicReportsRepo ??= new ClinicReportRepository(context);
                 return ClinicReportsRepo;
+            }
+        }
+
+        public IPasswordRecoveryRequestRepository PasswordRecoveryRequestsRepository
+        {
+            get
+            {
+                PasswordRecoveryRequestsRepo ??= new PasswordRecoveryRequestRepository(context);
+                return PasswordRecoveryRequestsRepo;
             }
         }
 

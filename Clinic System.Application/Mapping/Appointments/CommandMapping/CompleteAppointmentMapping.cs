@@ -7,6 +7,7 @@
             // Mapping for Appointment → CompleteAppointmentDTO
             CreateMap<Appointment, CompleteAppointmentDTO>()
                 .ForMember(dest => dest.AppointmentId, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.PaymentId, opt => opt.MapFrom(src => src.Payment != null ? src.Payment.Id : 0))
                 .ForMember(dest => dest.AppointmentDateTime,
                            opt => opt.MapFrom(src => src.AppointmentDate.ToString("dd/MM/yyyy-HH:mm")))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()))

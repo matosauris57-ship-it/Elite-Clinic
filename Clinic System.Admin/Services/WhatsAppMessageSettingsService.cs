@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Clinic_System.Core.Messaging;
 using DentalCare.Admin.Models;
 using Microsoft.Extensions.Options;
 
@@ -68,7 +69,7 @@ public class WhatsAppMessageSettingsService
             ? settings.ConfirmationTemplate
             : settings.ReminderTemplate;
 
-        return ApplyPlaceholders(template, ClinicName(), context);
+        return MessageBodyFormatting.ToWhatsApp(ApplyPlaceholders(template, ClinicName(), context));
     }
 
     public string Preview(string template, string? clinicName = null)
@@ -177,10 +178,10 @@ public class WhatsAppMessageSettingsService
         {
             ClinicName = string.IsNullOrWhiteSpace(settings.ClinicName) ? "DentalCare" : settings.ClinicName.Trim(),
             DefaultCountryCode = code,
-            ReminderTemplate = string.IsNullOrWhiteSpace(settings.ReminderTemplate)
+            ReminderTemplate = MessageBodyFormatting.IsBlank(settings.ReminderTemplate)
                 ? WhatsAppMessageSettings.ReminderDefault
                 : settings.ReminderTemplate.Trim(),
-            ConfirmationTemplate = string.IsNullOrWhiteSpace(settings.ConfirmationTemplate)
+            ConfirmationTemplate = MessageBodyFormatting.IsBlank(settings.ConfirmationTemplate)
                 ? WhatsAppMessageSettings.ConfirmationDefault
                 : settings.ConfirmationTemplate.Trim()
         };
@@ -192,11 +193,15 @@ public class WhatsAppMessageSettingsService
         var fecha = date?.ToString("d 'de' MMMM yyyy", MessageCulture) ?? "—";
         var hora = date?.ToString("HH:mm", MessageCulture) ?? "—";
 
-        return template
-            .Replace("{nombre}", context.PatientName, StringComparison.OrdinalIgnoreCase)
-            .Replace("{clinica}", clinicName, StringComparison.OrdinalIgnoreCase)
-            .Replace("{fecha}", fecha, StringComparison.OrdinalIgnoreCase)
-            .Replace("{hora}", hora, StringComparison.OrdinalIgnoreCase)
-            .Replace("{doctor}", context.DoctorName, StringComparison.OrdinalIgnoreCase);
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["{nombre}"] = context.PatientName,
+            ["{clinica}"] = clinicName,
+            ["{fecha}"] = fecha,
+            ["{hora}"] = hora,
+            ["{doctor}"] = context.DoctorName
+        };
+
+        return MessageBodyFormatting.ApplyTokens(template, tokens);
     }
 }

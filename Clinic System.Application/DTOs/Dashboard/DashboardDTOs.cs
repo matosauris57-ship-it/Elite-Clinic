@@ -46,3 +46,19 @@ public class PeriodontalIncompleteStatsDTO
 {
     public int IncompleteExams { get; set; }
 }
+
+public class AttendanceLinkAlertDTO
+{
+    public int AppointmentId { get; set; }
+    public int PatientId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public string? PatientPhone { get; set; }
+    public string DoctorName { get; set; } = string.Empty;
+    public DateTime AppointmentDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public bool Accepted { get; set; }
+    public DateTime RespondedAt { get; set; }
+    public string? Comment { get; set; }
+    public string? ProcedureName { get; set; }
+    public int? ToothNumber { get; set; }
+}

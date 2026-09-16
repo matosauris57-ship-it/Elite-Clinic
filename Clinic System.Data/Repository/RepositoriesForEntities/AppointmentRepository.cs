@@ -60,7 +60,10 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
             query = query
                 .OrderBy(a => a.AppointmentDate)
                 .Include(a => a.Doctor)
-                .Include(a => a.Patient);
+                .Include(a => a.Patient)
+                .Include(a => a.PlanItem)
+                .Include(a => a.TreatmentProcedure)
+                .Include(a => a.Payment);
 
             if (pageSize > 0)
             {
@@ -245,8 +248,18 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
             return await context.Appointments
                 .Include(a => a.Doctor)
                 .Include(a => a.Patient)
-                .Include(a => a.MedicalRecord) 
+                .Include(a => a.Payment)
+                    .ThenInclude(p => p!.Receipts)
+                .Include(a => a.Payment)
+                    .ThenInclude(p => p!.InvoiceLines)
+                .Include(a => a.MedicalRecord)
                 .ThenInclude(mr => mr.Prescriptions)
+                .Include(a => a.PlanItem)
+                    .ThenInclude(i => i!.DentalTreatment)
+                .Include(a => a.PlanItem)
+                    .ThenInclude(i => i!.TreatmentPlan)
+                .Include(a => a.TreatmentProcedure)
+                .Include(a => a.TreatmentPlan)
                 .FirstOrDefaultAsync(a => a.Id == AppointmentId, cancellationToken);
         }
 
@@ -254,13 +267,16 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
         {
             return await context.Appointments
                 .Include(a => a.Payment)
+                    .ThenInclude(p => p!.Receipts)
+                .Include(a => a.Payment)
+                    .ThenInclude(p => p!.InvoiceLines)
                 .Include(a => a.Doctor)
                 .Include(a => a.Patient)
                 .Where(a => a.Status == AppointmentStatus.Pending && a.AppointmentDate < date)
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<Dictionary<AppointmentStatus, int>> GetAppointmentsCountByStatusAsync(DateTime? start, DateTime? end, CancellationToken cancellationToken = default)
+        public async Task<Dictionary<AppointmentStatus, int>> GetAppointmentsCountByStatusAsync(DateTime? start, DateTime? end, CancellationToken cancellationToken = default, int? doctorId = null)
         {
             var query = context.Appointments.AsQueryable();
 
@@ -269,6 +285,9 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
 
             if (end.HasValue)
                 query = query.Where(a => a.AppointmentDate <= end.Value);
+
+            if (doctorId.HasValue)
+                query = query.Where(a => a.DoctorId == doctorId.Value);
 
             // نرجع Count لكل حالة على شكل Dictionary
             var result = await query
@@ -289,6 +308,26 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                     && (a.Status == AppointmentStatus.Pending
                         || a.Status == AppointmentStatus.Confirmed
                         || a.Status == AppointmentStatus.Rescheduled))
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<List<Appointment>> GetRecentAttendanceLinkResponsesAsync(DateTime since, int take, CancellationToken cancellationToken = default)
+        {
+            take = Math.Clamp(take, 1, 50);
+            return await context.Appointments
+                .AsNoTracking()
+                .Include(a => a.Patient)
+                .Include(a => a.Doctor)
+                .Include(a => a.PlanItem)
+                .Include(a => a.TreatmentProcedure)
+                .Where(a =>
+                    (a.AttendanceLinkRespondedAt != null && a.AttendanceLinkRespondedAt >= since)
+                    || (a.AttendanceLinkRespondedAt == null
+                        && a.CancellationChannel == AppointmentCancellationChannel.Patient
+                        && a.CancelledAt != null
+                        && a.CancelledAt >= since))
+                .OrderByDescending(a => a.AttendanceLinkRespondedAt ?? a.CancelledAt)
+                .Take(take)
                 .ToListAsync(cancellationToken);
         }
     }

@@ -7,6 +7,7 @@
 @inject TreatmentProcedureMaintenanceService ProcedureService
 @inject PermissionService PermissionService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
 
 <PageTitle>Facturación — DentalCare Admin</PageTitle>
 
@@ -14,7 +15,7 @@
     <div class="maintenance-header command-header">
         <div class="command-titles">
             <h1>Facturación</h1>
-            <p>Gestiona pagos, cobros y líneas de factura de las citas.</p>
+            <p>Cobra visitas y abonos al plan. Un plan de varias piezas no se salda con una sola cita.</p>
         </div>
         <div class="command-actions">
             <button class="btn-outline" disabled="@_loading" @onclick="ReloadAsync">
@@ -60,8 +61,8 @@
                 <input type="text"
                        placeholder="Buscar paciente, médico o # pago..."
                        disabled="@_loading"
-                       @bind="_search"
-                       @bind:event="oninput" />
+                       value="@_search"
+                       @oninput="OnSearchInput" />
             </div>
             <div class="form-group">
                 <label>Desde</label>
@@ -98,7 +99,14 @@
 
         <div class="billing-table-header">
             <span>@_payments.Count pago(s) visibles de @_totalCount</span>
-            <span>Página @_pageNumber de @TotalPages</span>
+            <div class="billing-pagination-meta">
+                <select class="form-input" disabled="@_loading" @bind="_pageSize" @bind:after="OnPageSizeChangedAsync" style="min-width:7rem;">
+                    <option value="10">10 / pág.</option>
+                    <option value="20">20 / pág.</option>
+                    <option value="50">50 / pág.</option>
+                </select>
+                <span>Página @_pageNumber de @TotalPages</span>
+            </div>
         </div>
 
         @if (_loading)
@@ -129,7 +137,7 @@
                             <th>Estado</th>
                             <th>Total</th>
                             <th>Abonado</th>
-                            <th>Saldo</th>
+                            <th>Por saldar</th>
                             <th class="col-actions">Acciones</th>
                         </tr>
                     </thead>
@@ -167,46 +175,155 @@
 {
     <div class="modal-overlay" @onclick="CloseDetailModal">
         <div class="modal-panel modal-panel-wide billing-detail-modal" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <div>
+            <div class="billing-detail-hero">
+                <div class="billing-detail-hero-copy">
+                    <p class="billing-detail-kicker">Factura abierta</p>
                     <h2>Factura #@_selectedPayment.PaymentId</h2>
                     <p>@_selectedPayment.PatientName · @_selectedPayment.DoctorName</p>
                 </div>
-                <button class="modal-close" @onclick="CloseDetailModal">×</button>
+                <div class="billing-detail-hero-meta">
+                    <span class="status-badge @GetPaymentStatusClass(_selectedPayment.PaymentStatus)">@_selectedPayment.PaymentStatusDisplay</span>
+                    <button class="modal-close" @onclick="CloseDetailModal">×</button>
+                </div>
             </div>
 
-            <div class="agenda-detail-grid billing-detail-grid">
-                <div>
-                    <span>Paciente</span>
-                    <strong>
-                        <a href="/pacientes/@_selectedPayment.PatientId">@_selectedPayment.PatientName</a>
-                    </strong>
-                </div>
-                <div>
-                    <span>Cita</span>
-                    <strong>
-                        <a href="/agenda">#@_selectedPayment.AppointmentId</a>
-                    </strong>
-                </div>
-                <div><span>Fecha</span><strong>@FormatDate(_selectedPayment.PaymentDate)</strong></div>
-                <div><span>Método</span><strong>@_selectedPayment.PaymentMethodDisplay</strong></div>
-                <div><span>Estado</span><strong><span class="status-badge @GetPaymentStatusClass(_selectedPayment.PaymentStatus)">@_selectedPayment.PaymentStatusDisplay</span></strong></div>
-                <div><span>Total</span><strong>@_selectedPayment.AmountDisplay</strong></div>
-                <div><span>Monto cobrado</span><strong>@_selectedPayment.AmountCollectedDisplay</strong></div>
-                <div><span>Saldo</span><strong>@_selectedPayment.BalanceDisplay</strong></div>
-            </div>
-
-            @if (_canEdit)
+            @if (!string.IsNullOrWhiteSpace(_actionMessage))
             {
-                @if (CanCollect)
-                {
-                    <div class="billing-lines-section billing-abono-section">
-                        <div class="billing-section-title">
-                            <h3>Registrar abono</h3>
-                            <span>Saldo @_selectedPayment.BalanceDisplay</span>
+                <div class="agenda-action-message billing-detail-banner @(_actionSuccess ? "success" : "error")">@_actionMessage</div>
+            }
+
+            <div class="billing-detail-totals">
+                <div>
+                    <span>Subtotal</span>
+                    <strong>@(_selectedPayment.SubtotalDisplay)</strong>
+                    <em>Antes de descuento</em>
+                </div>
+                <div>
+                    <span>Descuento</span>
+                    <strong>@(_selectedPayment.DiscountAmountDisplay)</strong>
+                    <em>De esta factura</em>
+                </div>
+                <div>
+                    <span>Total de la factura</span>
+                    <strong>@_selectedPayment.AmountDisplay</strong>
+                    <em>Monto a cobrar</em>
+                </div>
+                <div>
+                    <span>Ya cobrado</span>
+                    <strong>@_selectedPayment.AmountCollectedDisplay</strong>
+                    <em>Abonos menos reembolsos</em>
+                </div>
+                <div class="is-balance">
+                    <span>Total para saldar</span>
+                    <strong>@_selectedPayment.BalanceDisplay</strong>
+                    <em>Lo que falta por cobrar</em>
+                </div>
+            </div>
+
+            <div class="billing-detail-body">
+                <section class="billing-detail-card">
+                    <h3>Datos de la factura</h3>
+                    <dl class="billing-detail-meta">
+                        <div>
+                            <dt>Paciente</dt>
+                            <dd><a href="/pacientes/@_selectedPayment.PatientId">@_selectedPayment.PatientName</a></dd>
                         </div>
-                        <p class="billing-muted">Cada cobro debe confirmarse. El estado pasa a Pagado solo cuando el saldo llega a cero.</p>
-                        <div class="billing-add-line billing-abono-form">
+                        <div>
+                            <dt>Origen</dt>
+                            <dd>
+                                @if (_selectedPayment.AppointmentId > 0)
+                                {
+                                    <a href="/agenda">Cita #@_selectedPayment.AppointmentId</a>
+                                }
+                                else if (_selectedPayment.TreatmentPlanId is int planId)
+                                {
+                                    <span>Cuenta del plan #@planId</span>
+                                }
+                                else
+                                {
+                                    <span>Presupuesto</span>
+                                }
+                            </dd>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_selectedPayment.TreatmentPlanTitle))
+                        {
+                            <div>
+                                <dt>Plan</dt>
+                                <dd>@_selectedPayment.TreatmentPlanTitle</dd>
+                            </div>
+                        }
+                        <div>
+                            <dt>Fecha</dt>
+                            <dd>@FormatDate(_selectedPayment.PaymentDate)</dd>
+                        </div>
+                        <div>
+                            <dt>Método</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(_selectedPayment.PaymentMethodDisplay) ? "Sin definir" : _selectedPayment.PaymentMethodDisplay)</dd>
+                        </div>
+                    </dl>
+                    @if (_canEdit)
+                    {
+                        <div class="billing-detail-toolbar">
+                            @if (CanRefund)
+                            {
+                                <button class="btn-outline" disabled="@_saving" @onclick="() => OpenConfirm(BillingConfirmKind.Refund)">Reembolsar</button>
+                            }
+                            @if (CanCancel)
+                            {
+                                <button class="btn-outline" disabled="@_saving" @onclick="() => OpenConfirm(BillingConfirmKind.Cancel)">Cancelar factura</button>
+                            }
+                            <a class="btn-outline" href="@PrintUrl("detalle")" target="_blank">Imprimir detalle</a>
+                            <a class="btn-outline" href="@PrintUrl("resumen")" target="_blank">Imprimir total</a>
+                            <a class="btn-outline" href="@PrintUrl("detalle", "80mm")" target="_blank">Ticket 80 mm</a>
+                            <a class="btn-outline" href="@PrintUrl("resumen", "58mm")" target="_blank">Ticket 58 mm</a>
+                        </div>
+                        @if (CanApplyDiscount)
+                        {
+                            <div class="billing-abono-grid" style="margin-top: 0.75rem;">
+                                <div class="form-group">
+                                    <label>Descuento de la factura</label>
+                                    <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@_saving" @bind="_discountInput" placeholder="0.00" />
+                                </div>
+                                <div class="billing-abono-actions">
+                                    <button class="btn-outline" disabled="@_saving" @onclick="ApplyDiscountAsync">Aplicar descuento</button>
+                                </div>
+                            </div>
+                        }
+                        @if (CanRefund || CanCancel)
+                        {
+                            <div class="form-group">
+                                <label>Motivo (reembolso, anulación o cancelación)</label>
+                                <input class="form-input" disabled="@_saving" @bind="_reason" placeholder="Opcional" />
+                            </div>
+                            @if (CanRefund)
+                            {
+                                <div class="form-group">
+                                    <label>Monto a reembolsar (vacío = todo lo cobrado)</label>
+                                    <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@_saving" @bind="_refundAmountInput" placeholder="@_selectedPayment.AmountCollectedDisplay" />
+                                </div>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        <div class="billing-detail-toolbar">
+                            <a class="btn-outline" href="@PrintUrl("detalle")" target="_blank">Imprimir detalle</a>
+                            <a class="btn-outline" href="@PrintUrl("resumen")" target="_blank">Imprimir total</a>
+                            <a class="btn-outline" href="@PrintUrl("detalle", "80mm")" target="_blank">Ticket 80 mm</a>
+                            <a class="btn-outline" href="@PrintUrl("resumen", "58mm")" target="_blank">Ticket 58 mm</a>
+                        </div>
+                    }
+                </section>
+
+                @if (_canEdit && CanCollect)
+                {
+                    <section class="billing-detail-card billing-collect-card">
+                        <div class="billing-section-title">
+                            <h3>Registrar cobro</h3>
+                            <span>Total para saldar @_selectedPayment.BalanceDisplay</span>
+                        </div>
+                        <p class="billing-muted">Confirme cada cobro. El estado pasa a Pagado cuando el total para saldar llega a cero.</p>
+                        <div class="billing-abono-grid">
                             <div class="form-group">
                                 <label>Monto del abono</label>
                                 <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@_saving" @bind="_abonoAmountInput" placeholder="0.00" />
@@ -223,102 +340,47 @@
                                 <label>Nota del abono</label>
                                 <input class="form-input" disabled="@_saving" @bind="_abonoNotes" placeholder="Opcional" />
                             </div>
-                            <button class="btn-primary" disabled="@_saving" @onclick="() => AskCollectAsync(settle: false)">Solicitar abono</button>
-                            <button class="btn-outline" disabled="@(_saving || AmountCollectedBalanceZero)" @onclick="() => AskCollectAsync(settle: true)">Saldar factura</button>
-                        </div>
-                    </div>
-                }
-
-                <div class="billing-collect-actions">
-                    @if (CanRefund)
-                    {
-                        <button class="btn-outline" disabled="@_saving" @onclick="() => OpenConfirm(BillingConfirmKind.Refund)">Reembolsar</button>
-                    }
-                    @if (CanCancel)
-                    {
-                        <button class="btn-outline" disabled="@_saving" @onclick="() => OpenConfirm(BillingConfirmKind.Cancel)">Cancelar factura</button>
-                    }
-                    <a class="btn-outline" href="@PrintUrl("detalle")" target="_blank">Imprimir con detalle</a>
-                    <a class="btn-outline" href="@PrintUrl("resumen")" target="_blank">Imprimir solo total</a>
-                </div>
-
-                @if (CanRefund || CanCancel)
-                {
-                    <div class="form-group">
-                        <label>Motivo (reembolso o cancelación)</label>
-                        <input class="form-input" disabled="@_saving" @bind="_reason" placeholder="Opcional" />
-                    </div>
-                }
-            }
-            else
-            {
-                <div class="billing-collect-actions">
-                    <a class="btn-outline" href="@PrintUrl("detalle")" target="_blank">Imprimir con detalle</a>
-                    <a class="btn-outline" href="@PrintUrl("resumen")" target="_blank">Imprimir solo total</a>
-                </div>
-            }
-
-            @if ((_selectedPayment.Receipts?.Count ?? 0) > 0)
-            {
-                <div class="billing-lines-section">
-                    <div class="billing-section-title">
-                        <h3>Abonos confirmados</h3>
-                        <span>@_selectedPayment.Receipts!.Count comprobante(s)</span>
-                    </div>
-                    <div class="billing-lines-list">
-                        @foreach (var receipt in _selectedPayment.Receipts.OrderBy(r => r.PaidAt))
-                        {
-                            <div class="billing-line-item">
-                                <div>
-                                    <strong>@receipt.AmountDisplay</strong>
-                                    <span>@FormatDate(receipt.PaidAt) · @receipt.PaymentMethodDisplay</span>
-                                    @if (!string.IsNullOrWhiteSpace(receipt.Notes))
-                                    {
-                                        <span>@receipt.Notes</span>
-                                    }
-                                </div>
+                            <div class="billing-abono-actions">
+                                <button class="btn-primary" disabled="@_saving" @onclick="() => AskCollectAsync(settle: false)">Solicitar abono</button>
+                                <button class="btn-outline" disabled="@(_saving || AmountCollectedBalanceZero)" @onclick="() => AskCollectAsync(settle: true)">Saldar factura</button>
                             </div>
-                        }
-                    </div>
-                </div>
-            }
-
-            @if (_selectedPayment.PatientId > 0)
-            {
-                <details class="billing-history-fold">
-                    <summary>Historial clínico del paciente</summary>
-                    <PatientClinicalHistoryPanel PatientId="@_selectedPayment.PatientId"
-                                                 PatientName="@_selectedPayment.PatientName" />
-                </details>
-            }
-
-            <div class="billing-edit-grid">
-                <div class="form-group">
-                    <label>Monto</label>
-                    <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@(_saving || !CanEditInvoice)" @bind="_editAmountInput" placeholder="0.00" />
-                </div>
-                <div class="form-group">
-                    <label>Método</label>
-                    <select class="form-input" disabled="@(_saving || !CanEditInvoice)" @bind="_editPaymentMethod">
-                        <option value="">Seleccione</option>
-                        <option value="1">Efectivo</option>
-                        <option value="2">Tarjeta</option>
-                        <option value="3">InstaPay</option>
-                    </select>
-                </div>
-                <div class="form-group billing-notes">
-                    <label>Notas</label>
-                    <textarea class="form-input" rows="3" disabled="@(_saving || !CanEditInvoice)" @bind="_editNotes"></textarea>
-                </div>
-                @if (CanEditInvoice)
-                {
-                    <div class="billing-edit-actions">
-                        <button class="btn-primary" disabled="@_saving" @onclick="() => OpenConfirm(BillingConfirmKind.SavePayment)">Guardar pago</button>
-                    </div>
+                        </div>
+                    </section>
                 }
             </div>
 
-            <div class="billing-lines-section">
+            @if ((_selectedPayment.Receipts?.Count ?? 0) > 0)
+            {
+                <section class="billing-detail-card">
+                    <div class="billing-section-title">
+                        <h3>Movimientos de cobro</h3>
+                        <span>@_selectedPayment.Receipts!.Count comprobante(s)</span>
+                    </div>
+                    <div class="billing-receipt-list">
+                        @foreach (var receipt in _selectedPayment.Receipts.OrderBy(r => r.PaidAt))
+                        {
+                            <div class="billing-receipt-item">
+                                <strong>@receipt.AmountDisplay</strong>
+                                <span>@(string.IsNullOrWhiteSpace(receipt.KindDisplay) ? "Abono" : receipt.KindDisplay) · @FormatDate(receipt.PaidAt) · @receipt.PaymentMethodDisplay</span>
+                                @if (!string.IsNullOrWhiteSpace(receipt.Notes))
+                                {
+                                    <span>@receipt.Notes</span>
+                                }
+                                @if (receipt.IsVoided)
+                                {
+                                    <span>Anulado@(string.IsNullOrWhiteSpace(receipt.VoidReason) ? "" : $": {receipt.VoidReason}")</span>
+                                }
+                                else if (_canEdit && _selectedPayment.PaymentStatus != "Cancelled")
+                                {
+                                    <button class="btn-table" disabled="@_saving" @onclick="() => AskVoidReceipt(receipt)">Anular</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+
+            <section class="billing-detail-card">
                 <div class="billing-section-title">
                     <h3>Líneas de factura</h3>
                     <span>@_invoiceLines.Count línea(s)</span>
@@ -330,63 +392,94 @@
                 }
                 else if (_invoiceLines.Count == 0)
                 {
-                    <p class="billing-muted">Este pago aún no tiene desglose de tratamientos o conceptos.</p>
+                    <p class="billing-muted">Aún no hay desglose. Agregue tratamientos debajo; el importe se suma al total de la factura.</p>
                 }
                 else
                 {
-                    <div class="billing-lines-list">
-                        @foreach (var line in _invoiceLines)
-                        {
-                            <div class="billing-line-item">
-                                <div>
-                                    <strong>@line.Description</strong>
-                                    <span>@line.MetaDisplay</span>
-                                </div>
-                                <div class="billing-line-actions">
-                                    <strong>@line.LineTotalDisplay</strong>
+                    <div class="data-table-wrap billing-lines-table-wrap">
+                        <table class="data-table billing-lines-table">
+                            <thead>
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th>Detalle</th>
+                                    <th>Importe</th>
                                     @if (CanEditInvoice)
                                     {
-                                        <button class="btn-table" disabled="@_saving" @onclick="() => AskDeleteLine(line)">Eliminar</button>
+                                        <th class="col-actions"></th>
                                     }
-                                </div>
-                            </div>
-                        }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var line in _invoiceLines)
+                                {
+                                    <tr>
+                                        <td>@line.Description</td>
+                                        <td>@line.MetaDisplay</td>
+                                        <td class="billing-amount">@line.LineTotalDisplay</td>
+                                        @if (CanEditInvoice)
+                                        {
+                                            <td class="col-actions">
+                                                <button class="btn-table" disabled="@_saving" @onclick="() => AskDeleteLine(line)">Eliminar</button>
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 }
 
-                @if (CanEditInvoice)
+                @if (_canEdit)
                 {
-                    <div class="billing-add-line">
-                        <div class="form-group">
-                            <label>Catálogo</label>
-                            <select class="form-input" disabled="@_saving" value="@_selectedProcedureId" @onchange="OnProcedureSelected">
-                                <option value="">Texto libre</option>
-                                @foreach (var procedure in _procedures)
-                                {
-                                    <option value="@procedure.Id">@procedure.Name (@FormatProcedurePricingHint(procedure))</option>
-                                }
-                            </select>
+                    <div class="billing-add-line-block">
+                        <div class="billing-section-title">
+                            <h3>Agregar línea</h3>
+                            @if (!CanAddInvoiceLines)
+                            {
+                                <span>No disponible en facturas canceladas</span>
+                            }
                         </div>
-                        <div class="form-group">
-                            <label>Descripción</label>
-                            <input class="form-input" disabled="@_saving" placeholder="Ej. Limpieza dental" @bind="_newLine.Description" />
+                        <div class="billing-add-line">
+                            <div class="form-group">
+                                <label>Catálogo</label>
+                                <select class="form-input" disabled="@(_saving || !CanAddInvoiceLines)" value="@_selectedProcedureId" @onchange="OnProcedureSelected">
+                                    <option value="">Texto libre</option>
+                                    @foreach (var procedure in _procedures)
+                                    {
+                                        <option value="@procedure.Id">@procedure.Name (@FormatProcedurePricingHint(procedure))</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Descripción</label>
+                                <input class="form-input" disabled="@(_saving || !CanAddInvoiceLines)" placeholder="Ej. Limpieza dental" @bind="_newLine.Description" />
+                            </div>
+                            <div class="form-group">
+                                <label>Pieza FDI</label>
+                                <input class="form-input" type="number" min="11" disabled="@(_saving || !CanAddInvoiceLines)" @bind="_newLine.ToothNumber" />
+                            </div>
+                            <div class="form-group">
+                                <label>Cant.</label>
+                                <input class="form-input" type="number" min="1" disabled="@(_saving || !CanAddInvoiceLines)" @bind="_newLine.Quantity" />
+                            </div>
+                            <div class="form-group">
+                                <label>Precio</label>
+                                <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@(_saving || !CanAddInvoiceLines)" @bind="_newLinePriceInput" placeholder="0.00" />
+                            </div>
+                            <button class="btn-primary" disabled="@(_saving || !CanAddInvoiceLines)" @onclick="AddLineAsync">Agregar línea</button>
                         </div>
-                        <div class="form-group">
-                            <label>Pieza FDI</label>
-                            <input class="form-input" type="number" min="11" disabled="@_saving" @bind="_newLine.ToothNumber" />
-                        </div>
-                        <div class="form-group">
-                            <label>Cant.</label>
-                            <input class="form-input" type="number" min="1" disabled="@_saving" @bind="_newLine.Quantity" />
-                        </div>
-                        <div class="form-group">
-                            <label>Precio</label>
-                            <input class="form-input" type="text" inputmode="decimal" autocomplete="off" disabled="@_saving" @bind="_newLinePriceInput" placeholder="0.00" />
-                        </div>
-                        <button class="btn-primary" disabled="@_saving" @onclick="AddLineAsync">Agregar línea</button>
                     </div>
                 }
-            </div>
+            </section>
+
+            @if (_selectedPayment.PatientId > 0)
+            {
+                <details class="billing-history-fold">
+                    <summary>Historial clínico del paciente</summary>
+                    <PatientClinicalHistoryPanel PatientId="@_selectedPayment.PatientId"
+                                                 PatientName="@_selectedPayment.PatientName" />
+                </details>
+            }
 
             <div class="modal-actions">
                 <button class="btn-outline" disabled="@_saving" @onclick="CloseDetailModal">Cerrar</button>
@@ -423,7 +516,7 @@
         Refund,
         Cancel,
         DeleteLine,
-        SavePayment
+        VoidReceipt
     }
 
     private List<PaymentListItem> _payments = [];
@@ -455,9 +548,11 @@
     private int _totalCount;
     private int _totalPages = 1;
     private int _pendingLineId;
+    private int _pendingReceiptId;
 
-    private string _editAmountInput = string.Empty;
     private string _abonoAmountInput = string.Empty;
+    private string _refundAmountInput = string.Empty;
+    private string _discountInput = string.Empty;
     private string _newLinePriceInput = string.Empty;
     private string _editPaymentMethod = string.Empty;
     private string? _editNotes;
@@ -465,23 +560,38 @@
     private BillingConfirmKind _confirmKind = BillingConfirmKind.None;
     private string _confirmTitle = string.Empty;
     private string _confirmBody = string.Empty;
+    private bool _queryInvoiceOpened;
+
+    [SupplyParameterFromQuery(Name = "pago")]
+    public int? OpenPaymentId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "paciente")]
+    public int? FilterPatientId { get; set; }
 
     private int TotalPages => Math.Max(1, _totalPages);
     private decimal AmountCollected => _selectedPayment?.AmountCollected ?? 0;
     private bool AmountCollectedBalanceZero => (_selectedPayment?.Balance ?? 0) <= 0;
     private bool CanEditInvoice => _canEdit && IsEditableStatus(_selectedPayment?.PaymentStatus) && AmountCollected <= 0;
-    private bool CanCollect => _canEdit && (_selectedPayment?.PaymentStatus is "Pending" or "Failed" or "PartiallyPaid") && !AmountCollectedBalanceZero;
-    private bool CanRefund => _canEdit && (_selectedPayment?.PaymentStatus is "Paid" or "PartiallyPaid");
-    private bool CanCancel => _canEdit && (_selectedPayment?.PaymentStatus is "Pending" or "Failed") && AmountCollected <= 0;
+    private bool CanAddInvoiceLines => _canEdit && _selectedPayment?.PaymentStatus is not "Cancelled";
+    private bool CanApplyDiscount => _canEdit && _selectedPayment?.PaymentStatus is not "Cancelled";
+    private bool CanCollect => _canEdit && (_selectedPayment?.PaymentStatus is "Pending" or "Failed" or "PartiallyPaid" or "Paid" or "Refunded") && !AmountCollectedBalanceZero;
+    private bool CanRefund => _canEdit && AmountCollected > 0 && _selectedPayment?.PaymentStatus is not "Cancelled";
+    private bool CanCancel => _canEdit && (_selectedPayment?.PaymentStatus is "Pending" or "Failed" or "Refunded") && AmountCollected <= 0;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _canEdit = PermissionService.HasPermission(authState.User, "facturacion.edit");
+        if (FilterPatientId is > 0)
+        {
+            _fromDate = string.Empty;
+            _toDate = string.Empty;
+        }
         var proceduresTask = ProcedureService.GetActiveProceduresAsync();
         await ReloadAsync();
         var (procedures, _) = await proceduresTask;
         _procedures = procedures;
+        await TryOpenInvoiceFromQueryAsync();
     }
 
     private async Task ReloadAsync()
@@ -554,10 +664,34 @@
         await ReloadAsync();
     }
 
+    private CancellationTokenSource? _searchCts;
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+        try
+        {
+            await Task.Delay(350, token);
+            _pageNumber = 1;
+            await ReloadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task OnPageSizeChangedAsync()
+    {
+        _pageNumber = 1;
+        await ReloadAsync();
+    }
+
     private async Task OpenDetailAsync(PaymentListItem payment)
     {
         _selectedPayment = payment;
-        _editAmountInput = payment.AmountRaw;
         _editPaymentMethod = PaymentMethodToValue(payment.PaymentMethod);
         if (string.IsNullOrWhiteSpace(_editPaymentMethod) && payment.PaymentStatus is "Pending" or "Failed")
             _editPaymentMethod = "1";
@@ -569,6 +703,8 @@
         _newLinePriceInput = string.Empty;
         _selectedProcedureId = string.Empty;
         _reason = string.Empty;
+        _refundAmountInput = string.Empty;
+        _discountInput = payment.DiscountAmount > 0 ? payment.DiscountAmount.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty;
         _showDetailModal = true;
         await LoadInvoiceLinesAsync(payment.PaymentId);
     }
@@ -581,39 +717,6 @@
         if (!string.IsNullOrWhiteSpace(error))
             ShowAction(error, success: false);
         _linesLoading = false;
-    }
-
-    private async Task SavePaymentAsync()
-    {
-        if (_selectedPayment == null)
-            return;
-
-        if (string.IsNullOrWhiteSpace(_editAmountInput))
-        {
-            ShowAction("El monto debe ser mayor a cero.", success: false);
-            return;
-        }
-
-        _saving = true;
-        var request = new UpdatePaymentRequest
-        {
-            AmountInput = _editAmountInput,
-            PaymentMethod = int.TryParse(_editPaymentMethod, out var method) ? method : null,
-            Notes = _editNotes
-        };
-
-        var (success, error) = await BillingService.UpdatePaymentAsync(_selectedPayment.PaymentId, request);
-        if (!success)
-        {
-            ShowAction(error ?? "No se pudo actualizar el pago.", success: false);
-            _saving = false;
-            return;
-        }
-
-        ShowAction("Pago actualizado correctamente.", success: true);
-        await RefreshSelectedPaymentAsync();
-        await ReloadAsync();
-        _saving = false;
     }
 
     private async Task AddLineAsync()
@@ -723,7 +826,7 @@
             return;
 
         _saving = true;
-        var (success, error) = await BillingService.RefundPaymentAsync(_selectedPayment.PaymentId, _reason);
+        var (success, error) = await BillingService.RefundPaymentAsync(_selectedPayment.PaymentId, _reason, string.IsNullOrWhiteSpace(_refundAmountInput) ? null : _refundAmountInput);
         if (!success)
         {
             ShowAction(error ?? "No se pudo reembolsar el pago.", success: false);
@@ -731,7 +834,7 @@
             return;
         }
 
-        ShowAction("Pago reembolsado.", success: true);
+        ShowAction("Reembolso registrado. El dinero cobrado se deshizo en el saldo.", success: true);
         await RefreshSelectedPaymentAsync();
         await ReloadAsync();
         _saving = false;
@@ -794,12 +897,13 @@
         if (payment != null)
         {
             _selectedPayment = payment;
-            _editAmountInput = payment.AmountRaw;
             _editPaymentMethod = PaymentMethodToValue(payment.PaymentMethod);
             if (string.IsNullOrWhiteSpace(_editPaymentMethod) && payment.PaymentStatus is "Pending" or "Failed")
                 _editPaymentMethod = "1";
             _editNotes = payment.Notes is "N/A" ? null : payment.Notes;
             _abonoAmountInput = payment.Balance > 0 ? payment.BalanceRaw : string.Empty;
+            _refundAmountInput = payment.AmountCollected > 0 ? string.Empty : string.Empty;
+            _discountInput = payment.DiscountAmount > 0 ? payment.DiscountAmount.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty;
             _abonoNotes = null;
         }
         else if (!string.IsNullOrWhiteSpace(error))
@@ -812,6 +916,7 @@
     {
         PageNumber = _pageNumber,
         PageSize = _pageSize,
+        PatientId = FilterPatientId is > 0 ? FilterPatientId : null,
         FromDate = ParseDate(_fromDate),
         ToDate = ParseDate(_toDate),
         Method = string.IsNullOrWhiteSpace(_methodFilter) ? null : _methodFilter,
@@ -825,15 +930,37 @@
         _selectedPayment = null;
         _invoiceLines = [];
         _reason = string.Empty;
+        _refundAmountInput = string.Empty;
+        _discountInput = string.Empty;
+        _pendingReceiptId = 0;
         _selectedProcedureId = string.Empty;
         _confirmKind = BillingConfirmKind.None;
         _newLinePriceInput = string.Empty;
+        if (OpenPaymentId is > 0)
+            Navigation.NavigateTo(FilterPatientId is > 0 ? $"/facturacion?paciente={FilterPatientId}" : "/facturacion", replace: true);
     }
 
-    private string PrintUrl(string vista) =>
+    private async Task TryOpenInvoiceFromQueryAsync()
+    {
+        if (_queryInvoiceOpened || OpenPaymentId is not int paymentId || paymentId <= 0)
+            return;
+
+        _queryInvoiceOpened = true;
+        var (payment, error) = await BillingService.GetPaymentAsync(paymentId);
+        if (payment != null)
+        {
+            await OpenDetailAsync(payment);
+            ShowAction("Factura abierta. Puede cobrar abonos o ajustar las líneas.", success: true);
+            return;
+        }
+
+        ShowAction(error ?? "No se encontró la factura indicada.", success: false);
+    }
+
+    private string PrintUrl(string vista, string formato = "carta") =>
         _selectedPayment == null
             ? "/facturacion"
-            : $"/facturacion/{_selectedPayment.PaymentId}/imprimir?vista={vista}";
+            : $"/facturacion/{_selectedPayment.PaymentId}/imprimir?vista={vista}&formato={formato}";
 
     private void AskCollectAsync(bool settle)
     {
@@ -849,8 +976,8 @@
         var methodLabel = MethodLabel(_editPaymentMethod);
         if (settle)
         {
-            _confirmTitle = "Confirmar saldo de factura";
-            _confirmBody = $"Se cobrará el saldo {_selectedPayment.BalanceDisplay} de la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName} con {methodLabel}. ¿Confirma o declina?";
+            _confirmTitle = "Confirmar total para saldar";
+            _confirmBody = $"Se cobrará el total para saldar {_selectedPayment.BalanceDisplay} de la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName} con {methodLabel}. ¿Confirma o declina?";
             _confirmKind = BillingConfirmKind.CollectSettle;
             return;
         }
@@ -858,6 +985,54 @@
         _confirmTitle = "Confirmar abono";
         _confirmBody = $"Se registrará un abono de {_abonoAmountInput} en la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName} con {methodLabel}. ¿Confirma o declina?";
         _confirmKind = BillingConfirmKind.CollectAbono;
+    }
+
+    private void AskVoidReceipt(PaymentReceiptItem receipt)
+    {
+        _pendingReceiptId = receipt.Id;
+        _confirmTitle = "Anular comprobante";
+        _confirmBody = $"Se anulará el {(string.IsNullOrWhiteSpace(receipt.KindDisplay) ? "abono" : receipt.KindDisplay.ToLowerInvariant())} de {receipt.AmountDisplay}. El saldo de la factura se recalcula. ¿Confirma o declina?";
+        _confirmKind = BillingConfirmKind.VoidReceipt;
+    }
+
+    private async Task ApplyDiscountAsync()
+    {
+        if (_selectedPayment == null)
+            return;
+
+        _saving = true;
+        var (success, error) = await BillingService.ApplyDiscountAsync(_selectedPayment.PaymentId, _discountInput);
+        if (!success)
+        {
+            ShowAction(error ?? "No se pudo aplicar el descuento.", success: false);
+            _saving = false;
+            return;
+        }
+
+        ShowAction("Descuento aplicado a la factura.", success: true);
+        await RefreshSelectedPaymentAsync();
+        await ReloadAsync();
+        _saving = false;
+    }
+
+    private async Task VoidReceiptAsync()
+    {
+        if (_selectedPayment == null || _pendingReceiptId <= 0)
+            return;
+
+        _saving = true;
+        var (success, error) = await BillingService.VoidReceiptAsync(_selectedPayment.PaymentId, _pendingReceiptId, _reason);
+        if (!success)
+        {
+            ShowAction(error ?? "No se pudo anular el comprobante.", success: false);
+            _saving = false;
+            return;
+        }
+
+        ShowAction("Comprobante anulado. El dinero de ese abono ya no cuenta.", success: true);
+        await RefreshSelectedPaymentAsync();
+        await ReloadAsync();
+        _saving = false;
     }
 
     private void AskDeleteLine(InvoiceLineItem line)
@@ -876,9 +1051,8 @@
         _confirmKind = kind;
         (_confirmTitle, _confirmBody) = kind switch
         {
-            BillingConfirmKind.Refund => ("Confirmar reembolso", $"Se reembolsará la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName} por {_selectedPayment.AmountCollectedDisplay}. ¿Confirma o declina?"),
+            BillingConfirmKind.Refund => ("Confirmar reembolso", $"Se registrará un reembolso{(string.IsNullOrWhiteSpace(_refundAmountInput) ? $" por {_selectedPayment.AmountCollectedDisplay}" : $" de {_refundAmountInput}")} en la factura #{_selectedPayment.PaymentId}. El saldo de cobro se actualiza. ¿Confirma o declina?"),
             BillingConfirmKind.Cancel => ("Cancelar factura", $"Se cancelará la factura #{_selectedPayment.PaymentId} de {_selectedPayment.PatientName}. No se cobrará nada. ¿Confirma o declina?"),
-            BillingConfirmKind.SavePayment => ("Guardar factura", $"Se actualizará el monto {_editAmountInput} y el método de la factura #{_selectedPayment.PaymentId}. ¿Confirma o declina?"),
             _ => ("Confirmar", "¿Desea continuar?")
         };
     }
@@ -887,6 +1061,7 @@
     {
         _confirmKind = BillingConfirmKind.None;
         _pendingLineId = 0;
+        _pendingReceiptId = 0;
     }
 
     private async Task AcceptConfirmAsync()
@@ -907,15 +1082,16 @@
             case BillingConfirmKind.Cancel:
                 await CancelAsync();
                 break;
+            case BillingConfirmKind.VoidReceipt:
+                await VoidReceiptAsync();
+                break;
             case BillingConfirmKind.DeleteLine:
                 await DeleteLineAsync(_pendingLineId);
-                break;
-            case BillingConfirmKind.SavePayment:
-                await SavePaymentAsync();
                 break;
         }
 
         _pendingLineId = 0;
+        _pendingReceiptId = 0;
     }
 
     private static string MethodLabel(string value) => value switch

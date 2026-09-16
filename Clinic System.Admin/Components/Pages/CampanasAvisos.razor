@@ -1,0 +1,90 @@
+@page "/campanas/avisos"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "campanas.edit")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject CampaignBookingService BookingService
+
+<PageTitle>Avisos de solicitudes de campaña — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/campanas/solicitudes" class="back-link-inline">← Solicitudes</a>
+            <h1>Destinatarios de aviso</h1>
+            <p>Correos del personal que reciben cada solicitud enviada desde el enlace de campaña.</p>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando configuración..." />
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_saveMessage))
+        {
+            <div class="wizard-success">@_saveMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(_saveError))
+        {
+            <div class="wizard-error">@_saveError</div>
+        }
+
+        <form class="new-patient-form whatsapp-settings-form" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+            <div class="clinic-hours-card">
+                <h2>Correos del personal</h2>
+                <p class="billing-muted">
+                    Requiere SMTP en <a href="/configuracion/clinica">Datos de la clínica</a>.
+                    Cuando un paciente envía una solicitud, se avisa a todos estos correos.
+                </p>
+                <div class="form-group">
+                    <label>Destinatarios</label>
+                    <textarea class="form-input" rows="6" @bind="_recipientsText"
+                              placeholder="recepcion@clinica.com&#10;admin@clinica.com"></textarea>
+                    <span class="billing-muted">Uno por línea, o separados por coma. Máximo 20.</span>
+                </div>
+            </div>
+            <div class="modal-actions" style="justify-content: flex-start; gap: 0.75rem; margin-top: 1rem;">
+                <button class="btn-primary" type="submit" disabled="@_saving">
+                    @(_saving ? "Guardando..." : "Guardar")
+                </button>
+            </div>
+        </form>
+    }
+</div>
+
+@code {
+    private string _recipientsText = string.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _saveMessage;
+    private string? _saveError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (settings, error) = await BookingService.GetNotifySettingsAsync();
+        if (settings != null)
+            _recipientsText = settings.RecipientsText;
+        else
+            _saveError = error;
+        _loading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _saveMessage = null;
+        _saveError = null;
+        var model = new CampaignBookingNotifySettingsModel { RecipientsText = _recipientsText };
+        var (ok, error) = await BookingService.SaveNotifySettingsAsync(model);
+        _saving = false;
+        if (!ok)
+        {
+            _saveError = error;
+            return;
+        }
+        var (reloaded, _) = await BookingService.GetNotifySettingsAsync();
+        if (reloaded != null)
+            _recipientsText = reloaded.RecipientsText;
+        _saveMessage = "Destinatarios guardados.";
+    }
+}

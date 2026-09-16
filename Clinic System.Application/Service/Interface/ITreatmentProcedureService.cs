@@ -12,6 +12,8 @@ namespace Clinic_System.Application.Service.Interface
             TreatmentPricingMode pricingMode,
             int durationMinutes,
             bool isActive,
+            TreatmentProcedureTarget target,
+            TreatmentToothKindFilter toothKindFilter,
             CancellationToken cancellationToken = default);
         Task<TreatmentProcedure> UpdateAsync(
             int id,
@@ -22,6 +24,8 @@ namespace Clinic_System.Application.Service.Interface
             TreatmentPricingMode pricingMode,
             int durationMinutes,
             bool isActive,
+            TreatmentProcedureTarget target,
+            TreatmentToothKindFilter toothKindFilter,
             CancellationToken cancellationToken = default);
         Task SoftDeleteAsync(int id, CancellationToken cancellationToken = default);
         Task ReplaceDoctorPricesAsync(int procedureId, IEnumerable<DoctorProcedurePriceInput> prices, CancellationToken cancellationToken = default);

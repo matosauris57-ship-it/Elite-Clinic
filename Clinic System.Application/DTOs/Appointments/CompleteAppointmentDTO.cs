@@ -3,6 +3,7 @@
     public class CompleteAppointmentDTO
     {
         public int AppointmentId { get; set; }
+        public int PaymentId { get; set; }
         public string DoctorName { get; set; }
         public string PatientName { get; set; }
         public string AppointmentDateTime { get; set; }

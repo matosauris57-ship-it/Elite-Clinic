@@ -23,19 +23,26 @@ namespace Clinic_System.Application.Features.DentalTreatments.Commands.Handlers
             if (!roles.Contains("Admin") && !roles.Contains("Doctor"))
                 return Unauthorized<DentalTreatmentDTO>("Only doctors or admins can update treatments.");
 
-            var treatment = await dentalTreatmentService.UpdateAsync(
-                request.Id,
-                request.ProcedureName,
-                request.Cost,
-                request.ToothNumber,
-                request.ToothSurface,
-                request.TreatmentProcedureId,
-                request.ProcedureDetails,
-                request.MedicalNotes,
-                cancellationToken);
+            try
+            {
+                var treatment = await dentalTreatmentService.UpdateAsync(
+                    request.Id,
+                    request.ProcedureName,
+                    request.Cost,
+                    request.ToothNumber,
+                    request.ToothSurface,
+                    request.TreatmentProcedureId,
+                    request.ProcedureDetails,
+                    request.MedicalNotes,
+                    cancellationToken);
 
-            await unitOfWork.SaveAsync(cancellationToken);
-            return Success(mapper.Map<DentalTreatmentDTO>(treatment), "Dental treatment updated.");
+                await unitOfWork.SaveAsync(cancellationToken);
+                return Success(mapper.Map<DentalTreatmentDTO>(treatment), "Dental treatment updated.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest<DentalTreatmentDTO>(ex.Message);
+            }
         }
     }
 }

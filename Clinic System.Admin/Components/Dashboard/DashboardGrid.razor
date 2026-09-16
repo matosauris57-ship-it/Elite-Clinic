@@ -7,8 +7,13 @@
     @foreach (var item in VisibleItems)
     {
         var def = DashboardWidgetCatalog.ByKey[item.WidgetKey];
-        <div class="dash-cell"
+        <div @key="item.WidgetKey"
+             class="dash-cell"
              data-widget-id="@item.Id"
+             data-x="@item.X"
+             data-y="@item.Y"
+             data-w="@item.W"
+             data-h="@item.H"
              data-min-w="@def.MinW"
              data-min-h="@def.MinH"
              data-max-w="@def.MaxW"
@@ -44,17 +49,19 @@
 
     private DotNetObjectReference<DashboardGrid>? _dotNet;
     private bool _jsReady;
+    private bool _lastEditMode;
     private string _columnsClass = "cols-12";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         try
         {
-            if (!_jsReady)
+            _dotNet ??= DotNetObjectReference.Create(this);
+            if (!_jsReady || _lastEditMode != EditMode)
             {
-                _dotNet ??= DotNetObjectReference.Create(this);
                 await JS.InvokeVoidAsync("dentalCareDashboardGrid.init", GridId, EditMode, _dotNet);
                 _jsReady = true;
+                _lastEditMode = EditMode;
                 return;
             }
 

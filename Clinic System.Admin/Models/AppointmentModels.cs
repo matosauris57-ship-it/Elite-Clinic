@@ -26,6 +26,7 @@ public class BookAppointmentRequest
     public TimeSpan AppointmentTime { get; set; }
     public int? TreatmentProcedureId { get; set; }
     public decimal? QuotedAmount { get; set; }
+    public int? PlanItemId { get; set; }
 }
 
 public class BookAppointmentResult
@@ -89,6 +90,7 @@ public class AppointmentWizardState
     public bool NotifyViaEmail { get; set; } = true;
     public string Room { get; set; } = "Sala 1";
     public string QuotedPriceInput { get; set; } = string.Empty;
+    public int? PlanItemId { get; set; }
     public bool IsSuccess { get; set; }
     public BookAppointmentResult? BookedAppointment { get; set; }
 }
@@ -106,6 +108,14 @@ public class AppointmentAgendaItem
     public string Specialization { get; set; } = string.Empty;
     public string AppointmentDate { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public DateTime? CancelledAt { get; set; }
+    public string? CancellationChannel { get; set; }
+    public string? CancellationComment { get; set; }
+    public int? PlanItemId { get; set; }
+    public int? TreatmentPlanId { get; set; }
+    public int? PaymentId { get; set; }
+    public int? ToothNumber { get; set; }
+    public string? ProcedureName { get; set; }
 
     public DateTime? ParsedDate =>
         DateTime.TryParseExact(AppointmentDate, "yyyy-MM-dd HH:mm", null, System.Globalization.DateTimeStyles.None, out var dt)
@@ -126,6 +136,7 @@ public class CancelAppointmentRequest
 {
     public int AppointmentId { get; set; }
     public int PatientId { get; set; }
+    public string? Comment { get; set; }
 }
 
 public class RescheduleAppointmentRequest
@@ -143,6 +154,13 @@ public class CompleteAppointmentRequest
     public string Description { get; set; } = string.Empty;
     public string? AdditionalNotes { get; set; }
     public List<PrescriptionItem> Medicines { get; set; } = [];
+}
+
+public class CompleteAppointmentResult
+{
+    public int AppointmentId { get; set; }
+    public int PaymentId { get; set; }
+    public string Status { get; set; } = string.Empty;
 }
 
 public class PrescriptionItem
@@ -178,9 +196,9 @@ public class AttendanceConfirmationDetails
     public string DoctorName { get; set; } = string.Empty;
     public DateTime AppointmentDate { get; set; }
     public string Status { get; set; } = string.Empty;
-}
-
-public class AttendanceConfirmationResponseResult
-{
-    public string Status { get; set; } = string.Empty;
+    public bool CanRespond { get; set; } = true;
+    public bool AlreadyResponded { get; set; }
+    public bool? Accepted { get; set; }
+    public string? Comment { get; set; }
+    public DateTime? RespondedAt { get; set; }
 }

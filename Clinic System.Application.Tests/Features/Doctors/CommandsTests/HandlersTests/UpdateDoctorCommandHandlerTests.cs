@@ -9,10 +9,12 @@ namespace Clinic_System.Application.Tests.Features.Doctors.CommandsTests.Handler
         private readonly Mock<ILogger<UpdateDoctorCommandHandler>> _mockLogger;
         private readonly UpdateDoctorCommandHandler _handler;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
+        private readonly Mock<IIdentityService> _mockIdentityService;
         public UpdateDoctorCommandHandlerTests()
         {
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockCurrentUserService.Setup(s => s.IsAdmin).Returns(true);
+            _mockIdentityService = new Mock<IIdentityService>();
             _mockUnitOfWork = new Mock<IUnitOfWork>();
             _mockDoctorService = new Mock<IDoctorService>();
             _mockMapper = new Mock<IMapper>();
@@ -23,7 +25,8 @@ namespace Clinic_System.Application.Tests.Features.Doctors.CommandsTests.Handler
                 _mockMapper.Object,
                 _mockUnitOfWork.Object,
                 _mockCacheService.Object,
-                _mockLogger.Object);
+                _mockLogger.Object,
+                _mockIdentityService.Object);
         }
 
         [Fact]

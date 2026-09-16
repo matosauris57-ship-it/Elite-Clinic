@@ -29,7 +29,7 @@ namespace Clinic_System.Application.Features.Payment.Queries.Handlers
                 }
 
                 var doctorId = payment.Appointment?.DoctorId;
-                var patientId = payment.Appointment?.PatientId;
+                var patientId = payment.PatientId;
 
                 var roles = await _currentUserService.GetCurrentUserRolesAsync();
                 var canViewBilling = roles.Contains("Admin")

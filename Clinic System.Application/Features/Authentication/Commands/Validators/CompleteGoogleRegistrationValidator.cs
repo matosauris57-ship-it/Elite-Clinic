@@ -18,14 +18,16 @@
         {
             RuleFor(x => x.FullName)
                 .NotEmpty().WithMessage("Patient Name is required")
-                .MaximumLength(100).WithMessage("Name must not exceed 100 characters");
+                .MaximumLength(100).WithMessage("Name must not exceed 100 characters")
+                .Must(PersonNameRules.IsValid)
+                .WithMessage(PersonNameRules.InvalidNameMessage);
 
             RuleFor(x => x.Address)
                 .NotEmpty().WithMessage("Address is required");
 
             RuleFor(x => x.Phone)
                 .NotEmpty().WithMessage("Phone number is required")
-                .Matches(@"^\+?[0-9]{10,15}$")
+                .Must(phone => PatientFieldLimits.IsValidPhone(phone, required: true))
                 .WithMessage("Phone number must contain 10–15 digits (numbers only, optional +)");
 
             RuleFor(x => x.Email)

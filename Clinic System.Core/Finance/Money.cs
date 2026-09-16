@@ -36,6 +36,31 @@ public static class Money
     public static string ToInput(decimal value) =>
         Normalize(value).ToString("0.00", CultureInfo.InvariantCulture);
 
+    public static string SanitizeAmountInput(string? input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return string.Empty;
+
+        var builder = new StringBuilder(input.Length);
+        var separatorSeen = false;
+        foreach (var ch in input)
+        {
+            if (char.IsDigit(ch))
+            {
+                builder.Append(ch);
+                continue;
+            }
+
+            if ((ch is '.' or ',') && !separatorSeen)
+            {
+                separatorSeen = true;
+                builder.Append(ch);
+            }
+        }
+
+        return builder.ToString();
+    }
+
     public static decimal? Resolve(string? input, decimal? fallback)
     {
         if (!string.IsNullOrWhiteSpace(input))

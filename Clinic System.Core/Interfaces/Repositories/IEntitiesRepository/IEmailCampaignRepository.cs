@@ -8,4 +8,5 @@ public interface IEmailCampaignRepository : IGenericRepository<EmailCampaign>
     Task<List<EmailCampaignRecipient>> TakePendingAsync(int take, CancellationToken cancellationToken = default);
     Task<List<EmailCampaignRecipient>> GetPendingByCampaignAsync(int campaignId, CancellationToken cancellationToken = default);
     Task AddRecipientsAsync(IEnumerable<EmailCampaignRecipient> recipients, CancellationToken cancellationToken = default);
+    Task ClearRecipientsAsync(int campaignId, CancellationToken cancellationToken = default);
 }

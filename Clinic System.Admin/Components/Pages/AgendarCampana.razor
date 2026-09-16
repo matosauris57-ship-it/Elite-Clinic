@@ -3,15 +3,15 @@
 @rendermode InteractiveServer
 @inject CampaignBookingService BookingService
 
-<PageTitle>Agendar cita — DentalCare</PageTitle>
+<PageTitle>Solicitar cita — DentalCare</PageTitle>
 
 <div class="login-card attendance-card">
     <div class="login-brand">
         <div class="login-logo">
             <Icon Name="calendar" Class="login-logo-svg" StrokeWidth="1.6" />
         </div>
-        <h1>Agendar cita</h1>
-        <p>Elija el día y la hora que más le convenga. No está limitado al horario habitual de turnos.</p>
+        <h1>Solicitar cita</h1>
+        <p>Indique el servicio y el horario que prefiere. La clínica confirmará su cita.</p>
     </div>
 
     @if (_loading)
@@ -22,19 +22,27 @@
     {
         <div class="login-error">@_error</div>
     }
-    else if (!string.IsNullOrWhiteSpace(_success))
+    else if (_showExisting)
     {
-        <div class="wizard-success">@_success</div>
-        @if (_result != null)
-        {
-            <div class="attendance-summary">
-                <div><span>Paciente</span><strong>@_result.PatientName</strong></div>
-                <div><span>Médico</span><strong>@_result.DoctorName</strong></div>
-                <div><span>Fecha</span><strong>@_result.AppointmentDate.ToString("dd/MM/yyyy")</strong></div>
-                <div><span>Hora</span><strong>@_result.AppointmentDate.ToString("hh:mm tt")</strong></div>
-            </div>
-        }
-        <p class="attendance-muted">Puede cerrar esta ventana. La clínica confirmará su cita.</p>
+        <div class="wizard-success">@_existingTitle</div>
+        <div class="attendance-summary">
+            <div><span>Paciente</span><strong>@(_context?.PatientName ?? _result?.PatientName)</strong></div>
+            @if (!string.IsNullOrWhiteSpace(_displayDoctor))
+            {
+                <div><span>Médico</span><strong>@_displayDoctor</strong></div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_displayService))
+            {
+                <div><span>Servicio</span><strong>@_displayService</strong></div>
+            }
+            @if (_displayDate.HasValue)
+            {
+                <div><span>Fecha</span><strong>@_displayDate.Value.ToString("dd/MM/yyyy")</strong></div>
+                <div><span>Hora</span><strong>@_displayDate.Value.ToString("hh:mm tt")</strong></div>
+            }
+            <div><span>Estado</span><strong>@_displayStatus</strong></div>
+        </div>
+        <p class="attendance-muted">@_existingNote</p>
     }
     else if (_context != null)
     {
@@ -64,13 +72,31 @@
                     }
                 </select>
             </div>
+            <div class="form-group">
+                <label>Servicio</label>
+                <select class="form-input" @bind="_serviceKey">
+                    <option value="">Seleccione...</option>
+                    @foreach (var service in _context.Services)
+                    {
+                        <option value="@service.Id.ToString()">@service.Name@(string.IsNullOrWhiteSpace(service.Category) ? "" : $" ({service.Category})")</option>
+                    }
+                    <option value="other">Otro servicio</option>
+                </select>
+            </div>
+            @if (_serviceKey == "other")
+            {
+                <div class="form-group">
+                    <label>¿Qué servicio necesita?</label>
+                    <input class="form-input" maxlength="200" @bind="_otherService" placeholder="Ej. Evaluación de ortodoncia" />
+                </div>
+            }
             <div class="form-row">
                 <div class="form-group">
-                    <label>Fecha</label>
+                    <label>Fecha preferida</label>
                     <input class="form-input" type="date" min="@DateTime.Today.ToString("yyyy-MM-dd")" @bind="_date" @bind:after="LoadOccupiedAsync" />
                 </div>
                 <div class="form-group">
-                    <label>Hora (cualquier horario)</label>
+                    <label>Hora preferida</label>
                     <input class="form-input" type="time" @bind="_time" />
                 </div>
             </div>
@@ -81,8 +107,8 @@
         </div>
 
         <div class="attendance-actions">
-            <button class="btn-primary" disabled="@_saving" @onclick="BookAsync">
-                @(_saving ? "Agendando..." : "Confirmar cita")
+            <button class="btn-primary" disabled="@_saving" @onclick="SubmitAsync">
+                @(_saving ? "Enviando..." : "Enviar solicitud")
             </button>
         </div>
     }
@@ -96,11 +122,46 @@
     private bool _loading = true;
     private bool _saving;
     private string? _error;
-    private string? _success;
     private int _doctorId;
+    private string _serviceKey = "";
+    private string _otherService = "";
     private DateTime _date = DateTime.Today.AddDays(1);
     private TimeOnly _time = new(9, 0);
     private List<string> _occupied = [];
+
+    private bool _showExisting =>
+        _result != null
+        || (_context?.AlreadySubmitted == true && _context.ExistingRequest != null);
+
+    private string _existingTitle =>
+        StatusOfExisting() switch
+        {
+            "Scheduled" => "Su cita ya está agendada",
+            "Rejected" => "Su solicitud ya fue revisada",
+            _ => "Ya envió su solicitud"
+        };
+
+    private string _existingNote =>
+        StatusOfExisting() switch
+        {
+            "Scheduled" => "Puede cerrar esta ventana. Si necesita cambiar la cita, comuníquese con la clínica.",
+            "Rejected" => "Comuníquese con la clínica si desea una nueva fecha.",
+            _ => "La clínica confirmará su cita y le escribirá por correo."
+        };
+
+    private string? _displayDoctor =>
+        _result?.DoctorName ?? _context?.ExistingRequest?.DoctorName;
+
+    private string? _displayService =>
+        _result?.ServiceName ?? _context?.ExistingRequest?.ServiceName;
+
+    private DateTime? _displayDate =>
+        _result?.AppointmentDate
+        ?? _context?.ExistingRequest?.ScheduledAppointmentAt
+        ?? _context?.ExistingRequest?.AppointmentDate
+        ?? _context?.ExistingRequest?.RequestedAppointmentAt;
+
+    private string _displayStatus => FormatStatus(StatusOfExisting());
 
     protected override async Task OnInitializedAsync()
     {
@@ -127,7 +188,7 @@
         _occupied = occupied;
     }
 
-    private async Task BookAsync()
+    private async Task SubmitAsync()
     {
         if (string.IsNullOrWhiteSpace(Token))
             return;
@@ -138,25 +199,60 @@
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(_serviceKey))
+        {
+            _error = "Seleccione un servicio.";
+            return;
+        }
+
+        var isOther = _serviceKey == "other";
+        if (isOther && string.IsNullOrWhiteSpace(_otherService))
+        {
+            _error = "Indique el servicio que desea.";
+            return;
+        }
+
         _saving = true;
         _error = null;
-        var (result, error) = await BookingService.BookAsync(new CampaignBookFormRequest
+
+        int? procedureId = null;
+        if (!isOther && int.TryParse(_serviceKey, out var parsedId))
+            procedureId = parsedId;
+
+        var (result, error) = await BookingService.RequestAsync(new CampaignBookFormRequest
         {
             Token = Token,
             DoctorId = _doctorId,
             AppointmentDate = _date.Date,
-            AppointmentTime = _time.ToTimeSpan()
+            AppointmentTime = _time.ToTimeSpan(),
+            TreatmentProcedureId = procedureId,
+            ServiceKey = isOther ? "other" : null,
+            OtherServiceText = isOther ? _otherService.Trim() : null
         });
         _saving = false;
 
-        if (error != null || result == null)
+        if (result != null && (error == null || result.AlreadySubmitted))
         {
-            _error = error ?? "No se pudo agendar.";
-            await LoadOccupiedAsync();
+            _result = result;
+            if (_context != null)
+                _context.AlreadySubmitted = true;
             return;
         }
 
-        _result = result;
-        _success = "¡Listo! Su cita quedó registrada.";
+        _error = error ?? "No se pudo enviar la solicitud.";
+        await LoadOccupiedAsync();
     }
+
+    private string StatusOfExisting() =>
+        _result?.Status
+        ?? _context?.ExistingRequest?.Status
+        ?? "Pending";
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "Pending" => "Pendiente de confirmación",
+        "Scheduled" => "Agendada",
+        "Rejected" => "No disponible / rechazada",
+        _ => status
+    };
 }

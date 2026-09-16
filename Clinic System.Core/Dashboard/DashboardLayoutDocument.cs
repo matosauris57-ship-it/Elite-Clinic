@@ -56,6 +56,8 @@ public static class DashboardWidgetKeys
     public const string DailyCollections = "daily-collections";
     public const string MonthlyIncomeChart = "monthly-income";
     public const string SmartAlerts = "smart-alerts";
+    public const string AttendanceLinkAlerts = "attendance-link-alerts";
+    public const string CampaignBookingRequests = "campaign-booking-requests";
     public const string PendingTreatments = "pending-treatments";
     public const string UpcomingDues = "upcoming-dues";
     public const string PatientsRegistered = "patients-registered";

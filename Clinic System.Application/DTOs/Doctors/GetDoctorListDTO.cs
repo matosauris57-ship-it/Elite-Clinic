@@ -13,5 +13,6 @@
         public string? SignatureImageUrl { get; set; }
         public string ApplicationUserId { get; set; } = null!;
         public bool IsActive { get; set; } = true;
+        public bool CanViewAllClinicData { get; set; }
     }
 }

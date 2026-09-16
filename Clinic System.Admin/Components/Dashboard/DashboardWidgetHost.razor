@@ -60,6 +60,34 @@ else
         case DashboardWidgetKeys.SmartAlerts:
             <SmartAlertsPanel Alerts="Data.Alerts" />
             break;
+        case DashboardWidgetKeys.AttendanceLinkAlerts:
+            @if (Data.AttendanceLinkRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver las respuestas del enlace." />
+            }
+            else if (!string.IsNullOrWhiteSpace(Data.AttendanceLinkError))
+            {
+                <WidgetState Message="No se pudieron cargar las respuestas del enlace." Retry="OnRetry" />
+            }
+            else
+            {
+                <AttendanceLinkAlertsWidget Items="Data.AttendanceLinkAlerts" />
+            }
+            break;
+        case DashboardWidgetKeys.CampaignBookingRequests:
+            @if (Data.CampaignBookingRestricted)
+            {
+                <WidgetState Message="No tienes permiso para ver las solicitudes de campaña." />
+            }
+            else if (!string.IsNullOrWhiteSpace(Data.CampaignBookingError))
+            {
+                <WidgetState Message="No se pudieron cargar las solicitudes de campaña." Retry="OnRetry" />
+            }
+            else
+            {
+                <CampaignBookingRequestsWidget Items="Data.CampaignBookingRequests" />
+            }
+            break;
         case DashboardWidgetKeys.PendingTreatments:
             <DashboardPendingTreatments Items="Data.PendingTreatments" Restricted="Data.TreatmentsRestricted" />
             break;

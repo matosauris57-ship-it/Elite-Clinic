@@ -1,0 +1,100 @@
+<div class="widget alerts-widget dash-panel attendance-link-widget">
+    <div class="widget-head">
+        <div>
+            <h3>Respuestas del enlace</h3>
+            <p class="dash-panel-sub">Aceptó o rechazó la cita por WhatsApp o correo</p>
+        </div>
+        <span class="widget-pill">@Items.Count recientes</span>
+    </div>
+
+    <div class="alert-tabs">
+        @foreach (var tab in _tabs)
+        {
+            <button class="alert-tab @(tab.Key == _activeTab ? "active" : "")"
+                    @onclick="() => SelectTab(tab.Key)">
+                @tab.Label (@tab.Count)
+            </button>
+        }
+    </div>
+
+    <div class="alert-cards">
+        @if (Filtered.Count == 0)
+        {
+            <div class="dash-empty">
+                <Icon Name="bell" Class="dash-empty-icon" />
+                <p>Nadie ha respondido el enlace de asistencia en este periodo.</p>
+            </div>
+        }
+        @foreach (var item in Filtered)
+        {
+            var severity = item.Accepted ? "success" : "warning";
+            var href = $"/agenda?fecha={item.AppointmentDate:yyyy-MM-dd}&id={item.AppointmentId}";
+            <div class="alert-card severity-@severity">
+                <div class="alert-card-top">
+                    <span class="alert-severity-tag">@(item.Accepted ? "ACEPTÓ" : "RECHAZÓ")</span>
+                    <span class="alert-card-time">@item.RespondedAt.ToString("dd MMM HH:mm")</span>
+                </div>
+                <div class="alert-card-title">@item.PatientName</div>
+                <div class="alert-card-desc">
+                    Cita @item.AppointmentDate.ToString("dd/MM/yyyy") a las @item.AppointmentDate.ToString("hh:mm tt")
+                    · @item.DoctorName
+                    @if (!string.IsNullOrWhiteSpace(item.ProcedureName))
+                    {
+                        <text> · @item.ProcedureName</text>
+                    }
+                    @if (item.ToothNumber.HasValue)
+                    {
+                        <text> · pieza @item.ToothNumber</text>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(item.PatientPhone))
+                    {
+                        <text> · @item.PatientPhone</text>
+                    }
+                    · @FormatStatus(item.Status)
+                </div>
+                <div class="agenda-cancel-comment attendance-link-comment">
+                    <span>Comentario</span>
+                    <strong>@(string.IsNullOrWhiteSpace(item.Comment) ? "Sin comentario" : item.Comment)</strong>
+                </div>
+                <NavLink class="alert-action-btn" href="@href">
+                    Ver cita
+                    <Icon Name="chevron-right" Class="alert-action-icon" StrokeWidth="2" />
+                </NavLink>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<AttendanceLinkAlertItem> Items { get; set; } = [];
+
+    private string _activeTab = "all";
+
+    private List<(string Key, string Label, int Count)> _tabs =>
+    [
+        ("all", "Todas", Items.Count),
+        ("accepted", "Aceptó", Items.Count(a => a.Accepted)),
+        ("declined", "Rechazó", Items.Count(a => !a.Accepted))
+    ];
+
+    private List<AttendanceLinkAlertItem> Filtered => _activeTab switch
+    {
+        "accepted" => Items.Where(a => a.Accepted).ToList(),
+        "declined" => Items.Where(a => !a.Accepted).ToList(),
+        _ => Items
+    };
+
+    private void SelectTab(string tab) => _activeTab = tab;
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "Pending" => "Pendiente",
+        "Confirmed" => "Confirmada",
+        "Rescheduled" => "Reagendada",
+        "InProgress" => "En consulta",
+        "Completed" => "Completada",
+        "Cancelled" => "Cancelada",
+        "NoShow" => "No asistió",
+        _ => status
+    };
+}

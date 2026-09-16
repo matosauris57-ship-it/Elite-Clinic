@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "pacientes.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Clinic_System.Core.Finance
 @inject PatientMaintenanceService PatientService
 @inject AuthService AuthService
 @inject PermissionService PermissionService
@@ -39,19 +40,30 @@
         <div class="maintenance-toolbar-left">
             <div class="search-field maintenance-search">
                 <Icon Name="search" Class="field-icon" />
-                <input type="text" placeholder="Buscar por nombre, cédula, teléfono o correo..." @bind="_search" @bind:event="oninput" />
+                <input type="text"
+                       placeholder="Buscar por nombre, cédula, teléfono o correo..."
+                       disabled="@_loading"
+                       value="@_search"
+                       @oninput="OnSearchInput" />
             </div>
             <div class="maintenance-status-toggles">
-                <button class="toggle-btn @(_statusFilter == "all" ? "active" : "")" @onclick='() => _statusFilter = "all"'>Todos</button>
-                <button class="toggle-btn @(_statusFilter == "active" ? "active" : "")" @onclick='() => _statusFilter = "active"'>Activos</button>
-                <button class="toggle-btn @(_statusFilter == "inactive" ? "active" : "")" @onclick='() => _statusFilter = "inactive"'>Inactivos</button>
+                <button class="toggle-btn @(_statusFilter == "all" ? "active" : "")" disabled="@_loading" @onclick='() => SetStatusFilterAsync("all")'>Todos</button>
+                <button class="toggle-btn @(_statusFilter == "active" ? "active" : "")" disabled="@_loading" @onclick='() => SetStatusFilterAsync("active")'>Activos</button>
+                <button class="toggle-btn @(_statusFilter == "inactive" ? "active" : "")" disabled="@_loading" @onclick='() => SetStatusFilterAsync("inactive")'>Inactivos</button>
+            </div>
+            <div class="form-group" style="margin:0; min-width:7rem;">
+                <select class="form-input" disabled="@_loading" @bind="_pageSize" @bind:after="OnPageSizeChangedAsync">
+                    <option value="10">10 / pág.</option>
+                    <option value="20">20 / pág.</option>
+                    <option value="50">50 / pág.</option>
+                </select>
             </div>
         </div>
-        <span class="maintenance-count">@FilteredPatients.Count() paciente(s)</span>
+        <span class="maintenance-count">@_totalCount paciente(s) · pág. @_pageNumber/@TotalPages</span>
     </div>
 
     @if (_loading) { <AnimatedLoader Message="Cargando pacientes..." /> }
-    else if (!FilteredPatients.Any() && string.IsNullOrEmpty(_loadError))
+    else if (!_patients.Any() && string.IsNullOrEmpty(_loadError))
     {
         <div class="maintenance-empty"><p>No hay pacientes con los filtros actuales.</p></div>
     }
@@ -64,18 +76,20 @@
                         <th>Nombre</th>
                         <th>Cédula</th>
                         <th>Teléfono</th>
-                        <th>Celular</th>
                         <th>Correo</th>
                         <th class="col-age">Edad</th>
                         <th>Estado</th>
+                        @if (_canViewFacturas)
+                        {
+                            <th class="col-debt">Deuda</th>
+                        }
                         <th class="col-actions">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var p in FilteredPatients)
+                    @foreach (var p in _patients)
                     {
                         var email = DisplayEmail(p);
-                        var mobile = DisplayMobile(p);
                         <tr class="@(p.IsActive ? null : "table-row-inactive")">
                             <td>
                                 <button type="button" class="table-patient-link" @onclick="() => GoToPatient(p.Id)">
@@ -88,7 +102,6 @@
                             </td>
                             <td class="table-id-cell">@(string.IsNullOrWhiteSpace(p.NationalId) ? "—" : p.NationalId)</td>
                             <td>@Dash(p.Phone)</td>
-                            <td>@mobile</td>
                             <td class="col-email">
                                 @if (string.IsNullOrWhiteSpace(email))
                                 {
@@ -105,6 +118,24 @@
                                     @(p.IsActive ? "Activo" : "Inactivo")
                                 </span>
                             </td>
+                            @if (_canViewFacturas)
+                            {
+                                <td class="col-debt">
+                                    @if (p.OutstandingBalance > 0)
+                                    {
+                                        <button type="button"
+                                                class="status-badge status-debt"
+                                                title="Ver facturas pendientes"
+                                                @onclick="() => GoToPatientDebt(p.Id)">
+                                            Pendiente · @Money.Format(p.OutstandingBalance)
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="table-muted">Sin deuda</span>
+                                    }
+                                </td>
+                            }
                             <td class="col-actions">
                                 <div class="table-actions">
                                     <button class="btn-table btn-table-primary" @onclick="() => GoToPatient(p.Id)">Ver ficha</button>
@@ -127,6 +158,12 @@
                 </tbody>
             </table>
         </div>
+
+        <div class="billing-pagination">
+            <button class="btn-outline" disabled="@(_loading || _pageNumber <= 1)" @onclick="PrevPageAsync">Anterior</button>
+            <span>Página @_pageNumber de @TotalPages</span>
+            <button class="btn-outline" disabled="@(_loading || _pageNumber >= TotalPages)" @onclick="NextPageAsync">Siguiente</button>
+        </div>
     }
 </div>
 
@@ -139,33 +176,32 @@
                 <button class="modal-close" @onclick="CloseFormModal">×</button>
             </div>
             @if (!string.IsNullOrEmpty(_formError)) { <div class="wizard-error">@_formError</div> }
+            <DuplicateCedulaBanner PatientId="_duplicatePatientId" />
+            @if (!string.IsNullOrEmpty(_fieldLimitToast))
+            {
+                <div class="wizard-error">@_fieldLimitToast</div>
+            }
             @if (_isEdit)
             {
                 <div class="new-patient-form">
                     <div class="form-row">
-                        <div class="form-group"><label>Nombre</label><input class="form-input" @bind="_editForm.FullName" /></div>
-                        <div class="form-group"><label>Cédula</label><input class="form-input" @bind="_editForm.NationalId" /></div>
+                        <div class="form-group"><label>Nombre</label><input class="form-input" maxlength="@PatientFieldLimits.FullName" value="@_editForm.FullName" @oninput="e => _editForm.FullName = LimitName(e)" /></div>
+                        <div class="form-group"><label>Cédula</label><input class="form-input" maxlength="@PatientFieldLimits.NationalId" value="@_editForm.NationalId" @oninput="e => _editForm.NationalId = LimitCedula(e)" /></div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group"><label>Teléfono</label><input class="form-input" @bind="_editForm.Phone" /></div>
-                        <div class="form-group"><label>Celular</label><input class="form-input" @bind="_editForm.MobilePhone" /></div>
-                    </div>
-                    <div class="form-group"><label>Correo (opcional)</label><input class="form-input" type="email" @bind="_editForm.Email" placeholder="paciente@correo.com" /></div>
-                    <div class="form-group"><label>Dirección</label><input class="form-input" @bind="_editForm.Address" /></div>
+                    <div class="form-group"><label>Teléfono</label><input class="form-input" maxlength="@PatientFieldLimits.Phone" inputmode="tel" value="@_editForm.Phone" @oninput="e => _editForm.Phone = LimitPhone(e)" /></div>
+                    <div class="form-group"><label>Correo (opcional)</label><input class="form-input" type="email" maxlength="@PatientFieldLimits.Email" value="@_editForm.Email" placeholder="paciente@correo.com" @oninput="e => _editForm.Email = LimitEmail(e)" /></div>
+                    <div class="form-group"><label>Dirección</label><input class="form-input" maxlength="@PatientFieldLimits.Address" value="@_editForm.Address" @oninput="e => _editForm.Address = LimitAddress(e)" /></div>
                 </div>
             }
             else
             {
                 <div class="new-patient-form">
                     <div class="form-row">
-                        <div class="form-group"><label>Nombre completo</label><input class="form-input" @bind="_createForm.FullName" /></div>
-                        <div class="form-group"><label>Cédula</label><input class="form-input" @bind="_createForm.NationalId" /></div>
+                        <div class="form-group"><label>Nombre completo</label><input class="form-input" maxlength="@PatientFieldLimits.FullName" value="@_createForm.FullName" @oninput="e => _createForm.FullName = LimitName(e)" /></div>
+                        <div class="form-group"><label>Cédula</label><input class="form-input" maxlength="@PatientFieldLimits.NationalId" value="@_createForm.NationalId" @oninput="e => _createForm.NationalId = LimitCedula(e)" /></div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group"><label>Teléfono</label><input class="form-input" @bind="_createForm.Phone" /></div>
-                        <div class="form-group"><label>Celular</label><input class="form-input" @bind="_createForm.MobilePhone" /></div>
-                    </div>
-                    <div class="form-group"><label>Correo (opcional)</label><input class="form-input" type="email" @bind="_createForm.Email" placeholder="paciente@correo.com" /></div>
+                    <div class="form-group"><label>Teléfono</label><input class="form-input" maxlength="@PatientFieldLimits.Phone" inputmode="tel" value="@_createForm.Phone" @oninput="e => _createForm.Phone = LimitPhone(e)" /></div>
+                    <div class="form-group"><label>Correo (opcional)</label><input class="form-input" type="email" maxlength="@PatientFieldLimits.Email" value="@_createForm.Email" placeholder="paciente@correo.com" @oninput="e => _createForm.Email = LimitEmail(e)" /></div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>Género</label>
@@ -179,7 +215,7 @@
                             <input class="form-input" type="date" value="@_createForm.DateOfBirth.ToString("yyyy-MM-dd")" @onchange="OnBirthChanged" />
                         </div>
                     </div>
-                    <div class="form-group"><label>Dirección</label><input class="form-input" @bind="_createForm.Address" /></div>
+                    <div class="form-group"><label>Dirección</label><input class="form-input" maxlength="@PatientFieldLimits.Address" value="@_createForm.Address" @oninput="e => _createForm.Address = LimitAddress(e)" /></div>
                 </div>
             }
             <div class="modal-actions">
@@ -333,32 +369,24 @@
 @code {
     private List<PatientListItem> _patients = [];
     private string _search = "", _statusFilter = "all";
+    private int _pageNumber = 1;
+    private int _pageSize = 20;
+    private int _totalCount;
+    private int _totalPages = 1;
     private bool _loading = true;
-    private string? _loadError, _formError, _disableError, _enableError;
-    private bool _canCreate, _canEdit, _canDelete, _showFormModal, _isEdit, _saving;
+    private string? _loadError, _formError, _disableError, _enableError, _fieldLimitToast;
+    private bool _canCreate, _canEdit, _canDelete, _canViewFacturas, _showFormModal, _isEdit, _saving;
     private bool _showDisableModal, _showEnableModal, _showImportModal, _importBusy;
     private CreatePatientRequest _createForm = new();
     private UpdatePatientRequest _editForm = new();
     private int _editingId;
+    private int? _duplicatePatientId;
     private PatientListItem? _toDisable, _toEnable;
     private PatientImportPreview? _importPreview;
     private string? _importError, _importNotice;
+    private CancellationTokenSource? _searchCts;
 
-    private IEnumerable<PatientListItem> FilteredPatients
-    {
-        get
-        {
-            var q = _patients.AsEnumerable();
-            q = _statusFilter switch { "active" => q.Where(p => p.IsActive), "inactive" => q.Where(p => !p.IsActive), _ => q };
-            if (!string.IsNullOrWhiteSpace(_search))
-                q = q.Where(p => p.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-                    (p.NationalId?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    p.Phone.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-                    (p.MobilePhone?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (p.Email?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
-            return q;
-        }
-    }
+    private int TotalPages => Math.Max(1, _totalPages);
 
     protected override async Task OnInitializedAsync()
     {
@@ -366,19 +394,85 @@
         _canCreate = PermissionService.HasPermission(user, "pacientes.create");
         _canEdit = PermissionService.HasPermission(user, "pacientes.edit");
         _canDelete = PermissionService.HasPermission(user, "pacientes.delete");
+        _canViewFacturas = PermissionService.HasPermission(user, "facturacion.view");
         await ReloadAsync();
     }
 
     private void GoToPatient(int id) => Navigation.NavigateTo($"/pacientes/{id}");
+    private void GoToPatientDebt(int id) => Navigation.NavigateTo($"/pacientes/{id}?tab=facturas");
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+        try
+        {
+            await Task.Delay(350, token);
+            _pageNumber = 1;
+            await ReloadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task SetStatusFilterAsync(string status)
+    {
+        if (_statusFilter == status) return;
+        _statusFilter = status;
+        _pageNumber = 1;
+        await ReloadAsync();
+    }
+
+    private async Task OnPageSizeChangedAsync()
+    {
+        _pageNumber = 1;
+        await ReloadAsync();
+    }
+
+    private async Task PrevPageAsync()
+    {
+        if (_pageNumber <= 1) return;
+        _pageNumber--;
+        await ReloadAsync();
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_pageNumber >= TotalPages) return;
+        _pageNumber++;
+        await ReloadAsync();
+    }
 
     private async Task ReloadAsync()
     {
         _loading = true;
-        var (patients, error) = await AuthService.WithTokenRetryAsync(() => PatientService.GetPatientsAsync(), AuthService.IsTokenError);
-        _patients = patients; _loadError = error; _loading = false;
+        var (page, error) = await AuthService.WithTokenRetryAsync(
+            () => PatientService.GetPatientsPagedAsync(_pageNumber, _pageSize, _statusFilter, _search),
+            AuthService.IsTokenError);
+
+        if (page != null)
+        {
+            _patients = page.Items?.ToList() ?? [];
+            _pageNumber = page.CurrentPage > 0 ? page.CurrentPage : _pageNumber;
+            _pageSize = page.PageSize > 0 ? page.PageSize : _pageSize;
+            _totalCount = page.TotalCount;
+            _totalPages = page.TotalPages > 0 ? page.TotalPages : 1;
+        }
+        else
+        {
+            _patients = [];
+            _totalCount = 0;
+            _totalPages = 1;
+        }
+
+        _loadError = error;
+        _loading = false;
     }
 
-    private void OpenCreateModal() { _isEdit = false; _createForm = new(); _formError = null; _showFormModal = true; }
+    private void OpenCreateModal() { _isEdit = false; _createForm = new(); _formError = null; _duplicatePatientId = null; _fieldLimitToast = null; _showFormModal = true; }
     private void OpenImportModal()
     {
         _showImportModal = true;
@@ -510,7 +604,8 @@
     private void OpenEditModal(PatientListItem p)
     {
         _isEdit = true; _editingId = p.Id;
-        _editForm = new UpdatePatientRequest { Id = p.Id, FullName = p.FullName, Phone = p.Phone, MobilePhone = p.MobilePhone, NationalId = p.NationalId, Email = p.Email, Address = p.Address };
+        _editForm = new UpdatePatientRequest { Id = p.Id, FullName = p.FullName, Phone = p.Phone, NationalId = p.NationalId, Email = p.Email, Address = p.Address };
+        _formError = null; _duplicatePatientId = null; _fieldLimitToast = null;
         _showFormModal = true;
     }
     private void CloseFormModal() => _showFormModal = false;
@@ -520,8 +615,29 @@
 
     private async Task SaveAsync()
     {
-        _saving = true; _formError = null;
+        _saving = true; _formError = null; _duplicatePatientId = null; _fieldLimitToast = null;
+        var name = _isEdit ? _editForm.FullName : _createForm.FullName;
+        var nationalId = _isEdit ? _editForm.NationalId : _createForm.NationalId;
+        var phone = _isEdit ? _editForm.Phone : _createForm.Phone;
         var emailToCheck = _isEdit ? _editForm.Email : _createForm.Email;
+        var address = _isEdit ? _editForm.Address : _createForm.Address;
+
+        var lengthError = PatientFieldLimits.ValidateLengths(name, nationalId, phone, emailToCheck, address);
+        if (lengthError != null)
+        {
+            _formError = lengthError;
+            _saving = false;
+            return;
+        }
+
+        _duplicatePatientId = PatientSaveErrors.FindLocalDuplicate(_patients, nationalId, _isEdit ? _editingId : null);
+        if (_duplicatePatientId.HasValue)
+        {
+            _formError = "Esta cédula ya existe";
+            _saving = false;
+            return;
+        }
+
         if (!ContactEmail.TryValidate(emailToCheck, out var normalizedEmail, out var emailError))
         {
             _formError = emailError;
@@ -532,8 +648,9 @@
         if (_isEdit)
         {
             _editForm.Email = normalizedEmail;
-            var (ok, err) = await PatientService.UpdatePatientAsync(_editingId, _editForm);
-            if (!ok) { _formError = err; _saving = false; return; }
+            _editForm.MobilePhone = null;
+            var (ok, err, duplicateId) = await PatientService.UpdatePatientAsync(_editingId, _editForm);
+            if (!ok) { _formError = err; _duplicatePatientId = duplicateId; _saving = false; return; }
         }
         else
         {
@@ -542,8 +659,9 @@
             if (string.IsNullOrWhiteSpace(_createForm.Address))
                 _createForm.Address = "Sin dirección";
             _createForm.Email = normalizedEmail;
-            var (ok, err, id) = await PatientService.CreatePatientAsync(_createForm);
-            if (!ok) { _formError = err; _saving = false; return; }
+            _createForm.MobilePhone = null;
+            var (ok, err, id, duplicateId) = await PatientService.CreatePatientAsync(_createForm);
+            if (!ok) { _formError = err; _duplicatePatientId = duplicateId; _saving = false; return; }
             if (id is int patientId)
             {
                 Navigation.NavigateTo($"/pacientes/{patientId}?tab=antecedentes");
@@ -551,6 +669,29 @@
             }
         }
         _saving = false; _showFormModal = false; await ReloadAsync();
+    }
+
+    private string LimitName(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString() ?? string.Empty;
+        var value = PersonNameRules.Sanitize(raw, PatientFieldLimits.FullName, out var changed);
+        if (raw.Any(char.IsDigit))
+            _fieldLimitToast = "El nombre no puede contener números.";
+        else if (changed && raw.Length > PatientFieldLimits.FullName)
+            _fieldLimitToast = $"El nombre admite máximo {PatientFieldLimits.FullName} caracteres.";
+        return value;
+    }
+    private string LimitCedula(ChangeEventArgs e) => Limit(e, PatientFieldLimits.NationalId, "La cédula");
+    private string LimitPhone(ChangeEventArgs e) => Limit(e, PatientFieldLimits.Phone, "El teléfono");
+    private string LimitEmail(ChangeEventArgs e) => Limit(e, PatientFieldLimits.Email, "El correo");
+    private string LimitAddress(ChangeEventArgs e) => Limit(e, PatientFieldLimits.Address, "La dirección");
+
+    private string Limit(ChangeEventArgs e, int max, string label)
+    {
+        var value = PatientSaveErrors.Clamp(e.Value?.ToString(), max, out var truncated);
+        if (truncated)
+            _fieldLimitToast = $"{label} admite máximo {max} caracteres.";
+        return value;
     }
 
     private async Task ConfirmDisableAsync()
@@ -588,15 +729,6 @@
 
     private static bool LooksLikeEmail(string? value) =>
         !string.IsNullOrWhiteSpace(value) && value.Contains('@');
-
-    private static string DisplayMobile(PatientListItem patient)
-    {
-        if (string.IsNullOrWhiteSpace(patient.MobilePhone))
-            return "—";
-        if (LooksLikeEmail(patient.MobilePhone) && string.IsNullOrWhiteSpace(patient.Email))
-            return "—";
-        return patient.MobilePhone.Trim();
-    }
 
     private static string? DisplayEmail(PatientListItem patient)
     {

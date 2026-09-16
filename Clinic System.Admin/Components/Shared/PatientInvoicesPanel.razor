@@ -8,7 +8,7 @@
             <h3>Facturas del paciente</h3>
             <p>Pendientes al frente; elija pagadas u otras para consultar e imprimir.</p>
         </div>
-        <a class="btn-outline" href="/facturacion">Ir a facturación</a>
+        <a class="btn-outline" href="@($"/facturacion?paciente={PatientId}")">Ir a facturación</a>
     </div>
 
     <div class="billing-kpi-grid patient-invoice-kpis">
@@ -25,7 +25,7 @@
             <span class="agenda-kpi-label">Pagadas</span>
         </div>
         <div class="agenda-kpi accent-purple">
-            <span class="agenda-kpi-value">@_invoices.Count</span>
+            <span class="agenda-kpi-value">@_totalCountAll</span>
             <span class="agenda-kpi-label">Total facturas</span>
         </div>
     </div>
@@ -35,7 +35,8 @@
         {
             <button type="button" role="tab" aria-selected="@(_filter == filter.Key)"
                     class="toggle-btn @(_filter == filter.Key ? "active" : "")"
-                    @onclick="() => SetFilter(filter.Key)">@filter.Label</button>
+                    disabled="@_loading"
+                    @onclick="() => SetFilterAsync(filter.Key)">@filter.Label</button>
         }
     </div>
 
@@ -47,7 +48,7 @@
     {
         <AnimatedLoader Message="Cargando facturas..." />
     }
-    else if (VisibleInvoices.Count == 0)
+    else if (_invoices.Count == 0)
     {
         <div class="maintenance-empty">
             <p>@EmptyMessage</p>
@@ -70,7 +71,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var invoice in VisibleInvoices)
+                    @foreach (var invoice in _invoices)
                     {
                         var selected = _selectedId == invoice.PaymentId;
                         <tr class="@(selected ? "is-selected" : "")" @onclick="() => Select(invoice.PaymentId)">
@@ -83,12 +84,18 @@
                             <td>@invoice.BalanceDisplay</td>
                             <td class="col-actions" @onclick:stopPropagation="true">
                                 <a class="btn-table" href="@PrintUrl(invoice.PaymentId, "detalle")" target="_blank">Imprimir</a>
-                                <a class="btn-table" href="@PrintUrl(invoice.PaymentId, "resumen")" target="_blank">Solo total</a>
+                                <a class="btn-table" href="@PrintUrl(invoice.PaymentId, "detalle", "80mm")" target="_blank">Ticket</a>
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
+        </div>
+
+        <div class="billing-pagination">
+            <button class="btn-outline" disabled="@(_loading || _pageNumber <= 1)" @onclick="PrevPageAsync">Anterior</button>
+            <span>@_totalCount factura(s) · pág. @_pageNumber/@TotalPages</span>
+            <button class="btn-outline" disabled="@(_loading || _pageNumber >= TotalPages)" @onclick="NextPageAsync">Siguiente</button>
         </div>
     }
 
@@ -98,21 +105,29 @@
             <div class="clinical-section-heading">
                 <div>
                     <h4>Factura #@SelectedInvoice.PaymentId</h4>
-                    <p>
-                        @SelectedInvoice.PaymentStatusDisplay
-                        · Total @SelectedInvoice.AmountDisplay
-                        · Saldo @SelectedInvoice.BalanceDisplay
-                    </p>
+                    <p>@SelectedInvoice.PaymentStatusDisplay · @FormatDate(SelectedInvoice.PaymentDate)</p>
                 </div>
                 <div class="patient-invoice-print-actions">
-                    <a class="btn-primary" href="@PrintUrl(SelectedInvoice.PaymentId, "detalle")" target="_blank">Imprimir con detalle</a>
-                    <a class="btn-outline" href="@PrintUrl(SelectedInvoice.PaymentId, "resumen")" target="_blank">Imprimir solo total</a>
+                    <a class="btn-outline" href="@PrintUrl(SelectedInvoice.PaymentId, "detalle")" target="_blank">Imprimir detalle</a>
+                    <a class="btn-outline" href="@PrintUrl(SelectedInvoice.PaymentId, "resumen")" target="_blank">Solo total</a>
+                    <a class="btn-outline" href="@PrintUrl(SelectedInvoice.PaymentId, "detalle", "80mm")" target="_blank">Ticket 80 mm</a>
+                    <a class="btn-outline" href="@PrintUrl(SelectedInvoice.PaymentId, "resumen", "58mm")" target="_blank">Ticket 58 mm</a>
                 </div>
             </div>
-            @if ((SelectedInvoice.Receipts?.Count ?? 0) > 0)
-            {
-                <p class="rx-hint">Abonos: @string.Join(" · ", (SelectedInvoice.Receipts ?? []).OrderBy(r => r.PaidAt).Select(r => $"{r.AmountDisplay} ({r.PaymentMethodDisplay})"))</p>
-            }
+            <div class="billing-kpi-grid">
+                <div class="agenda-kpi accent-purple">
+                    <span class="agenda-kpi-value">@SelectedInvoice.AmountDisplay</span>
+                    <span class="agenda-kpi-label">Total</span>
+                </div>
+                <div class="agenda-kpi accent-teal">
+                    <span class="agenda-kpi-value">@SelectedInvoice.AmountCollectedDisplay</span>
+                    <span class="agenda-kpi-label">Abonado</span>
+                </div>
+                <div class="agenda-kpi accent-yellow">
+                    <span class="agenda-kpi-value">@SelectedInvoice.BalanceDisplay</span>
+                    <span class="agenda-kpi-label">Saldo</span>
+                </div>
+            </div>
         </div>
     }
 </section>
@@ -133,17 +148,17 @@
     private bool _loading = true;
     private string? _error;
     private int _loadedPatientId;
+    private int _pageNumber = 1;
+    private const int PageSize = 10;
+    private int _totalCount;
+    private int _totalPages = 1;
 
     private int _pendingCount;
     private int _paidCount;
+    private int _totalCountAll;
     private decimal _pendingBalance;
 
-    private List<PaymentListItem> VisibleInvoices => _filter switch
-    {
-        "pendientes" => _invoices.Where(IsOutstanding).ToList(),
-        "pagadas" => _invoices.Where(x => x.PaymentStatus == "Paid").ToList(),
-        _ => _invoices
-    };
+    private int TotalPages => Math.Max(1, _totalPages);
 
     private PaymentListItem? SelectedInvoice =>
         _selectedId is int id ? _invoices.FirstOrDefault(x => x.PaymentId == id) : null;
@@ -160,6 +175,7 @@
         if (PatientId <= 0 || PatientId == _loadedPatientId)
             return;
 
+        _pageNumber = 1;
         await LoadAsync();
     }
 
@@ -169,54 +185,121 @@
         _error = null;
         _loadedPatientId = PatientId;
 
-        var result = await AuthService.WithTokenRetryAsync(
+        var filters = BuildListFilters();
+        var listTask = AuthService.WithTokenRetryAsync(
             async () =>
             {
-                var response = await BillingService.GetPaymentsAsync(new BillingPaymentFilters
-                {
-                    PatientId = PatientId,
-                    PageNumber = 1,
-                    PageSize = 100
-                });
+                var response = await BillingService.GetPaymentsAsync(filters);
                 return (response.Page, response.Error);
             },
             AuthService.IsTokenError);
 
+        var summaryTask = LoadSummaryAsync();
+        var result = await listTask;
+        await summaryTask;
+
         _invoices = result.Data?.Items?.ToList() ?? [];
         _error = result.Error;
-        _pendingCount = _invoices.Count(IsOutstanding);
-        _paidCount = _invoices.Count(x => x.PaymentStatus == "Paid");
-        _pendingBalance = _invoices.Where(IsOutstanding).Sum(x => x.Balance);
+        _pageNumber = result.Data?.CurrentPage > 0 ? result.Data.CurrentPage : _pageNumber;
+        _totalCount = result.Data?.TotalCount ?? 0;
+        _totalPages = result.Data?.TotalPages > 0 ? result.Data.TotalPages : 1;
 
         if (_selectedId is int id && _invoices.All(x => x.PaymentId != id))
             _selectedId = null;
 
         if (_selectedId is null)
-        {
-            var firstVisible = VisibleInvoices.FirstOrDefault();
-            _selectedId = firstVisible?.PaymentId;
-        }
+            _selectedId = _invoices.FirstOrDefault()?.PaymentId;
 
         _loading = false;
     }
 
-    private void SetFilter(string filter)
+    private async Task LoadSummaryAsync()
     {
+        var outstandingTask = BillingService.GetPaymentsAsync(new BillingPaymentFilters
+        {
+            PatientId = PatientId,
+            OutstandingOnly = true,
+            PageNumber = 1,
+            PageSize = 100
+        });
+        var paidTask = BillingService.GetPaymentsAsync(new BillingPaymentFilters
+        {
+            PatientId = PatientId,
+            Status = "Paid",
+            PageNumber = 1,
+            PageSize = 1
+        });
+        var allTask = BillingService.GetPaymentsAsync(new BillingPaymentFilters
+        {
+            PatientId = PatientId,
+            PageNumber = 1,
+            PageSize = 1
+        });
+
+        await Task.WhenAll(outstandingTask, paidTask, allTask);
+
+        var (outstanding, _) = await outstandingTask;
+        var (paid, _) = await paidTask;
+        var (all, _) = await allTask;
+
+        var outstandingItems = outstanding?.Items?.ToList() ?? [];
+        _pendingCount = outstanding?.TotalCount ?? outstandingItems.Count;
+        _pendingBalance = outstandingItems.Sum(x => x.Balance);
+        _paidCount = paid?.TotalCount ?? 0;
+        _totalCountAll = all?.TotalCount ?? 0;
+    }
+
+    private BillingPaymentFilters BuildListFilters()
+    {
+        var filters = new BillingPaymentFilters
+        {
+            PatientId = PatientId,
+            PageNumber = _pageNumber,
+            PageSize = PageSize
+        };
+
+        switch (_filter)
+        {
+            case "pendientes":
+                filters.OutstandingOnly = true;
+                break;
+            case "pagadas":
+                filters.Status = "Paid";
+                break;
+        }
+
+        return filters;
+    }
+
+    private async Task SetFilterAsync(string filter)
+    {
+        if (_filter == filter) return;
         _filter = filter;
-        var first = VisibleInvoices.FirstOrDefault();
-        _selectedId = first?.PaymentId;
+        _pageNumber = 1;
+        await LoadAsync();
+    }
+
+    private async Task PrevPageAsync()
+    {
+        if (_pageNumber <= 1) return;
+        _pageNumber--;
+        await LoadAsync();
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_pageNumber >= TotalPages) return;
+        _pageNumber++;
+        await LoadAsync();
     }
 
     private void Select(int paymentId) => _selectedId = paymentId;
 
-    private string PrintUrl(int paymentId, string vista)
+    private string PrintUrl(int paymentId, string vista, string formato = "carta")
     {
         var back = Uri.EscapeDataString($"/pacientes/{PatientId}?tab=facturas");
-        return $"/facturacion/{paymentId}/imprimir?vista={vista}&volver={back}";
+        return $"/facturacion/{paymentId}/imprimir?vista={vista}&formato={formato}&volver={back}";
     }
-
-    private static bool IsOutstanding(PaymentListItem invoice) =>
-        invoice.PaymentStatus is "Pending" or "PartiallyPaid" or "Failed";
 
     private static string StatusClass(string? status) => status switch
     {

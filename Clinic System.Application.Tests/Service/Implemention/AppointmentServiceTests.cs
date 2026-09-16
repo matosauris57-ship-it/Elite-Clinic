@@ -85,6 +85,9 @@ namespace Clinic_System.Application.Tests.Service.Implemention
                  It.IsAny<CancellationToken>()), Times.Once);
            
             _mockUnitOfWork.Verify(u => u.SaveAsync(), Times.AtLeastOnce);
+            _mockPaymentService.Verify(
+                p => p.CreatePaymentAsync(It.IsAny<int>(), It.IsAny<decimal?>(), It.IsAny<CancellationToken>()),
+                Times.Never);
         }
 
         [Fact]
@@ -221,6 +224,55 @@ namespace Clinic_System.Application.Tests.Service.Implemention
             var slots = await _appointmentService.GetAvailableSlotsAsync(1, sunday);
 
             slots.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task CompleteAppointmentAsync_CreatesVisitInvoice()
+        {
+            var command = new CompleteAppointmentCommand
+            {
+                AppointmentId = 7,
+                DoctorId = 3,
+                Diagnosis = "Sellantes",
+                Description = "Aplicación de sellantes"
+            };
+            var appointment = new Appointment
+            {
+                Id = 7,
+                DoctorId = 3,
+                PatientId = 2,
+                Status = AppointmentStatus.InProgress,
+                QuotedAmount = 1800,
+                Patient = new Patient { FullName = "Pati Cabrera", ApplicationUserId = "u1" },
+                Doctor = new Doctor { FullName = "Ana Maria", Specialization = "Endodoncia" }
+            };
+            _mockAppointmentRepository
+                .Setup(r => r.GetAppointmentWithDetailsAsync(7, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(appointment);
+            _mockUnitOfWork
+                .Setup(u => u.SaveAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(1);
+            _mockMedicalRecordService
+                .Setup(m => m.CreateMedicalRecordAsync(
+                    appointment,
+                    command.Diagnosis,
+                    command.Description,
+                    command.Medicines,
+                    command.AdditionalNotes,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MedicalRecord());
+            _mockPaymentService
+                .Setup(p => p.CreatePaymentAsync(7, 1800m, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Payment { Id = 44, AppointmentId = 7, AmountPaid = 1800, PatientId = 2 });
+
+            var result = await _appointmentService.CompleteAppointmentAsync(command);
+
+            result.Status.Should().Be(AppointmentStatus.Completed);
+            result.Payment.Should().NotBeNull();
+            result.Payment!.Id.Should().Be(44);
+            _mockPaymentService.Verify(
+                p => p.CreatePaymentAsync(7, 1800m, It.IsAny<CancellationToken>()),
+                Times.Once);
         }
     }
 }

@@ -1,0 +1,158 @@
+@page "/reportes/imprimir"
+@using System.Globalization
+@layout PrintLayout
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "reportes.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ReportMaintenanceService Reports
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Reportes — Imprimir</PageTitle>
+
+<div class="invoice-print-page">
+    <div class="invoice-print-toolbar no-print">
+        <a class="btn-outline" href="@BackHref">Volver a reportes</a>
+        <div class="invoice-print-modes">
+            <a class="@(!IsAll ? "btn-primary" : "btn-outline")" href="@ModeUrl(_sectionKey)">Sección actual</a>
+            <a class="@(IsAll ? "btn-primary" : "btn-outline")" href="@ModeUrl("todos")">Todos</a>
+        </div>
+        <button class="btn-primary" disabled="@_loading" @onclick="PrintAsync">Imprimir</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_loading || _data == null)
+    {
+        <AnimatedLoader Message="Cargando reportes..." />
+    }
+    else
+    {
+        <ReportsDocument Data="_data"
+                         Section="@(IsAll ? "todos" : _sectionKey)"
+                         FromDate="_fromDate"
+                         ToDate="_toDate" />
+    }
+</div>
+
+@code {
+    private static readonly HashSet<string> ValidSections = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "asistencia", "ingresos", "produccion", "pacientes", "tratamientos", "inventario", "cobrar", "todos"
+    };
+
+    [SupplyParameterFromQuery(Name = "desde")]
+    public string? Desde { get; set; }
+
+    [SupplyParameterFromQuery(Name = "hasta")]
+    public string? Hasta { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? Tab { get; set; }
+
+    [SupplyParameterFromQuery(Name = "focus")]
+    public string? Focus { get; set; }
+
+    private ClinicReportsData? _data;
+    private bool _loading = true;
+    private string? _error;
+    private DateTime _fromDate = DateTime.Today.AddDays(-30);
+    private DateTime _toDate = DateTime.Today;
+    private string _sectionKey = "asistencia";
+    private DateTime? _loadedFrom;
+    private DateTime? _loadedTo;
+
+    private bool IsAll =>
+        string.Equals(Tab, "todos", StringComparison.OrdinalIgnoreCase)
+        || string.IsNullOrWhiteSpace(Tab);
+
+    private string BackHref
+    {
+        get
+        {
+            var from = _fromDate.ToString("yyyy-MM-dd");
+            var to = _toDate.ToString("yyyy-MM-dd");
+            return $"/reportes?desde={from}&hasta={to}&tab={_sectionKey}";
+        }
+    }
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+
+        _fromDate = ParseDate(Desde) ?? DateTime.Today.AddDays(-30);
+        _toDate = ParseDate(Hasta) ?? DateTime.Today;
+        if (_toDate < _fromDate)
+            (_fromDate, _toDate) = (_toDate, _fromDate);
+
+        _sectionKey = ResolveSectionKey();
+
+        var needsFetch = _data == null
+            || _loadedFrom != _fromDate.Date
+            || _loadedTo != _toDate.Date;
+
+        if (!needsFetch)
+            return;
+
+        _loading = true;
+        var (data, error) = await Reports.GetReportsAsync(_fromDate.Date, _toDate.Date);
+        _data = data;
+        _error = error;
+        if (_data == null && string.IsNullOrWhiteSpace(_error))
+            _error = "No se pudieron cargar los reportes.";
+        if (_data != null)
+        {
+            _loadedFrom = _fromDate.Date;
+            _loadedTo = _toDate.Date;
+        }
+        _loading = false;
+    }
+
+    private string ModeUrl(string tab)
+    {
+        var from = _fromDate.ToString("yyyy-MM-dd");
+        var to = _toDate.ToString("yyyy-MM-dd");
+        var path = $"/reportes/imprimir?desde={from}&hasta={to}&tab={Uri.EscapeDataString(tab)}";
+        if (string.Equals(tab, "todos", StringComparison.OrdinalIgnoreCase))
+            path += $"&focus={Uri.EscapeDataString(_sectionKey)}";
+        return Navigation.ToAbsoluteUri(path).PathAndQuery;
+    }
+
+    private string ResolveSectionKey()
+    {
+        if (!IsAll)
+            return NormalizeSection(Tab);
+        return NormalizeSection(Focus);
+    }
+
+    private static string NormalizeSection(string? tab)
+    {
+        if (string.IsNullOrWhiteSpace(tab) || string.Equals(tab, "todos", StringComparison.OrdinalIgnoreCase))
+            return "asistencia";
+        return ValidSections.Contains(tab) ? tab.ToLowerInvariant() : "asistencia";
+    }
+
+    private static DateTime? ParseDate(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (DateTime.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+            return dt.Date;
+        if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out dt))
+            return dt.Date;
+        return null;
+    }
+
+    private async Task PrintAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dentalCareUi.printPage");
+        }
+        catch
+        {
+        }
+    }
+}

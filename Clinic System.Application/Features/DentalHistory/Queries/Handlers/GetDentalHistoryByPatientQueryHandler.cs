@@ -4,14 +4,17 @@ namespace Clinic_System.Application.Features.DentalHistory.Queries.Handlers
     {
         private readonly IDentalHistoryService dentalHistoryService;
         private readonly IMapper mapper;
+        private readonly IClinicDataScopeService clinicScope;
 
         public GetDentalHistoryByPatientQueryHandler(
             ICurrentUserService currentUserService,
             IDentalHistoryService dentalHistoryService,
-            IMapper mapper) : base(currentUserService)
+            IMapper mapper,
+            IClinicDataScopeService clinicScope) : base(currentUserService)
         {
             this.dentalHistoryService = dentalHistoryService;
             this.mapper = mapper;
+            this.clinicScope = clinicScope;
         }
 
         public override async Task<Response<DentalHistoryDTO>> Handle(GetDentalHistoryByPatientQuery request, CancellationToken cancellationToken)
@@ -29,6 +32,9 @@ namespace Clinic_System.Application.Features.DentalHistory.Queries.Handlers
                 if (error != null) return error;
                 patientId = authorizedPatientId;
             }
+
+            if (!await clinicScope.AllowsPatientAsync(patientId, cancellationToken))
+                return Unauthorized<DentalHistoryDTO>("Solo puede consultar pacientes que haya atendido.");
 
             var history = await dentalHistoryService.GetByPatientIdAsync(patientId, cancellationToken);
             if (history == null)

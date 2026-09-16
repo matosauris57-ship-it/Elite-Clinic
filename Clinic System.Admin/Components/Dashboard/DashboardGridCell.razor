@@ -24,7 +24,8 @@
     private bool HasSettings =>
         Item.WidgetKey is DashboardWidgetKeys.RevenueSummary
             or DashboardWidgetKeys.UpcomingAppointments
-            or DashboardWidgetKeys.RecentActivity;
+            or DashboardWidgetKeys.RecentActivity
+            or DashboardWidgetKeys.AttendanceLinkAlerts;
 
     private Task Hide() => OnHide.InvokeAsync(Item.WidgetKey);
     private Task Configure() => OnConfigure.InvokeAsync(Item.WidgetKey);

@@ -14,6 +14,7 @@ public class DashboardService
     private readonly ClinicalTreatmentMaintenanceService _treatments;
     private readonly DashboardLayoutApiService _layoutApi;
     private readonly InventoryMaintenanceService _inventory;
+    private readonly CampaignBookingService _campaignBooking;
     private readonly ApiSettings _apiSettings;
 
     public DashboardService(
@@ -22,6 +23,7 @@ public class DashboardService
         ClinicalTreatmentMaintenanceService treatments,
         DashboardLayoutApiService layoutApi,
         InventoryMaintenanceService inventory,
+        CampaignBookingService campaignBooking,
         IOptions<ApiSettings> apiSettings)
     {
         _agenda = agenda;
@@ -29,6 +31,7 @@ public class DashboardService
         _treatments = treatments;
         _layoutApi = layoutApi;
         _inventory = inventory;
+        _campaignBooking = campaignBooking;
         _apiSettings = apiSettings.Value;
     }
 
@@ -75,6 +78,8 @@ public class DashboardService
         var needActivity = Needs(keys, DashboardWidgetKeys.RecentActivity);
         var needPeriodontal = Needs(keys, DashboardWidgetKeys.PeriodontalIncomplete);
         var needInventory = Needs(keys, DashboardWidgetKeys.SmartAlerts);
+        var needAttendanceLink = Needs(keys, DashboardWidgetKeys.AttendanceLinkAlerts, DashboardWidgetKeys.SmartAlerts);
+        var needCampaignBooking = Needs(keys, DashboardWidgetKeys.CampaignBookingRequests, DashboardWidgetKeys.SmartAlerts);
 
         var agendaTask = needAgenda ? _agenda.GetAgendaAsync(today) : CompletedAgenda();
         var weekAgendaTask = needWeek ? _agenda.GetAgendaAsync(weekStart, endDate: weekStart.AddDays(6)) : CompletedAgenda();
@@ -97,6 +102,12 @@ public class DashboardService
         var activityTask = needActivity ? _layoutApi.GetRecentActivityAsync("7d", 10) : Task.FromResult<(List<RecentClinicalActivityItem>?, string?)>(([], null));
         var periodontalTask = needPeriodontal ? _layoutApi.GetPeriodontalIncompleteAsync() : Task.FromResult<(PeriodontalIncompleteStats?, string?)>((null, null));
         var lowStockTask = needInventory ? _inventory.GetLowStockAsync() : Task.FromResult<(LowStockAlert?, string?)>((null, null));
+        var attendanceLinkTask = needAttendanceLink
+            ? _layoutApi.GetAttendanceLinkAlertsAsync("14d", 20)
+            : Task.FromResult<(List<AttendanceLinkAlertItem>?, string?)>(([], null));
+        var campaignBookingTask = needCampaignBooking
+            ? _campaignBooking.ListRequestsAsync("Pending", 20)
+            : Task.FromResult<(List<CampaignAppointmentRequestItem> Items, string? Error)>(([], null));
 
         await Task.WhenAll(
             agendaTask,
@@ -111,7 +122,10 @@ public class DashboardService
             patientsTask,
             activityTask,
             periodontalTask,
-            lowStockTask);
+            periodontalTask,
+            lowStockTask,
+            attendanceLinkTask,
+            campaignBookingTask);
 
         var (agenda, agendaError) = await agendaTask;
         var (weekAgenda, _) = await weekAgendaTask;
@@ -126,6 +140,8 @@ public class DashboardService
         var (activity, activityError) = await activityTask;
         var (periodontal, periodontalError) = await periodontalTask;
         var (lowStock, _) = await lowStockTask;
+        var (attendanceLink, attendanceLinkError) = await attendanceLinkTask;
+        var (campaignBooking, campaignBookingError) = await campaignBookingTask;
 
         if (IsConnectionError(agendaError) && agenda.Count == 0)
         {
@@ -245,7 +261,13 @@ public class DashboardService
             HistoryRestricted = IsRestricted(activityError),
             PeriodontalIncompleteCount = periodontal?.IncompleteExams ?? 0,
             PeriodontalError = periodontalError,
-            PeriodontalRestricted = IsRestricted(periodontalError)
+            PeriodontalRestricted = IsRestricted(periodontalError),
+            AttendanceLinkAlerts = attendanceLink ?? [],
+            AttendanceLinkError = attendanceLinkError,
+            AttendanceLinkRestricted = IsRestricted(attendanceLinkError),
+            CampaignBookingRequests = campaignBooking ?? [],
+            CampaignBookingError = campaignBookingError,
+            CampaignBookingRestricted = IsRestricted(campaignBookingError)
         };
 
         data.Alerts = BuildAlerts(data, stats, lowStock);
@@ -269,6 +291,38 @@ public class DashboardService
                 Time = now,
                 ActionLabel = "Ver inventario",
                 ActionHref = "/inventario"
+            });
+        }
+
+        if (data.CampaignBookingRequests.Count > 0)
+        {
+            alerts.Add(new DashboardAlert
+            {
+                Title = "Solicitudes de campaña",
+                Description = $"{data.CampaignBookingRequests.Count} paciente(s) pidieron cita desde el enlace y esperan confirmación.",
+                Severity = "warning",
+                Time = now,
+                ActionLabel = "Revisar",
+                ActionHref = "/campanas/solicitudes"
+            });
+        }
+
+        foreach (var item in data.AttendanceLinkAlerts.Take(12))
+        {
+            var comment = string.IsNullOrWhiteSpace(item.Comment) ? "Sin comentario" : item.Comment.Trim();
+            var related = string.IsNullOrWhiteSpace(item.ProcedureName)
+                ? item.DoctorName
+                : $"{item.DoctorName} · {item.ProcedureName}";
+            alerts.Add(new DashboardAlert
+            {
+                Title = item.Accepted
+                    ? $"{item.PatientName} aceptó la cita"
+                    : $"{item.PatientName} rechazó la cita",
+                Description = $"{item.AppointmentDate.ToString("dd/MM/yyyy hh:mm tt", EsDo)} · {related}. Comentario: {comment}",
+                Severity = item.Accepted ? "success" : "warning",
+                Time = item.RespondedAt.ToString("dd MMM HH:mm", EsDo),
+                ActionLabel = "Ver cita",
+                ActionHref = $"/agenda?fecha={item.AppointmentDate:yyyy-MM-dd}&id={item.AppointmentId}"
             });
         }
 

@@ -14,6 +14,36 @@
         }
     </div>
 
+    @if (EnableDateFilter && !Loading && string.IsNullOrWhiteSpace(Error) && Events.Count > 0)
+    {
+        <div class="timeline-date-filter" role="group" aria-label="Filtrar historial por fecha">
+            <div class="odontogram-seg timeline-date-seg">
+                <button type="button" class="odontogram-seg-btn @(_dateMode == "all" ? "is-active" : "")"
+                        @onclick='() => SetDateMode("all")'>Todas</button>
+                <button type="button" class="odontogram-seg-btn @(_dateMode == "today" ? "is-active" : "")"
+                        @onclick='() => SetDateMode("today")'>Hoy</button>
+                <button type="button" class="odontogram-seg-btn @(_dateMode == "7d" ? "is-active" : "")"
+                        @onclick='() => SetDateMode("7d")'>7 días</button>
+                <button type="button" class="odontogram-seg-btn @(_dateMode == "30d" ? "is-active" : "")"
+                        @onclick='() => SetDateMode("30d")'>30 días</button>
+                <button type="button" class="odontogram-seg-btn @(_dateMode == "range" ? "is-active" : "")"
+                        @onclick='() => SetDateMode("range")'>Rango</button>
+            </div>
+            @if (_dateMode == "range")
+            {
+                <label class="agenda-date-jump timeline-date-field">
+                    Desde
+                    <input type="date" value="@_fromDate.ToString("yyyy-MM-dd")" @onchange="OnFromChanged" />
+                </label>
+                <label class="agenda-date-jump timeline-date-field">
+                    Hasta
+                    <input type="date" value="@_toDate.ToString("yyyy-MM-dd")" @onchange="OnToChanged" />
+                </label>
+            }
+            <span class="timeline-date-count">@FilteredCountLabel</span>
+        </div>
+    }
+
     @if (Loading)
     {
         <AnimatedLoader Compact="true" Message="Cargando historial clínico..." />
@@ -28,19 +58,50 @@
             <p>No hay eventos clínicos para mostrar.</p>
         </div>
     }
+    else if (!VisibleEvents.Any())
+    {
+        <div class="maintenance-empty">
+            <p>Ningún evento coincide con el filtro de fechas.</p>
+            @if (EnableDateFilter && _dateMode != "all")
+            {
+                <button type="button" class="btn-outline" @onclick='() => SetDateMode("all")'>Ver todas las fechas</button>
+            }
+        </div>
+    }
     else
     {
         <ol class="clinical-timeline-list">
             @foreach (var item in VisibleEvents)
             {
                 <li>
-                    <div class="timeline-marker @PhaseClass(item.Phase)" title="@PhaseLabel(item.Phase)"></div>
-                    <article>
+                    <div class="timeline-marker @PhaseClass(item.Phase) @(item.IsVoided ? "is-voided" : "")" title="@PhaseLabel(item.Phase)"></div>
+                    <article class="@(item.IsVoided ? "is-voided" : "")">
                         <div class="timeline-event-head">
                             <strong>@ToothChartEventText.LocalizeTitle(item.Title)</strong>
+                            @if (CanMutateEvent(item))
+                            {
+                                <div class="timeline-event-actions">
+                                    @if (OnEdit.HasDelegate)
+                                    {
+                                        <button type="button" class="btn-outline timeline-edit-btn" @onclick="() => OnEdit.InvokeAsync(item)">
+                                            Editar
+                                        </button>
+                                    }
+                                    @if (OnVoid.HasDelegate)
+                                    {
+                                        <button type="button" class="btn-outline timeline-void-btn" @onclick="() => AskVoid(item)">
+                                            Anular
+                                        </button>
+                                    }
+                                </div>
+                            }
                         </div>
                         <div class="timeline-event-meta">
                             <span>@TypeLabel(item.Type)</span>
+                            @if (item.IsVoided)
+                            {
+                                <span class="timeline-voided-badge">Anulado</span>
+                            }
                             @if (item.ToothNumber.HasValue)
                             {
                                 <span>Pieza @item.ToothNumber</span>
@@ -61,6 +122,18 @@
                             </span>
                             <time datetime="@item.RecordedAt.ToString("O")">@item.RecordedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</time>
                         </div>
+                        @if (_pendingVoid?.Id == item.Id)
+                        {
+                            <div class="timeline-void-confirm" role="alertdialog" aria-label="Confirmar anulación">
+                                <p>¿Anular este registro? El odontograma volverá al estado anterior y el evento quedará marcado como anulado.</p>
+                                <div class="timeline-event-actions">
+                                    <button type="button" class="btn-outline" disabled="@_voiding" @onclick="CancelVoid">Cancelar</button>
+                                    <button type="button" class="btn-danger" disabled="@_voiding" @onclick="ConfirmVoidAsync">
+                                        @(_voiding ? "Anulando..." : "Confirmar anulación")
+                                    </button>
+                                </div>
+                            </div>
+                        }
                     </article>
                 </li>
             }
@@ -77,13 +150,144 @@
     [Parameter] public RenderFragment? HeaderActions { get; set; }
     [Parameter] public bool Compact { get; set; }
     [Parameter] public int MaxItems { get; set; } = 0;
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool EnableDateFilter { get; set; }
+    [Parameter] public EventCallback<DentalClinicalEvent> OnEdit { get; set; }
+    [Parameter] public EventCallback<DentalClinicalEvent> OnVoid { get; set; }
+
+    private DentalClinicalEvent? _pendingVoid;
+    private bool _voiding;
+    private string _dateMode = "all";
+    private DateTime _fromDate = DateTime.Today.AddDays(-30);
+    private DateTime _toDate = DateTime.Today;
+
+    private bool CanMutateEvent(DentalClinicalEvent item) =>
+        CanEdit &&
+        !item.IsVoided &&
+        item.Type == DentalClinicalEventType.OdontogramEntry &&
+        (item.ToothChartEntryId is > 0 || (long.TryParse(item.ReferenceId, out var id) && id > 0));
+
+    private void AskVoid(DentalClinicalEvent item) => _pendingVoid = item;
+
+    private void CancelVoid()
+    {
+        if (_voiding)
+            return;
+        _pendingVoid = null;
+    }
+
+    private async Task ConfirmVoidAsync()
+    {
+        if (_pendingVoid == null || _voiding)
+            return;
+
+        _voiding = true;
+        try
+        {
+            await OnVoid.InvokeAsync(_pendingVoid);
+            _pendingVoid = null;
+        }
+        finally
+        {
+            _voiding = false;
+        }
+    }
+
+    private void SetDateMode(string mode)
+    {
+        _dateMode = mode;
+        var today = DateTime.Today;
+        switch (mode)
+        {
+            case "today":
+                _fromDate = today;
+                _toDate = today;
+                break;
+            case "7d":
+                _fromDate = today.AddDays(-6);
+                _toDate = today;
+                break;
+            case "30d":
+                _fromDate = today.AddDays(-29);
+                _toDate = today;
+                break;
+            case "range":
+                if (_toDate < _fromDate)
+                    (_fromDate, _toDate) = (_toDate, _fromDate);
+                break;
+        }
+    }
+
+    private void OnFromChanged(ChangeEventArgs args)
+    {
+        if (!DateTime.TryParse(args.Value?.ToString(), out var date))
+            return;
+        _fromDate = date.Date;
+        _dateMode = "range";
+        if (_toDate < _fromDate)
+            _toDate = _fromDate;
+    }
+
+    private void OnToChanged(ChangeEventArgs args)
+    {
+        if (!DateTime.TryParse(args.Value?.ToString(), out var date))
+            return;
+        _toDate = date.Date;
+        _dateMode = "range";
+        if (_fromDate > _toDate)
+            _fromDate = _toDate;
+    }
+
+    private (DateTime? From, DateTime? To) ActiveDateRange => _dateMode switch
+    {
+        "all" => (null, null),
+        "today" => (DateTime.Today, DateTime.Today),
+        "7d" => (DateTime.Today.AddDays(-6), DateTime.Today),
+        "30d" => (DateTime.Today.AddDays(-29), DateTime.Today),
+        "range" => (_fromDate.Date, _toDate.Date),
+        _ => (null, null)
+    };
+
+    private IEnumerable<DentalClinicalEvent> FilteredEvents
+    {
+        get
+        {
+            var (from, to) = ActiveDateRange;
+            IEnumerable<DentalClinicalEvent> query = Events;
+            if (from.HasValue || to.HasValue)
+            {
+                query = query.Where(e =>
+                {
+                    var day = e.RecordedAt.ToLocalTime().Date;
+                    if (from.HasValue && day < from.Value)
+                        return false;
+                    if (to.HasValue && day > to.Value)
+                        return false;
+                    return true;
+                });
+            }
+
+            return query.OrderByDescending(x => x.RecordedAt);
+        }
+    }
 
     private IEnumerable<DentalClinicalEvent> VisibleEvents
     {
         get
         {
-            var ordered = Events.OrderByDescending(x => x.RecordedAt);
+            var ordered = FilteredEvents;
             return MaxItems > 0 ? ordered.Take(MaxItems) : ordered;
+        }
+    }
+
+    private string FilteredCountLabel
+    {
+        get
+        {
+            var visible = FilteredEvents.Count();
+            if (_dateMode == "all")
+                return visible == 1 ? "1 evento" : $"{visible} eventos";
+            return $"{visible} de {Events.Count}";
         }
     }
 
@@ -109,6 +313,8 @@
         DentalClinicalEventType.ClinicalNote => "Nota clínica",
         DentalClinicalEventType.PeriodontalExam => "Periodontograma",
         DentalClinicalEventType.Prescription => "Receta",
+        DentalClinicalEventType.Attachment => "Adjunto",
+        DentalClinicalEventType.InformedConsent => "Consentimiento",
         _ => type.ToString()
     };
 

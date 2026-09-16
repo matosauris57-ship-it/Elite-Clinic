@@ -1,3 +1,5 @@
+using Clinic_System.Core.Messaging;
+
 namespace DentalCare.Admin.Models;
 
 public class ClinicProfile
@@ -29,7 +31,7 @@ public class ClinicProfile
 
     public string DisplayLogoUrl =>
         string.IsNullOrWhiteSpace(LogoUrl)
-            ? string.Empty
+            ? ClinicBrandMark.WebPath
             : LogoVersion > 0
                 ? $"{LogoUrl}?v={LogoVersion}"
                 : LogoUrl;

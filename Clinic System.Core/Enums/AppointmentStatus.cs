@@ -7,6 +7,7 @@
         Rescheduled = 3,
         NoShow = 4,
         Pending = 5,
-        Cancelled = 6
+        Cancelled = 6,
+        InProgress = 7
     }
 }

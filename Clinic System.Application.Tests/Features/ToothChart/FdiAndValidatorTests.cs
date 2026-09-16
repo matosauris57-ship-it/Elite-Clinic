@@ -208,4 +208,31 @@ public class FdiAndValidatorTests
         };
         validator.TestValidate(command).ShouldNotHaveAnyValidationErrors();
     }
+
+    [Fact]
+    public void CreateEntryValidator_AcceptsMultipleSurfacesForCaries()
+    {
+        var validator = new CreateToothChartEntryValidator();
+        var command = new CreateToothChartEntryCommand
+        {
+            PatientId = 1,
+            ToothNumber = 26,
+            Surface = ToothSurface.WholeTooth,
+            Surfaces = [ToothSurface.Mesial, ToothSurface.OcclusalIncisal, ToothSurface.Distal],
+            Phase = ToothChartPhase.Diagnosis,
+            Condition = ToothCondition.Caries,
+            CariesType = CariesType.SmoothSurface,
+            Icdas = IcdasCode.DistinctVisual
+        };
+
+        validator.TestValidate(command).ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void CombinationCode_OrdersModFaces()
+    {
+        ToothSurfaceSelection.CombinationCode(
+            [ToothSurface.Distal, ToothSurface.Mesial, ToothSurface.OcclusalIncisal],
+            26).Should().Be("MOD");
+    }
 }

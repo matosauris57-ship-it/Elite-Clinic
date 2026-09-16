@@ -35,6 +35,7 @@ global using Clinic_System.Application.Features.Patients.Queries.Models;
 global using Clinic_System.Application.Features.Patients.Commands.Handlers;
 global using Clinic_System.Application.Features.Patients.Commands.Models;
 global using Clinic_System.Application.Features.Patients.Commands.Validators;
+global using Clinic_System.Core.Validation;
 
 
 

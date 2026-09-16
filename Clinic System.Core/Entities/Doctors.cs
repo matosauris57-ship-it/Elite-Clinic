@@ -5,6 +5,7 @@ namespace Clinic_System.Core.Entities
         public virtual string Specialization { get; set; } = null!;
         public virtual string? SignatureImageUrl { get; set; }
         public virtual string ApplicationUserId { get; set; } = null!;
+        public virtual bool CanViewAllClinicData { get; set; }
 
         public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
         public virtual ICollection<DoctorProcedurePrice> ProcedurePrices { get; set; } = new List<DoctorProcedurePrice>();

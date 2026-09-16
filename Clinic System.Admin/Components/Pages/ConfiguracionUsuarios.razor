@@ -1,4 +1,5 @@
 @page "/configuracion/usuarios"
+@using Clinic_System.Core.Authorization
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "usuarios.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject AccessControlMaintenanceService AccessService
@@ -7,13 +8,31 @@
 
 <PageTitle>Usuarios y roles — DentalCare Admin</PageTitle>
 
-<div class="maintenance-page">
-    <div class="maintenance-header command-header">
-        <div class="command-titles">
-            <h1>Usuarios y roles</h1>
-            <p>Gestión de accesos al panel por módulo y acción</p>
+<div class="maintenance-page access-page">
+    <header class="access-hero">
+        <div class="access-hero-main">
+            <div class="access-hero-icon" aria-hidden="true">
+                <Icon Name="shield" Class="access-hero-svg" StrokeWidth="1.7" />
+            </div>
+            <div class="access-hero-copy">
+                <p class="access-kicker">Configuración</p>
+                <h1>Usuarios y roles</h1>
+                <p>Gestiona cuentas, roles y permisos por módulo y acción. El permiso «Cambiar contraseña» permite asignar una clave nueva a un usuario.</p>
+            </div>
         </div>
-        <div class="command-actions">
+        <div class="access-hero-side">
+            <div class="access-tabs" role="tablist" aria-label="Secciones de acceso">
+                <button type="button" role="tab" aria-selected="@(_activeTab == "roles")"
+                        class="access-tab @(_activeTab == "roles" ? "active" : "")"
+                        @onclick='() => SwitchTab("roles")'>
+                    <Icon Name="shield" Class="btn-svg" /> Roles
+                </button>
+                <button type="button" role="tab" aria-selected="@(_activeTab == "users")"
+                        class="access-tab @(_activeTab == "users" ? "active" : "")"
+                        @onclick='() => SwitchTab("users")'>
+                    <Icon Name="users" Class="btn-svg" /> Usuarios
+                </button>
+            </div>
             @if (_activeTab == "users" && _canCreateUser)
             {
                 <button class="btn-primary" @onclick="OpenCreateUserModal">
@@ -29,12 +48,7 @@
                 </button>
             }
         </div>
-    </div>
-
-    <div class="maintenance-tabs">
-        <button class="toggle-btn @(_activeTab == "roles" ? "active" : "")" @onclick='() => SwitchTab("roles")'>Roles</button>
-        <button class="toggle-btn @(_activeTab == "users" ? "active" : "")" @onclick='() => SwitchTab("users")'>Usuarios</button>
-    </div>
+    </header>
 
     @if (!string.IsNullOrEmpty(_loadError))
     {
@@ -50,20 +64,28 @@
         else
         {
             <div class="access-layout">
-                <div class="access-role-list">
-                    @foreach (var role in _roles)
-                    {
-                        <button class="access-role-item @(role.Id == _selectedRoleId ? "active" : "")"
-                                @onclick="() => SelectRoleAsync(role)">
-                            <span class="access-role-name">@role.Name</span>
-                            @if (role.IsSystem)
-                            {
-                                <span class="widget-pill">Sistema</span>
-                            }
-                            <span class="access-role-meta">@role.PermissionCount permiso(s)</span>
-                        </button>
-                    }
-                </div>
+                <aside class="access-role-panel">
+                    <div class="access-panel-head">
+                        <h2>Roles</h2>
+                        <span>@_roles.Count</span>
+                    </div>
+                    <div class="access-role-list">
+                        @foreach (var role in _roles)
+                        {
+                            <button class="access-role-item @(role.Id == _selectedRoleId ? "active" : "")"
+                                    @onclick="() => SelectRoleAsync(role)">
+                                <span class="access-role-name">@role.Name</span>
+                                <span class="access-role-row">
+                                    @if (role.IsSystem)
+                                    {
+                                        <span class="widget-pill">Sistema</span>
+                                    }
+                                    <span class="access-role-meta">@role.PermissionCount permiso(s)</span>
+                                </span>
+                            </button>
+                        }
+                    </div>
+                </aside>
 
                 <div class="access-permissions-panel">
                     @if (_selectedRole == null)
@@ -77,12 +99,30 @@
                     else
                     {
                         <div class="access-permissions-header">
-                            <h2>@_selectedRole.Name</h2>
+                            <div>
+                                <h2>@_selectedRole.Name</h2>
+                                <p class="access-hint">
+                                    @if (IsLockedSystemRole(_selectedRole.Name))
+                                    {
+                                        @(string.Equals(_selectedRole.Name, "Admin", StringComparison.OrdinalIgnoreCase)
+                                            ? "El rol Admin tiene acceso total y no se edita."
+                                            : "El rol Patient es de la app de pacientes y no se edita aquí.")
+                                    }
+                                    else if (_selectedRole.IsSystem)
+                                    {
+                                        <text>Rol de sistema: no se puede eliminar, pero sí puedes asignarle permisos de módulos.</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Permisos de este rol en cada módulo del panel.</text>
+                                    }
+                                </p>
+                            </div>
                             @if (_selectedRole.IsSystem && string.Equals(_selectedRole.Name, "Admin", StringComparison.OrdinalIgnoreCase))
                             {
-                                <p class="access-hint">El rol Admin tiene acceso total y no es editable.</p>
+                                <span class="widget-pill">Acceso total</span>
                             }
-                            else if (_canEditRole && !_selectedRole.IsSystem)
+                            else if (CanEditSelectedRolePermissions)
                             {
                                 <button class="btn-primary" disabled="@_savingPermissions" @onclick="SaveRolePermissionsAsync">
                                     @(_savingPermissions ? "Guardando..." : "Guardar permisos")
@@ -102,14 +142,13 @@
                                             {
                                                 var perm = $"{module.Key}.{action}";
                                                 var isChecked = _selectedPermissions.Contains(perm);
-                                                var disabled = !_canEditRole || _selectedRole.IsSystem ||
-                                                               string.Equals(_selectedRole.Name, "Admin", StringComparison.OrdinalIgnoreCase);
-                                                <label class="access-action-item">
+                                                var disabled = !CanEditSelectedRolePermissions;
+                                                <label class="access-action-item @(isChecked ? "is-on" : "") @(disabled ? "is-disabled" : "")">
                                                     <input type="checkbox"
                                                            checked="@isChecked"
                                                            disabled="@disabled"
                                                            @onchange="e => TogglePermission(perm, e)" />
-                                                    <span>@action</span>
+                                                    <span>@FormatAction(action)</span>
                                                 </label>
                                             }
                                         </div>
@@ -131,7 +170,7 @@
     }
     else
     {
-        <div class="maintenance-toolbar">
+        <div class="access-toolbar">
             <div class="search-field maintenance-search">
                 <Icon Name="search" Class="field-icon" />
                 <input type="text" placeholder="Buscar por nombre o email..."
@@ -161,7 +200,7 @@
                     <thead>
                         <tr>
                             <th>Usuario</th>
-                            <th>Email</th>
+                            <th class="access-email-col">Email</th>
                             <th>Tipo</th>
                             <th>Vínculo</th>
                             <th>Roles</th>
@@ -172,20 +211,51 @@
                     <tbody>
                         @foreach (var user in _users)
                         {
-                            <tr>
-                                <td>@user.UserName</td>
-                                <td>@user.Email</td>
-                                <td><span class="widget-pill">@user.UserType</span></td>
-                                <td>@(user.LinkedName ?? "—")</td>
-                                <td>@string.Join(", ", user.Roles)</td>
-                                <td>@(user.IsLockedOut ? "Inactivo" : "Activo")</td>
+                            <tr class="@(user.IsLockedOut ? "table-row-inactive" : null)">
+                                <td>
+                                    <div class="table-name-cell">
+                                        <span class="avatar avatar-sm avatar-@(Math.Abs(user.UserName.GetHashCode()) % 4)">@GetInitials(user.UserName)</span>
+                                        <div class="patient-info">
+                                            <span class="patient-name">@user.UserName</span>
+                                            <span class="patient-id access-email-mobile">@user.Email</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="access-email-col">@user.Email</td>
+                                <td><span class="widget-pill">@FormatUserType(user.UserType)</span></td>
+                                <td>@(string.IsNullOrWhiteSpace(user.LinkedName) ? "—" : user.LinkedName)</td>
+                                <td>
+                                    <div class="access-role-chips">
+                                        @foreach (var roleName in user.Roles.Take(3))
+                                        {
+                                            <span class="access-chip">@roleName</span>
+                                        }
+                                        @if (user.Roles.Count > 3)
+                                        {
+                                            <span class="access-chip access-chip-more">+@(user.Roles.Count - 3)</span>
+                                        }
+                                        @if (user.Roles.Count == 0)
+                                        {
+                                            <span class="access-chip-empty">Sin roles</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="status-badge @(user.IsLockedOut ? "status-inactive" : "status-active")">
+                                        @(user.IsLockedOut ? "Inactivo" : "Activo")
+                                    </span>
+                                </td>
                                 <td class="col-actions">
                                     @if (_canEditUser)
                                     {
                                         <button class="btn-table" @onclick="() => OpenAssignRolesModal(user)">Roles</button>
-                                        <button class="btn-table" @onclick="() => ToggleLockoutAsync(user)">
+                                        <button class="btn-table @(user.IsLockedOut ? "" : "btn-table-danger")" @onclick="() => ToggleLockoutAsync(user)">
                                             @(user.IsLockedOut ? "Activar" : "Desactivar")
                                         </button>
+                                    }
+                                    @if (_canResetPassword)
+                                    {
+                                        <button class="btn-table" @onclick="() => OpenResetPasswordModal(user)">Contraseña</button>
                                     }
                                 </td>
                             </tr>
@@ -196,6 +266,12 @@
         }
     }
 </div>
+
+<ResetStaffPasswordModal Visible="_showResetPasswordModal"
+                         UserId="@_passwordUserId"
+                         DisplayName="@_passwordDisplayName"
+                         OnClose="CloseResetPasswordModal"
+                         OnSaved="OnPasswordSavedAsync" />
 
 @if (_showCreateRoleModal)
 {
@@ -315,6 +391,7 @@
     private bool _canEditRole;
     private bool _canDeleteRole;
     private bool _canEditUser;
+    private bool _canResetPassword;
 
     private List<RoleListItem> _roles = [];
     private List<ManagedUserItem> _users = [];
@@ -330,6 +407,9 @@
     private bool _showCreateRoleModal;
     private bool _showCreateUserModal;
     private bool _showAssignRolesModal;
+    private bool _showResetPasswordModal;
+    private string? _passwordUserId;
+    private string _passwordDisplayName = string.Empty;
     private string _newRoleName = string.Empty;
     private string _newUserName = string.Empty;
     private string _newUserEmail = string.Empty;
@@ -349,6 +429,8 @@
         _canEditRole = PermissionService.HasPermission(user, "usuarios.edit");
         _canDeleteRole = PermissionService.HasPermission(user, "usuarios.delete");
         _canEditUser = _canEditRole;
+        _canResetPassword = PermissionService.HasPermission(user, "usuarios.reset-password")
+            || PermissionService.HasPermission(user, "recuperacion-contrasena.reset-password");
 
         await ReloadAsync();
     }
@@ -523,6 +605,27 @@
         await ReloadUsersAsync();
     }
 
+    private void OpenResetPasswordModal(ManagedUserItem user)
+    {
+        _passwordUserId = user.Id;
+        _passwordDisplayName = string.IsNullOrWhiteSpace(user.Email) ? user.UserName : $"{user.UserName} ({user.Email})";
+        _showResetPasswordModal = true;
+    }
+
+    private void CloseResetPasswordModal()
+    {
+        _showResetPasswordModal = false;
+        _passwordUserId = null;
+        _passwordDisplayName = string.Empty;
+    }
+
+    private async Task OnPasswordSavedAsync()
+    {
+        CloseResetPasswordModal();
+        _loadError = null;
+        await ReloadUsersAsync();
+    }
+
     private void OpenAssignRolesModal(ManagedUserItem user)
     {
         _editingUser = user;
@@ -578,4 +681,41 @@
         if (e.Key == "Enter")
             await ReloadUsersAsync();
     }
+
+    private static string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}";
+        return name.Length >= 2 ? name[..2].ToUpperInvariant() : name.ToUpperInvariant();
+    }
+
+    private static string FormatUserType(string type) => type switch
+    {
+        "Doctor" => "Médico",
+        "Patient" => "Paciente",
+        _ => type
+    };
+
+    private bool CanEditSelectedRolePermissions =>
+        _canEditRole &&
+        _selectedRole != null &&
+        AdminPermissionCatalog.SystemRoles.CanEditModulePermissions(_selectedRole.Name);
+
+    private static bool IsLockedSystemRole(string? roleName) =>
+        !AdminPermissionCatalog.SystemRoles.CanEditModulePermissions(roleName ?? string.Empty)
+        && AdminPermissionCatalog.SystemRoles.IsSystemRole(roleName ?? string.Empty);
+
+    private static string FormatAction(string action) => action switch
+    {
+        "view" => "Ver",
+        "create" => "Crear",
+        "edit" => "Editar",
+        "delete" => "Eliminar",
+        "reset-password" => "Cambiar contraseña",
+        "view-all" => "Ver datos de todos los médicos",
+        _ => action
+    };
 }

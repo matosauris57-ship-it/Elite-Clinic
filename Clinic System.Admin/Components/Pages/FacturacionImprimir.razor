@@ -8,15 +8,39 @@
 
 <PageTitle>Factura #@PaymentId</PageTitle>
 
+@if (IsTicket)
+{
+    <style>
+        @@page {
+            size: @(PaperWidthMm)mm 297mm;
+            margin: 2mm;
+        }
+    </style>
+}
+
 <div class="invoice-print-page">
     <div class="invoice-print-toolbar no-print">
         <a class="btn-outline" href="@BackHref">@BackLabel</a>
         <div class="invoice-print-modes">
-            <a class="@(ShowLineDetails ? "btn-primary" : "btn-outline")" href="@ModeUrl("detalle")">Con detalle</a>
-            <a class="@(ShowLineDetails ? "btn-outline" : "btn-primary")" href="@ModeUrl("resumen")">Solo total</a>
+            <a class="@(ShowLineDetails ? "btn-primary" : "btn-outline")" href="@ModeUrl(VistaKey, FormatKey)">Con detalle</a>
+            <a class="@(ShowLineDetails ? "btn-outline" : "btn-primary")" href="@ModeUrl("resumen", FormatKey)">Solo total</a>
+        </div>
+        <div class="invoice-print-formats" role="group" aria-label="Formato de impresión">
+            <a class="@(FormatKey == "carta" ? "btn-primary" : "btn-outline")" href="@ModeUrl(VistaKey, "carta")">Carta</a>
+            <a class="@(FormatKey == "80mm" ? "btn-primary" : "btn-outline")" href="@ModeUrl(VistaKey, "80mm")">Ticket 80 mm</a>
+            <a class="@(FormatKey == "58mm" ? "btn-primary" : "btn-outline")" href="@ModeUrl(VistaKey, "58mm")">Ticket 58 mm</a>
         </div>
         <button class="btn-primary" disabled="@_loading" @onclick="PrintAsync">Imprimir</button>
     </div>
+
+    @if (IsTicket)
+    {
+        <p class="invoice-print-hint no-print">
+            Active <strong>Ticket @(PaperWidthMm) mm</strong> aquí arriba. En el diálogo de impresión:
+            elija la impresora térmica (no “Print to PDF”), papel de @(PaperWidthMm) mm si aparece,
+            escala 100 % y márgenes en Ninguno. Con PDF verá hoja carta, pero el ticket debe salir como una franja estrecha a la izquierda.
+        </p>
+    }
 
     @if (!string.IsNullOrWhiteSpace(_error))
     {
@@ -28,7 +52,9 @@
     }
     else
     {
-        <InvoiceDocument Payment="@_payment" Lines="@_lines" ShowLineDetails="@ShowLineDetails" />
+        <div class="invoice-print-preview @FormatCss">
+            <InvoiceDocument Payment="@_payment" Lines="@_lines" ShowLineDetails="@ShowLineDetails" Format="@FormatKey" />
+        </div>
     }
 </div>
 
@@ -39,6 +65,9 @@
     [SupplyParameterFromQuery(Name = "vista")]
     public string? Vista { get; set; }
 
+    [SupplyParameterFromQuery(Name = "formato")]
+    public string? Formato { get; set; }
+
     [SupplyParameterFromQuery(Name = "volver")]
     public string? Volver { get; set; }
 
@@ -48,6 +77,11 @@
     private string? _error;
 
     private bool ShowLineDetails => !string.Equals(Vista, "resumen", StringComparison.OrdinalIgnoreCase);
+    private string VistaKey => ShowLineDetails ? "detalle" : "resumen";
+    private string FormatKey => NormalizeFormat(Formato);
+    private bool IsTicket => FormatKey is "80mm" or "58mm";
+    private int PaperWidthMm => FormatKey == "58mm" ? 58 : 80;
+    private string FormatCss => $"format-{FormatKey}";
     private bool HasPatientReturn => IsSafeReturn(Volver);
     private string BackHref => HasPatientReturn ? Volver! : "/facturacion";
     private string BackLabel => HasPatientReturn ? "Volver a la ficha" : "Volver a facturación";
@@ -73,13 +107,29 @@
         _loading = false;
     }
 
-    private string ModeUrl(string vista)
+    private string ModeUrl(string vista, string formato)
     {
-        var query = $"vista={vista}";
+        var query = $"vista={vista}&formato={formato}";
         if (HasPatientReturn)
             query += $"&volver={Uri.EscapeDataString(Volver!)}";
         var uri = Navigation.ToAbsoluteUri($"/facturacion/{PaymentId}/imprimir?{query}");
         return uri.PathAndQuery;
+    }
+
+    private static string NormalizeFormat(string? formato)
+    {
+        if (string.Equals(formato, "80mm", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "80", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "ticket", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "ticket80", StringComparison.OrdinalIgnoreCase))
+            return "80mm";
+
+        if (string.Equals(formato, "58mm", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "58", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(formato, "ticket58", StringComparison.OrdinalIgnoreCase))
+            return "58mm";
+
+        return "carta";
     }
 
     private static bool IsSafeReturn(string? href) =>

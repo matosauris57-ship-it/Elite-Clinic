@@ -1,3 +1,7 @@
+using Clinic_System.Application.DTOs.Authentications;
+using Clinic_System.Core.Authorization;
+using Microsoft.EntityFrameworkCore;
+
 namespace Clinic_System.Infrastructure.Services
 {
     public class IdentityService : IIdentityService
@@ -26,7 +30,8 @@ namespace Clinic_System.Infrastructure.Services
             var user = new ApplicationUser
             {
                 UserName = userName,
-                Email = email
+                Email = email,
+                EmailConfirmed = true
             };
 
             var result = await _userManager.CreateAsync(user, password);
@@ -184,24 +189,33 @@ namespace Clinic_System.Infrastructure.Services
                 ? await _userManager.FindByEmailAsync(userNameOrEmail)
                 : await _userManager.FindByNameAsync(userNameOrEmail);
 
-            if (user == null)
-            {
-                return (false, false, string.Empty, string.Empty, string.Empty, new List<string>());
-            }
-            
-            var signInResult = await _signInManager.CheckPasswordSignInAsync(user, password, false);
-
-            if (!signInResult.Succeeded)
+            if (user == null || user.IsDeleted)
             {
                 return (false, false, string.Empty, string.Empty, string.Empty, new List<string>());
             }
 
-            if (!await _userManager.IsEmailConfirmedAsync(user))
+            // CheckPasswordSignInAsync falla con RequireConfirmedEmail y lo reporta como credenciales inválidas.
+            if (!await _userManager.CheckPasswordAsync(user, password))
             {
-                return (true, false, user.Id, user.UserName!, user.Email!, new List<string>());
+                return (false, false, string.Empty, string.Empty, string.Empty, new List<string>());
             }
 
             var roles = await _userManager.GetRolesAsync(user);
+            var isClinicAccount = roles.Any(r =>
+                !string.Equals(r, AdminPermissionCatalog.SystemRoles.Patient, StringComparison.OrdinalIgnoreCase));
+
+            if (!await _userManager.IsEmailConfirmedAsync(user))
+            {
+                if (isClinicAccount)
+                {
+                    user.EmailConfirmed = true;
+                    await _userManager.UpdateAsync(user);
+                }
+                else
+                {
+                    return (true, false, user.Id, user.UserName!, user.Email!, new List<string>());
+                }
+            }
 
             return (true, true, user.Id, user.UserName!, user.Email!, roles.ToList());
         }
@@ -325,6 +339,53 @@ namespace Clinic_System.Infrastructure.Services
             return true;
         }
 
+        public async Task<(bool Success, string? Error)> UpdateManagedUserAccountAsync(
+            string userId,
+            string? userName,
+            string? email,
+            string? newPassword,
+            CancellationToken cancellationToken = default)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return (false, "No se encontró la cuenta de acceso del médico.");
+
+            if (!string.IsNullOrWhiteSpace(email) &&
+                !string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase))
+            {
+                var setEmail = await _userManager.SetEmailAsync(user, email.Trim());
+                if (!setEmail.Succeeded)
+                    return (false, setEmail.Errors.FirstOrDefault()?.Description ?? "No se pudo actualizar el correo.");
+
+                user.EmailConfirmed = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(userName) &&
+                !string.Equals(user.UserName, userName, StringComparison.OrdinalIgnoreCase))
+            {
+                var setName = await _userManager.SetUserNameAsync(user, userName.Trim());
+                if (!setName.Succeeded)
+                    return (false, setName.Errors.FirstOrDefault()?.Description ?? "No se pudo actualizar el usuario.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(newPassword))
+            {
+                var removeResult = await _userManager.RemovePasswordAsync(user);
+                if (!removeResult.Succeeded)
+                    return (false, "No se pudo actualizar la contraseña.");
+
+                var addResult = await _userManager.AddPasswordAsync(user, newPassword);
+                if (!addResult.Succeeded)
+                    return (false, addResult.Errors.FirstOrDefault()?.Description ?? "No se pudo actualizar la contraseña.");
+            }
+
+            var update = await _userManager.UpdateAsync(user);
+            if (!update.Succeeded)
+                return (false, update.Errors.FirstOrDefault()?.Description ?? "No se pudo guardar la cuenta de acceso.");
+
+            return (true, null);
+        }
+
         public async Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword, bool isAdmin, CancellationToken cancellationToken = default)
         {
             var user = await _userManager.FindByIdAsync(userId);
@@ -387,6 +448,49 @@ namespace Clinic_System.Infrastructure.Services
             var roles = await _userManager.GetRolesAsync(user);
 
             return (true, user.Id, user.UserName ?? string.Empty, roles.ToList());
+        }
+
+        public async Task<PasswordRecoveryAccountMatch?> FindAccountForRecoveryAsync(string identifier, CancellationToken cancellationToken = default)
+        {
+            var value = identifier.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            ApplicationUser? user = null;
+            if (value.Contains('@'))
+                user = await _userManager.FindByEmailAsync(value);
+
+            user ??= await _userManager.FindByNameAsync(value);
+            if (user == null && !value.Contains('@'))
+                user = await _userManager.Users.FirstOrDefaultAsync(u => u.Email == value, cancellationToken);
+
+            if (user == null)
+                return null;
+
+            var loaded = await _userManager.Users
+                .Include(u => u.Doctor)
+                .Include(u => u.Patient)
+                .FirstOrDefaultAsync(u => u.Id == user.Id, cancellationToken) ?? user;
+
+            var roles = await _userManager.GetRolesAsync(loaded);
+            var display = loaded.Doctor?.FullName
+                ?? loaded.Patient?.FullName
+                ?? loaded.UserName
+                ?? loaded.Email
+                ?? value;
+
+            var userType = loaded.Doctor != null || roles.Contains(AdminPermissionCatalog.SystemRoles.Doctor)
+                ? "Médico"
+                : loaded.Patient != null || roles.Contains(AdminPermissionCatalog.SystemRoles.Patient)
+                    ? "Paciente"
+                    : "Staff";
+
+            return new PasswordRecoveryAccountMatch(
+                loaded.Id,
+                loaded.Email ?? string.Empty,
+                loaded.UserName ?? string.Empty,
+                display,
+                userType);
         }
     }
 }

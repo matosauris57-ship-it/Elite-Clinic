@@ -61,6 +61,14 @@ namespace Clinic_System.Infrastructure.Services
                 string.Equals(c.Value, permission, StringComparison.OrdinalIgnoreCase)) == true;
         }
 
+        public bool CanViewAllClinicData =>
+            IsAdmin
+            || !DoctorId.HasValue
+            || HasPermission(AdminPermissionCatalog.ViewAllClinicData);
+
+        public bool RestrictsToOwnDoctorData =>
+            DoctorId.HasValue && !CanViewAllClinicData;
+
         public int? DoctorId
         {
             get

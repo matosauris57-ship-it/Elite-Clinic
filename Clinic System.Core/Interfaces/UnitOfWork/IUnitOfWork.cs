@@ -30,6 +30,7 @@ namespace Clinic_System.Core.Interfaces.UnitOfWork
         IStockMovementRepository StockMovementsRepository { get; }
         ITreatmentMaterialConsumptionRepository TreatmentMaterialConsumptionsRepository { get; }
         IClinicReportRepository ClinicReportsRepository { get; }
+        IPasswordRecoveryRequestRepository PasswordRecoveryRequestsRepository { get; }
         Task<int> SaveAsync(CancellationToken cancellationToken = default);
     }
 }

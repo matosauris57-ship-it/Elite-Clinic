@@ -7,22 +7,30 @@
         private readonly IUnitOfWork unitOfWork;
         private readonly ICacheService cacheService;
         private readonly ILogger<UpdateDoctorCommandHandler> logger;
+        private readonly IIdentityService identityService;
 
-        public UpdateDoctorCommandHandler(IDoctorService doctorService, ICurrentUserService currentUserService
-            , IMapper mapper, IUnitOfWork unitOfWork, ICacheService cacheService, ILogger<UpdateDoctorCommandHandler> logger) : base(currentUserService) //
+        public UpdateDoctorCommandHandler(
+            IDoctorService doctorService,
+            ICurrentUserService currentUserService,
+            IMapper mapper,
+            IUnitOfWork unitOfWork,
+            ICacheService cacheService,
+            ILogger<UpdateDoctorCommandHandler> logger,
+            IIdentityService identityService) : base(currentUserService)
         {  
             this.doctorService = doctorService;
             this.mapper = mapper;
             this.unitOfWork = unitOfWork;
             this.cacheService = cacheService;
             this.logger = logger;
+            this.identityService = identityService;
         }
 
         public override async Task<Response<UpdateDoctorDTO>> Handle(UpdateDoctorCommand request, CancellationToken cancellationToken)
         {
             logger.LogInformation("Starting update process for doctor profile with Id {DoctorId}.", request.Id);
 
-            var authResult = await ValidateDoctorAccess(request.Id);
+            var authResult = await ValidateDoctorDirectoryAccess(request.Id, requireEdit: true);
             if (authResult != null)
                 return authResult;
 
@@ -36,6 +44,26 @@
 
             // 1. امسك التخصص القديم قبل التعديل
             var oldSpecialization = doctor.Specialization.Trim().ToLower();
+
+            var wantsAccountUpdate =
+                HasDoctorDirectoryPermission(AdminPermissionCatalog.Actions.Edit) &&
+                !string.IsNullOrWhiteSpace(doctor.ApplicationUserId) &&
+                (!string.IsNullOrWhiteSpace(request.UserName) ||
+                 !string.IsNullOrWhiteSpace(request.Email) ||
+                 !string.IsNullOrWhiteSpace(request.Password));
+
+            if (wantsAccountUpdate)
+            {
+                var (accountOk, accountError) = await identityService.UpdateManagedUserAccountAsync(
+                    doctor.ApplicationUserId,
+                    request.UserName,
+                    request.Email,
+                    request.Password,
+                    cancellationToken);
+
+                if (!accountOk)
+                    return BadRequest<UpdateDoctorDTO>(accountError ?? "No se pudo actualizar la cuenta de acceso.");
+            }
 
             mapper.Map(request, doctor);
             if (request.ClearSignatureImage)
@@ -52,6 +80,13 @@
             }
 
             var doctorsMapper = mapper.Map<UpdateDoctorDTO>(doctor);
+            if (!string.IsNullOrWhiteSpace(doctor.ApplicationUserId))
+            {
+                var (email, userName) = await identityService.GetUserEmailAndUserNameAsync(
+                    doctor.ApplicationUserId, cancellationToken);
+                doctorsMapper.Email = email;
+                doctorsMapper.UserName = userName;
+            }
             var newSpecialization = doctorsMapper.Specialization.Trim().ToLower();
 
 

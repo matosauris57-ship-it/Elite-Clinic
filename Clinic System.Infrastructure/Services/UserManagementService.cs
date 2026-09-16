@@ -218,6 +218,42 @@ public class UserManagementService : IUserManagementService
         return (true, null);
     }
 
+    public async Task<(bool Success, string? Error)> SetUserPasswordAsync(
+        string userId,
+        string newPassword,
+        bool actorIsAdmin,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return (false, "Debe indicar el usuario.");
+
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+            return (false, "La contraseña debe tener al menos 6 caracteres.");
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null || user.IsDeleted)
+            return (false, "Usuario no encontrado.");
+
+        if (!actorIsAdmin && await _userManager.IsInRoleAsync(user, AdminPermissionCatalog.SystemRoles.Admin))
+            return (false, "No se puede cambiar la contraseña de un administrador.");
+
+        if (await _userManager.HasPasswordAsync(user))
+        {
+            var removeResult = await _userManager.RemovePasswordAsync(user);
+            if (!removeResult.Succeeded)
+                return (false, string.Join(", ", removeResult.Errors.Select(e => e.Description)));
+        }
+
+        var addResult = await _userManager.AddPasswordAsync(user, newPassword);
+        if (!addResult.Succeeded)
+            return (false, string.Join(", ", addResult.Errors.Select(e => e.Description)));
+
+        await _userManager.SetLockoutEndDateAsync(user, null);
+        await _userManager.ResetAccessFailedCountAsync(user);
+
+        return (true, null);
+    }
+
     private static string ResolveUserType(
         string userId,
         IReadOnlyList<string> roles,

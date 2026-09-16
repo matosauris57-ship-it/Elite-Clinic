@@ -73,6 +73,15 @@ public class EmailCampaignLimitsTests
     }
 
     [Fact]
+    public void AppendFooter_HtmlKeepsMarkup()
+    {
+        var body = EmailCampaignLimits.AppendFooter("<p>Hola</p>", "Los Prados");
+        body.Should().Contain("<p>Hola</p>");
+        body.Should().Contain("Los Prados");
+        body.Should().Contain("<p style=");
+    }
+
+    [Fact]
     public void EstimatedBatches_RoundsUp()
     {
         var eligible = 16;

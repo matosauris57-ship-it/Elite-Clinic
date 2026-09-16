@@ -1,0 +1,175 @@
+@using System.Globalization
+@inject ClinicProfileService ClinicProfile
+
+<article class="invoice-document @(ShowAcceptance ? "is-quote-acceptance" : "is-quote")">
+    <header class="invoice-letterhead">
+        <div class="invoice-brand">
+            @if (!string.IsNullOrWhiteSpace(Clinic.DisplayLogoUrl))
+            {
+                <img class="invoice-logo" src="@Clinic.DisplayLogoUrl" alt="@Clinic.Name" />
+            }
+            <div class="invoice-brand-copy">
+                <h1>@Clinic.Name</h1>
+                <p class="invoice-contact">
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Address)) { <span>@Clinic.Address</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Phone)) { <span>Tel. @Clinic.Phone</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Email)) { <span>@Clinic.Email</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.TaxId)) { <span>RNC @Clinic.TaxId</span> }
+                </p>
+            </div>
+        </div>
+        <aside class="invoice-meta">
+            <p class="invoice-kicker">Presupuesto N.º @Plan.Id</p>
+            <span class="invoice-status @StatusCss">@StatusLabel</span>
+            <p class="invoice-meta-line">@FormatDate(Plan.CreatedAt)</p>
+            @if (Plan.ValidUntil.HasValue)
+            {
+                <p class="invoice-meta-line">Válido hasta @Plan.ValidUntil.Value.ToString("dd/MM/yyyy", Culture)</p>
+            }
+        </aside>
+    </header>
+
+    <section class="invoice-parties">
+        <p><span>Paciente</span> <strong>@(string.IsNullOrWhiteSpace(Plan.PatientName) ? PatientName : Plan.PatientName)</strong>
+            @if (!string.IsNullOrWhiteSpace(Plan.PatientPhone))
+            {
+                <span class="invoice-party-extra">@Plan.PatientPhone</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Plan.PatientNationalId))
+            {
+                <span class="invoice-party-extra">Céd. @Plan.PatientNationalId</span>
+            }
+        </p>
+        <p><span>Propuesta</span> <strong>@Plan.Title</strong></p>
+    </section>
+
+    <table class="invoice-lines">
+        <thead>
+            <tr>
+                <th>Procedimiento</th>
+                <th>Pieza</th>
+                <th>Cant.</th>
+                <th>P. unitario</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Plan.Items)
+            {
+                <tr>
+                    <td>
+                        @item.ProcedureName
+                        @if (!string.IsNullOrWhiteSpace(item.Notes))
+                        {
+                            <div class="quote-item-note">@item.Notes</div>
+                        }
+                    </td>
+                    <td>@(item.ToothNumber?.ToString() ?? "—")</td>
+                    <td>@item.Quantity</td>
+                    <td>@DisplayMoney(item.UnitPriceDisplay, item.UnitPrice)</td>
+                    <td>@DisplayMoney(item.LineTotalDisplay, item.LineTotal)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <footer class="invoice-totals">
+        <div class="invoice-footnote">
+            @if (!string.IsNullOrWhiteSpace(Plan.Notes))
+            {
+                <p class="invoice-notes"><span>Notas</span> @Plan.Notes</p>
+            }
+            <p class="invoice-thanks">Este documento es una cotización. No constituye factura hasta su aceptación y facturación.</p>
+        </div>
+        <dl>
+            <div>
+                <dt>Subtotal</dt>
+                <dd>@DisplayMoney(Plan.TotalAmountDisplay, Plan.TotalAmount)</dd>
+            </div>
+            @if (Plan.DiscountAmount > 0)
+            {
+                <div>
+                    <dt>Descuento</dt>
+                    <dd>@DisplayMoney(Plan.DiscountAmountDisplay, Plan.DiscountAmount)</dd>
+                </div>
+            }
+            <div class="invoice-grand">
+                <dt>Total</dt>
+                <dd>@DisplayMoney(Plan.FinalAmountDisplay, Plan.FinalAmount)</dd>
+            </div>
+        </dl>
+    </footer>
+
+    @if (ShowAcceptance)
+    {
+        <section class="quote-acceptance">
+            <p class="invoice-kicker">Aceptación del presupuesto</p>
+            <p class="quote-acceptance-copy">
+                Declaro que recibí esta cotización, conozco los procedimientos y el total indicado,
+                y acepto el plan de tratamiento propuesto.
+            </p>
+            @if (!string.IsNullOrWhiteSpace(Plan.AcceptedByName) || Plan.AcceptedAt.HasValue)
+            {
+                <p class="invoice-meta-line">
+                    Registrado
+                    @if (!string.IsNullOrWhiteSpace(Plan.AcceptedByName))
+                    {
+                        <text> por @Plan.AcceptedByName</text>
+                    }
+                    @if (Plan.AcceptedAt.HasValue)
+                    {
+                        <text> el @FormatDate(Plan.AcceptedAt)</text>
+                    }
+                </p>
+            }
+            <div class="quote-sign-grid">
+                <div>
+                    <span>Paciente o responsable</span>
+                    <em>@(!string.IsNullOrWhiteSpace(Plan.AcceptedByName) ? Plan.AcceptedByName : "Nombre y firma")</em>
+                </div>
+                <div>
+                    <span>Clínica</span>
+                    <em>@Clinic.Name</em>
+                </div>
+            </div>
+        </section>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public TreatmentPlanListItem Plan { get; set; } = new();
+
+    [Parameter]
+    public bool ShowAcceptance { get; set; }
+
+    [Parameter]
+    public string PatientName { get; set; } = string.Empty;
+
+    private ClinicProfile Clinic => ClinicProfile.Get();
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-DO");
+
+    private string StatusLabel => Plan.Status switch
+    {
+        "Draft" => "Borrador",
+        "Issued" => "Entregado",
+        "Approved" => "Aceptado",
+        "Rejected" => "Rechazado",
+        "Completed" => "Completado",
+        _ => Plan.Status
+    };
+
+    private string StatusCss => Plan.Status switch
+    {
+        "Approved" or "Completed" => "is-paid",
+        "Rejected" => "is-failed",
+        "Issued" => "is-pending",
+        _ => "is-pending"
+    };
+
+    private static string FormatDate(DateTime? value) =>
+        value.HasValue ? value.Value.ToString("dd/MM/yyyy HH:mm", Culture) : "—";
+
+    private static string DisplayMoney(string? display, decimal amount) =>
+        string.IsNullOrWhiteSpace(display) ? Clinic_System.Core.Finance.Money.Format(amount) : display;
+}

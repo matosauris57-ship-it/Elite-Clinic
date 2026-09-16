@@ -9,5 +9,10 @@
         public string? Specialization { get; set; }
         public string? SignatureImageUrl { get; set; }
         public bool ClearSignatureImage { get; set; }
+        public bool? CanViewAllClinicData { get; set; }
+        public string? UserName { get; set; }
+        public string? Email { get; set; }
+        public string? Password { get; set; }
+        public string? ConfirmPassword { get; set; }
     }
 }

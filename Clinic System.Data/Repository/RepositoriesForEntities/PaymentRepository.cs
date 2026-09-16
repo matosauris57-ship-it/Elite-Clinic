@@ -15,12 +15,15 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
         PaymentMethod? method,
         int pageNumber,
         int pageSize,
-        string? search = null)
+        string? search = null,
+        bool outstandingOnly = false)
         {
             var query = context.Payments
                 .AsNoTracking()
                 .Include(p => p.Receipts)
                 .Include(p => p.InvoiceLines)
+                .Include(p => p.Patient)
+                .Include(p => p.TreatmentPlan)
                 .Include(p => p.Appointment)
                     .ThenInclude(a => a.Patient)
                 .Include(p => p.Appointment)
@@ -28,17 +31,17 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 .AsQueryable();
 
             if (doctorId.HasValue)
-                query = query.Where(p => p.Appointment.DoctorId == doctorId);
+                query = query.Where(p => p.Appointment != null && p.Appointment.DoctorId == doctorId);
 
             if (patientId.HasValue)
-                query = query.Where(p => p.Appointment.PatientId == patientId);
+                query = query.Where(p => p.PatientId == patientId);
 
             if (fromDate.HasValue)
             {
                 var start = fromDate.Value.Date;
                 query = query.Where(p =>
                     (p.PaymentDate ?? p.CreatedAt) >= start
-                    || p.Appointment.AppointmentDate >= start);
+                    || (p.Appointment != null && p.Appointment.AppointmentDate >= start));
             }
 
             if (toDate.HasValue)
@@ -46,11 +49,23 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 var end = toDate.Value.Date.AddDays(1);
                 query = query.Where(p =>
                     (p.PaymentDate ?? p.CreatedAt) < end
-                    || p.Appointment.AppointmentDate < end);
+                    || (p.Appointment != null && p.Appointment.AppointmentDate < end));
             }
 
-            if (status.HasValue)
+            if (outstandingOnly)
+            {
+                PaymentStatus[] outstanding =
+                [
+                    PaymentStatus.Pending,
+                    PaymentStatus.Failed,
+                    PaymentStatus.PartiallyPaid
+                ];
+                query = query.Where(p => outstanding.Contains(p.PaymentStatus));
+            }
+            else if (status.HasValue)
+            {
                 query = query.Where(p => p.PaymentStatus == status);
+            }
 
             if (method.HasValue)
                 query = query.Where(p => p.PaymentMethod == method);
@@ -62,23 +77,21 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 {
                     query = query.Where(p =>
                         p.Id == paymentId
-                        || p.Appointment.Patient.FullName.Contains(term)
-                        || p.Appointment.Doctor.FullName.Contains(term));
+                        || p.Patient.FullName.Contains(term)
+                        || (p.Appointment != null && p.Appointment.Doctor.FullName.Contains(term)));
                 }
                 else
                 {
                     query = query.Where(p =>
-                        p.Appointment.Patient.FullName.Contains(term)
-                        || p.Appointment.Doctor.FullName.Contains(term));
+                        p.Patient.FullName.Contains(term)
+                        || (p.Appointment != null && p.Appointment.Doctor.FullName.Contains(term)));
                 }
             }
 
             query = query.OrderByDescending(p => p.PaymentDate ?? p.CreatedAt);
 
-            // 4. Get Total Count (قبل الـ Pagination)
             var totalCount = await query.CountAsync();
 
-            // 5. Pagination
             var items = await query
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
@@ -93,6 +106,8 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 .AsNoTracking()
                 .Include(p => p.Receipts)
                 .Include(p => p.InvoiceLines)
+                .Include(p => p.Patient)
+                .Include(p => p.TreatmentPlan)
                 .Include(p => p.Appointment)
                     .ThenInclude(a => a.Patient)
                 .Include(p => p.Appointment)
@@ -105,6 +120,8 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
             return await context.Payments
                 .Include(p => p.InvoiceLines)
                 .Include(p => p.Receipts)
+                .Include(p => p.Patient)
+                .Include(p => p.TreatmentPlan)
                 .Include(p => p.Appointment)
                     .ThenInclude(a => a.Patient)
                 .Include(p => p.Appointment)
@@ -127,17 +144,20 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
 
             var receipts = context.PaymentReceipts
                  .AsNoTracking()
-                 .Where(r => r.PaidAt >= start && r.PaidAt < end);
+                 .Where(r => r.PaidAt >= start && r.PaidAt < end && !r.IsVoided);
 
             var stats = await receipts
                  .GroupBy(r => 1)
                  .Select(g => new
                  {
-                     Total = g.Sum(r => r.Amount),
-                     Cash = g.Where(r => r.PaymentMethod == PaymentMethod.Cash).Sum(r => r.Amount),
-                     Card = g.Where(r => r.PaymentMethod == PaymentMethod.CreditCard).Sum(r => r.Amount),
-                     Insta = g.Where(r => r.PaymentMethod == PaymentMethod.InstaPay).Sum(r => r.Amount),
-                     Count = g.Count()
+                     Total = g.Sum(r => r.Kind == PaymentReceiptKind.Refund ? -r.Amount : r.Amount),
+                     Cash = g.Where(r => r.PaymentMethod == PaymentMethod.Cash)
+                         .Sum(r => r.Kind == PaymentReceiptKind.Refund ? -r.Amount : r.Amount),
+                     Card = g.Where(r => r.PaymentMethod == PaymentMethod.CreditCard)
+                         .Sum(r => r.Kind == PaymentReceiptKind.Refund ? -r.Amount : r.Amount),
+                     Insta = g.Where(r => r.PaymentMethod == PaymentMethod.InstaPay)
+                         .Sum(r => r.Kind == PaymentReceiptKind.Refund ? -r.Amount : r.Amount),
+                     Count = g.Count(r => r.Kind == PaymentReceiptKind.Payment)
                  })
                  .FirstOrDefaultAsync(cancellationToken);
 
@@ -151,14 +171,15 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
         {
             var stats = await context.PaymentReceipts
                 .AsNoTracking()
-                .Where(r => r.Payment.Appointment.DoctorId == doctorId &&
-                            r.PaidAt >= from &&
-                            r.PaidAt <= to)
+                .Where(r => !r.IsVoided
+                            && r.Payment.Appointment.DoctorId == doctorId
+                            && r.PaidAt >= from
+                            && r.PaidAt <= to)
                 .GroupBy(r => 1)
                 .Select(g => new
                 {
-                    Total = g.Sum(r => r.Amount),
-                    Count = g.Count()
+                    Total = g.Sum(r => r.Kind == PaymentReceiptKind.Refund ? -r.Amount : r.Amount),
+                    Count = g.Count(r => r.Kind == PaymentReceiptKind.Payment)
                 })
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -166,6 +187,40 @@ namespace Clinic_System.Data.Repository.RepositoriesForEntities
                 return (0, 0);
 
             return (stats.Total, stats.Count);
+        }
+
+        public async Task<Dictionary<int, decimal>> GetOutstandingBalancesByPatientAsync(CancellationToken cancellationToken = default)
+            => await GetOutstandingBalancesByPatientAsync(patientIds: null, cancellationToken);
+
+        public async Task<Dictionary<int, decimal>> GetOutstandingBalancesByPatientAsync(
+            IEnumerable<int>? patientIds,
+            CancellationToken cancellationToken = default)
+        {
+            PaymentStatus[] outstanding =
+            [
+                PaymentStatus.Pending,
+                PaymentStatus.Failed,
+                PaymentStatus.PartiallyPaid
+            ];
+
+            var idList = patientIds?.Distinct().ToList();
+
+            var query = context.Payments
+                .AsNoTracking()
+                .Where(p => outstanding.Contains(p.PaymentStatus));
+
+            if (idList is { Count: > 0 })
+                query = query.Where(p => idList.Contains(p.PatientId));
+
+            var payments = await query
+                .Include(p => p.Receipts)
+                .Include(p => p.InvoiceLines)
+                .ToListAsync(cancellationToken);
+
+            return payments
+                .Where(p => p.Balance > 0)
+                .GroupBy(p => p.PatientId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Balance));
         }
     }
 }

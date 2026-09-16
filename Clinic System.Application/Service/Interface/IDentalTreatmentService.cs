@@ -26,7 +26,8 @@ namespace Clinic_System.Application.Service.Interface
             DateTime? toDate,
             int pageNumber,
             int pageSize,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellationToken = default,
+            int? doctorId = null);
         Task<DentalTreatment> GetByIdAsync(int treatmentId, CancellationToken cancellationToken = default);
         Task<DentalTreatment> UpdateAsync(
             int treatmentId,

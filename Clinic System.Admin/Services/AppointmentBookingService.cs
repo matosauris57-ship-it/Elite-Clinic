@@ -141,24 +141,25 @@ public class AppointmentBookingService
         }
     }
 
-    public async Task<(bool Success, string? Error, PatientListItem? Patient)> CreatePatientAsync(CreatePatientRequest request)
+    public async Task<(bool Success, string? Error, PatientListItem? Patient, int? DuplicatePatientId)> CreatePatientAsync(CreatePatientRequest request)
     {
         try
         {
             var response = await Client.PostAsJsonAsync("/api/patients/create", request, JsonOptions);
             if (ApiConnectionMessages.IsRateLimited(response))
-                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), null);
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), null, null);
 
             var body = await response.Content.ReadFromJsonAsync<ApiResponse<CreatedPatientResponse>>(JsonOptions);
 
             if (body?.Succeeded == true && body.Data != null)
-                return (true, null, MapCreatedPatient(body.Data));
+                return (true, null, MapCreatedPatient(body.Data), null);
 
-            return (false, FormatApiErrors(body), null);
+            var (error, duplicateId) = PatientSaveErrors.FromApi(body, "No se pudo completar la operación.");
+            return (false, error, null, duplicateId);
         }
         catch (Exception ex)
         {
-            return (false, FormatConnectionError(ex) ?? ex.Message, null);
+            return (false, FormatConnectionError(ex) ?? ex.Message, null, null);
         }
     }
 
@@ -196,6 +197,8 @@ public class AppointmentBookingService
         var e when e.Contains("Username is already") => "Este nombre de usuario ya existe.",
         var e when e.Contains("Phone number is already") => "Este teléfono ya está registrado.",
         var e when e.Contains("National ID is already") => "Esta cédula ya está registrada.",
+        var e when e.Contains("Name must not contain numbers") => "El nombre no puede contener números.",
+        var e when e.Contains("National ID format") => "La cédula solo puede incluir números y guiones.",
         var e when e.Contains("Phone number must contain") =>
             "El teléfono debe tener 10–15 dígitos (solo números).",
         var e when e.Contains("Invalid email") => "Correo electrónico inválido.",

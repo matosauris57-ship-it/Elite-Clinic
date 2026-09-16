@@ -19,13 +19,20 @@ namespace Clinic_System.Application.Features.TreatmentPlans.Commands.Handlers
 
         public override async Task<Response<TreatmentPlanDTO>> Handle(ApproveTreatmentPlanCommand request, CancellationToken cancellationToken)
         {
-            var roles = await _currentUserService.GetCurrentUserRolesAsync();
-            if (!roles.Contains("Admin") && !roles.Contains("Doctor"))
-                return Unauthorized<TreatmentPlanDTO>("Only doctors or admins can approve treatment plans.");
-
-            var plan = await treatmentPlanService.ApproveAsync(request.PlanId, CurrentUserId, cancellationToken);
-            await unitOfWork.SaveAsync(cancellationToken);
-            return Success(mapper.Map<TreatmentPlanDTO>(plan), "Treatment plan approved.");
+            try
+            {
+                var plan = await treatmentPlanService.ApproveAsync(request.PlanId, CurrentUserId, request.AcceptedByName, cancellationToken);
+                await unitOfWork.SaveAsync(cancellationToken);
+                return Success(mapper.Map<TreatmentPlanDTO>(plan), "Presupuesto aceptado.");
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound<TreatmentPlanDTO>(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest<TreatmentPlanDTO>(ex.Message);
+            }
         }
     }
 }

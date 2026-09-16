@@ -1,0 +1,418 @@
+@inject PatientClinicalAttachmentService Attachments
+@inject AuthService AuthService
+@using Clinic_System.Core.Enums
+
+<section class="rx-panel attachment-panel">
+    <div class="clinical-section-heading">
+        <div>
+            <h3>Radiografías y documentos</h3>
+            <p>Adjunte radiografías e informes clínicos al expediente. Quedan en el historial clínico del paciente.</p>
+        </div>
+        @if (CanEdit)
+        {
+            <label class="btn-primary clinic-logo-upload">
+                Adjuntar archivo
+                <InputFile OnChange="OnFilesSelected" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,image/*,application/pdf" multiple disabled="@_saving" />
+            </label>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="wizard-success">@_message</div>
+    }
+
+    @if (_pendingFiles.Count > 0)
+    {
+        <div class="new-patient-form attachment-upload-card">
+            <h4 class="rx-subtitle">Nuevo adjunto</h4>
+            <p class="rx-hint">
+                @_pendingFiles.Count archivo(s): @string.Join(", ", _pendingFiles.Select(f => f.Name)).
+                JPG, PNG, WEBP, GIF, PDF o Word. Máximo 20 MB cada uno.
+            </p>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="att-kind">Tipo</label>
+                    <select id="att-kind" class="form-input" @bind="_kind">
+                        <option value="@ClinicalAttachmentKind.Radiograph">Radiografía</option>
+                        <option value="@ClinicalAttachmentKind.ClinicalDocument">Documento clínico</option>
+                        <option value="@ClinicalAttachmentKind.Other">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="att-subtype">Detalle</label>
+                    <select id="att-subtype" class="form-input" @bind="_subtype">
+                        <option value="">Sin especificar</option>
+                        @foreach (var option in SubtypeOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="att-title">Título</label>
+                    <input id="att-title" class="form-input" @bind="_title" maxlength="200" placeholder="Ej. Panorámica inicial" />
+                </div>
+                <div class="form-group">
+                    <label for="att-tooth">Pieza (opcional)</label>
+                    <input id="att-tooth" class="form-input" type="number" min="11" max="85" @bind="_toothNumber" />
+                </div>
+                <div class="form-group">
+                    <label for="att-date">Fecha del estudio</label>
+                    <input id="att-date" class="form-input" type="date" @bind="_capturedOn" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="att-notes">Notas clínicas</label>
+                <textarea id="att-notes" class="form-input" rows="2" @bind="_notes" maxlength="1000" placeholder="Indicación, hallazgos, laboratorio..."></textarea>
+            </div>
+            <div class="modal-actions rx-actions">
+                <button type="button" class="btn-outline" disabled="@_saving" @onclick="CancelPending">Cancelar</button>
+                <button type="button" class="btn-primary" disabled="@_saving" @onclick="UploadPendingAsync">
+                    @(_saving ? "Guardando..." : "Guardar en la ficha")
+                </button>
+            </div>
+        </div>
+    }
+
+    <div class="attachment-filters" role="tablist" aria-label="Filtrar adjuntos">
+        <button type="button" class="patient-record-tab @(_filter == null ? "is-active" : "")" @onclick="() => _filter = null">Todos</button>
+        <button type="button" class="patient-record-tab @(_filter == ClinicalAttachmentKind.Radiograph ? "is-active" : "")" @onclick="() => _filter = ClinicalAttachmentKind.Radiograph">Radiografías</button>
+        <button type="button" class="patient-record-tab @(_filter == ClinicalAttachmentKind.ClinicalDocument ? "is-active" : "")" @onclick="() => _filter = ClinicalAttachmentKind.ClinicalDocument">Documentos</button>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando adjuntos..." />
+    }
+    else if (VisibleItems.Count == 0)
+    {
+        <div class="maintenance-empty">
+            <p>Este paciente aún no tiene radiografías ni documentos clínicos adjuntos.</p>
+        </div>
+    }
+    else
+    {
+        <div class="attachment-grid">
+            @foreach (var item in VisibleItems)
+            {
+                <article class="attachment-card">
+                    @if (item.IsImage)
+                    {
+                        <a class="attachment-thumb" href="@FileUrl(item.Id)" target="_blank" rel="noopener" title="Ver imagen">
+                            <img src="@FileUrl(item.Id)" alt="@item.Title" />
+                        </a>
+                    }
+                    else
+                    {
+                        <a class="attachment-thumb is-file" href="@FileUrl(item.Id)" target="_blank" rel="noopener" title="Abrir archivo">
+                            <Icon Name="@(item.IsPdf ? "file-bar-chart" : "clipboard-list")" Class="attachment-file-icon" StrokeWidth="1.6" />
+                        </a>
+                    }
+                    <div class="attachment-card-body">
+                        <strong>@item.Title</strong>
+                        <p>
+                            @KindLabel(item.Kind)
+                            @if (!string.IsNullOrWhiteSpace(item.Subtype))
+                            {
+                                <text> · @item.Subtype</text>
+                            }
+                            @if (item.ToothNumber.HasValue)
+                            {
+                                <text> · Pieza @item.ToothNumber</text>
+                            }
+                        </p>
+                        <p>@item.OriginalFileName · @FormatSize(item.FileSizeBytes)</p>
+                        <p>Fecha: @FormatDate(item)</p>
+                        @if (!string.IsNullOrWhiteSpace(item.Notes))
+                        {
+                            <p>@item.Notes</p>
+                        }
+                    </div>
+                    <div class="rx-history-actions">
+                        <a class="btn-outline" href="@FileUrl(item.Id)" target="_blank" rel="noopener">Abrir</a>
+                        @if (CanEdit)
+                        {
+                            <button type="button" class="btn-outline" @onclick="() => BeginEdit(item)">Editar</button>
+                            <button type="button" class="btn-outline" disabled="@_saving" @onclick="() => DeleteAsync(item)">Eliminar</button>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+
+    @if (_editing != null)
+    {
+        <div class="new-patient-form attachment-upload-card">
+            <h4 class="rx-subtitle">Editar @_editing.Title</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Tipo</label>
+                    <select class="form-input" @bind="_editKind">
+                        <option value="@ClinicalAttachmentKind.Radiograph">Radiografía</option>
+                        <option value="@ClinicalAttachmentKind.ClinicalDocument">Documento clínico</option>
+                        <option value="@ClinicalAttachmentKind.Other">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Título</label>
+                    <input class="form-input" @bind="_editTitle" maxlength="200" />
+                </div>
+                <div class="form-group">
+                    <label>Fecha del estudio</label>
+                    <input class="form-input" type="date" @bind="_editCapturedOn" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Notas</label>
+                <textarea class="form-input" rows="2" @bind="_editNotes" maxlength="1000"></textarea>
+            </div>
+            <div class="modal-actions rx-actions">
+                <button type="button" class="btn-outline" @onclick="CancelEdit">Cancelar</button>
+                <button type="button" class="btn-primary" disabled="@_saving" @onclick="SaveEditAsync">Guardar cambios</button>
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly string[] RadiographTypes =
+    [
+        "Panorámica", "Periapical", "Aleta de mordida", "CBCT", "Intraoral", "Cefalométrica", "Otra"
+    ];
+
+    private static readonly string[] DocumentTypes =
+    [
+        "Informe clínico", "Laboratorio", "Interconsulta", "Otro documento"
+    ];
+
+    private readonly List<PatientClinicalAttachmentItem> _items = [];
+    private readonly List<IBrowserFile> _pendingFiles = [];
+    private ClinicalAttachmentKind? _filter;
+    private ClinicalAttachmentKind _kind = ClinicalAttachmentKind.Radiograph;
+    private string _subtype = "";
+    private string _title = "";
+    private string? _notes;
+    private int? _toothNumber;
+    private DateTime? _capturedOn = DateTime.Today;
+    private int _loadedPatientId;
+    private PatientClinicalAttachmentItem? _editing;
+    private ClinicalAttachmentKind _editKind;
+    private string _editTitle = "";
+    private string? _editNotes;
+    private DateTime _editCapturedOn = DateTime.Today;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _message;
+
+    private IReadOnlyList<string> SubtypeOptions =>
+        _kind == ClinicalAttachmentKind.ClinicalDocument ? DocumentTypes : RadiographTypes;
+
+    private List<PatientClinicalAttachmentItem> VisibleItems =>
+        _filter is null ? _items : _items.Where(x => x.Kind == _filter).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedPatientId == PatientId)
+            return;
+        _loadedPatientId = PatientId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var (items, error) = await AuthService.WithTokenRetryAsync(() => Attachments.ListAsync(PatientId), AuthService.IsTokenError);
+        _items.Clear();
+        _items.AddRange(items);
+        _error = error;
+        _loading = false;
+    }
+
+    private void OnFilesSelected(InputFileChangeEventArgs args)
+    {
+        _error = null;
+        _message = null;
+        _pendingFiles.Clear();
+        IReadOnlyList<IBrowserFile> files;
+        try
+        {
+            files = args.GetMultipleFiles(12);
+        }
+        catch (InvalidOperationException)
+        {
+            _error = "Puede adjuntar como máximo 12 archivos a la vez.";
+            return;
+        }
+
+        foreach (var file in files)
+        {
+            if (file.Size > PatientClinicalAttachmentService.MaxFileBytes)
+            {
+                _error = $"{file.Name} supera 20 MB.";
+                continue;
+            }
+
+            _pendingFiles.Add(file);
+        }
+
+        if (_pendingFiles.Count == 0)
+            return;
+
+        var first = _pendingFiles[0];
+        var ext = Path.GetExtension(first.Name);
+        _kind = ext is ".pdf" or ".doc" or ".docx"
+            ? ClinicalAttachmentKind.ClinicalDocument
+            : ClinicalAttachmentKind.Radiograph;
+        _title = Path.GetFileNameWithoutExtension(first.Name);
+        _subtype = "";
+        _notes = null;
+        _toothNumber = null;
+        _capturedOn = DateTime.Today;
+    }
+
+    private async Task UploadPendingAsync()
+    {
+        if (_pendingFiles.Count == 0)
+            return;
+
+        _saving = true;
+        _error = null;
+        _message = null;
+        var saved = 0;
+        foreach (var file in _pendingFiles.ToList())
+        {
+            var (item, error) = await AuthService.WithTokenRetryAsync(() =>
+                Attachments.UploadAsync(PatientId, file, _kind, _title, _subtype, _notes, _toothNumber, _capturedOn), AuthService.IsTokenError);
+            if (error != null)
+            {
+                _error = error;
+                break;
+            }
+
+            if (item != null)
+            {
+                _items.Insert(0, item);
+                saved++;
+            }
+        }
+
+        _saving = false;
+        if (saved > 0)
+        {
+            _message = saved == 1 ? "Adjunto guardado en la ficha." : $"{saved} adjuntos guardados en la ficha.";
+            _pendingFiles.Clear();
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private void CancelPending()
+    {
+        _pendingFiles.Clear();
+        _error = null;
+    }
+
+    private void BeginEdit(PatientClinicalAttachmentItem item)
+    {
+        _editing = item;
+        _editKind = item.Kind;
+        _editTitle = item.Title;
+        _editNotes = item.Notes;
+        _editCapturedOn = (item.CapturedOn ?? item.CreatedAt).Date;
+    }
+
+    private void CancelEdit() => _editing = null;
+
+    private async Task SaveEditAsync()
+    {
+        if (_editing == null)
+            return;
+
+        _saving = true;
+        _error = null;
+        var (ok, error) = await AuthService.WithTokenRetryAsync(() =>
+            Attachments.UpdateAsync(PatientId, _editing.Id, new UpdateClinicalAttachmentForm
+            {
+                Kind = _editKind,
+                Title = _editTitle,
+                Notes = _editNotes,
+                Subtype = _editing.Subtype,
+                ToothNumber = _editing.ToothNumber,
+                CapturedOn = _editCapturedOn.Date
+            }), AuthService.IsTokenError);
+        _saving = false;
+        if (!ok)
+        {
+            _error = error;
+            return;
+        }
+
+        _editing.Kind = _editKind;
+        _editing.Title = _editTitle;
+        _editing.Notes = _editNotes;
+        _editing.CapturedOn = _editCapturedOn.Date;
+        _editing.DateDisplay = _editCapturedOn.ToString("dd/MM/yyyy");
+        _editing = null;
+        _message = "Datos del adjunto actualizados.";
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task DeleteAsync(PatientClinicalAttachmentItem item)
+    {
+        _saving = true;
+        _error = null;
+        var (ok, error) = await AuthService.WithTokenRetryAsync(() => Attachments.DeleteAsync(PatientId, item.Id), AuthService.IsTokenError);
+        _saving = false;
+        if (!ok)
+        {
+            _error = error;
+            return;
+        }
+
+        _items.Remove(item);
+        if (_editing?.Id == item.Id)
+            _editing = null;
+        _message = "Adjunto eliminado.";
+        await OnChanged.InvokeAsync();
+    }
+
+    private string FileUrl(int attachmentId) => $"/pacientes/{PatientId}/adjuntos/{attachmentId}/archivo";
+
+    private static string KindLabel(ClinicalAttachmentKind kind) => kind switch
+    {
+        ClinicalAttachmentKind.Radiograph => "Radiografía",
+        ClinicalAttachmentKind.ClinicalDocument => "Documento",
+        _ => "Archivo"
+    };
+
+    private static string FormatDate(PatientClinicalAttachmentItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.DateDisplay))
+            return item.DateDisplay;
+        var value = item.CapturedOn ?? item.CreatedAt;
+        var date = value.Kind == DateTimeKind.Utc ? value.ToLocalTime() : value;
+        return date.ToString("dd/MM/yyyy");
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024)
+            return $"{bytes} B";
+        if (bytes < 1024 * 1024)
+            return $"{bytes / 1024.0:0.#} KB";
+        return $"{bytes / (1024.0 * 1024.0):0.#} MB";
+    }
+}

@@ -9,6 +9,8 @@ namespace Clinic_System.Core.Entities
         public virtual decimal Price { get; set; }
         public virtual TreatmentPricingMode PricingMode { get; set; } = TreatmentPricingMode.AtBooking;
         public virtual int DurationMinutes { get; set; }
+        public virtual TreatmentProcedureTarget Target { get; set; } = TreatmentProcedureTarget.PerTooth;
+        public virtual TreatmentToothKindFilter ToothKindFilter { get; set; } = TreatmentToothKindFilter.Any;
         public virtual bool IsActive { get; set; } = true;
         public virtual ICollection<DoctorProcedurePrice> DoctorPrices { get; set; } = new List<DoctorProcedurePrice>();
 

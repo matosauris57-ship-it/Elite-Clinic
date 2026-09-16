@@ -103,6 +103,7 @@ namespace Clinic_System.Application.Service.Implemention
             CancellationToken cancellationToken = default,
             int? treatmentProcedureId = null,
             decimal? quotedAmount = null,
+            int? planItemId = null,
             bool allowFlexibleSchedule = false)
         {
             var appointmentDateTime = appointmentDate.Date.Add(appointmentTime);
@@ -150,12 +151,30 @@ namespace Clinic_System.Application.Service.Implemention
                         throw new SlotAlreadyBookedException("The selected time slot is no longer available. Please select another time.");
                     }
 
+                    PlanItem? planItem = null;
+                    if (planItemId is > 0)
+                    {
+                        planItem = await unitOfWork.TreatmentPlansRepository.GetItemWithPlanAsync(planItemId.Value, cancellationToken)
+                            ?? throw new NotFoundException("No se encontró el procedimiento del plan.");
+                        if (planItem.TreatmentPlan.PatientId != patientId)
+                            throw new InvalidOperationException("El procedimiento no pertenece a este paciente.");
+                        if (planItem.AcceptanceStatus != PlanItemAcceptanceStatus.Approved)
+                            throw new InvalidOperationException("Solo se puede agendar un procedimiento aceptado del presupuesto.");
+                    }
+
                     var appointment = new Appointment
                     {
                         DoctorId = doctorId,
                         PatientId = patientId,
-                        AppointmentDate = appointmentDateTime, // نستخدم الـ DateTime المدمج
+                        AppointmentDate = appointmentDateTime,
                         Status = AppointmentStatus.Pending,
+                        QuotedAmount = quotedAmount is > 0
+                            ? Money.Normalize(quotedAmount.Value)
+                            : planItem != null ? planItem.LineTotal : null,
+                        PlanItemId = planItem?.Id,
+                        TreatmentPlanId = planItem?.TreatmentPlanId,
+                        TreatmentProcedureId = planItem?.TreatmentProcedureId ?? treatmentProcedureId,
+                        ToothNumber = planItem?.ToothNumber
                     };
 
                     // 3. إضافة الكيان
@@ -166,27 +185,17 @@ namespace Clinic_System.Application.Service.Implemention
                     if (result == 0)
                     {
                         logger.LogError("Failed to save the new appointment for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDateTime}",
-                           patientId, doctorId, appointmentDateTime);
-                        // إذا فشل الحفظ دون استثناء، يجب رفع استثناء هنا
+                            patientId, doctorId, appointmentDateTime);
                         throw new DatabaseSaveException("Failed to save the new appointment to the database.");
                     }
 
-                    decimal? paymentAmount = quotedAmount.HasValue && quotedAmount.Value > 0
-                        ? Money.Normalize(quotedAmount.Value)
-                        : null;
-
-                    await paymentService.CreatePaymentAsync(appointment.Id, paymentAmount, cancellationToken);
-
-                    // 4. *** الحفظ الفعلي والـ COMMIT (Transactional Safety) ***
-
-                    result = await unitOfWork.SaveAsync();
-
-                    if (result == 0)
+                    if (planItem != null)
                     {
-                        logger.LogError("Failed to save the new appointment for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDateTime}",
-                            patientId, doctorId, appointmentDateTime);
-                        // إذا فشل الحفظ دون استثناء، يجب رفع استثناء هنا
-                        throw new DatabaseSaveException("Failed to save the new appointment to the database.");
+                        planItem.MarkScheduled(appointment.Id);
+                        if (planItem.DentalTreatment != null)
+                            planItem.DentalTreatment.AppointmentId = appointment.Id;
+                        unitOfWork.TreatmentPlansRepository.Update(planItem.TreatmentPlan, cancellationToken);
+                        await unitOfWork.SaveAsync();
                     }
 
                     logger.LogInformation("Successfully booked appointment with ID: {AppointmentId} for PatientId: {PatientId} with DoctorId: {DoctorId} on {AppointmentDateTime}",
@@ -326,7 +335,7 @@ namespace Clinic_System.Application.Service.Implemention
             if (appointment.PatientId != command.PatientId)
                 throw new UnauthorizedException("You are not authorized to reschedule this appointment.");
 
-            appointment.Cancel();
+            appointment.Cancel(AppointmentCancellationChannel.Staff, command.Comment);
 
             StatePaymentOnAppointmentCancellation(appointment);
 
@@ -376,8 +385,6 @@ namespace Clinic_System.Application.Service.Implemention
             {
                 try
                 {
-                    await paymentService.ConfirmPaymentAsync(appointment.Id, method, notes, amount, cancellationToken);
-
                     appointment.Confirm();
 
                     var result = await unitOfWork.SaveAsync();
@@ -411,9 +418,9 @@ namespace Clinic_System.Application.Service.Implemention
                 DoctorName = appointment.Doctor.FullName,
                 DoctorSpecialization = appointment.Doctor.Specialization,
                 AppointmentDate = appointment.AppointmentDate,
-                AmountPaid = appointment.Payment.AmountPaid,
-                PaymentMethod = appointment.Payment.PaymentMethod.ToString(),
-                TransactionId = appointment.Payment.Id
+                    AmountPaid = appointment.Payment?.AmountPaid ?? 0,
+                    PaymentMethod = appointment.Payment?.PaymentMethod?.ToString() ?? string.Empty,
+                    TransactionId = appointment.Payment?.Id ?? 0
             }, cancellationToken);
 
             return appointment;
@@ -487,6 +494,11 @@ namespace Clinic_System.Application.Service.Implemention
                     await medicalRecordService.CreateMedicalRecordAsync(appointment,
                         command.Diagnosis,command.Description,  command.Medicines, command.AdditionalNotes, cancellationToken);
 
+                    await CompleteLinkedPlanItemAsync(appointment, cancellationToken);
+
+                    var payment = await paymentService.CreatePaymentAsync(appointment.Id, appointment.QuotedAmount, cancellationToken);
+                    appointment.Payment = payment;
+
                     var result = await unitOfWork.SaveAsync();
                     if (result == 0)
                     {
@@ -498,6 +510,9 @@ namespace Clinic_System.Application.Service.Implemention
 
                     logger.LogInformation("Successfully Completed appointment with ID: {AppointmentId} for DoctorId: {DoctorId}",
                         appointment.Id, command.DoctorId);
+
+                    appointment = await unitOfWork.AppointmentsRepository.GetAppointmentWithDetailsAsync(appointment.Id, cancellationToken)
+                        ?? appointment;
 
                     transaction.Complete();
 
@@ -536,6 +551,18 @@ namespace Clinic_System.Application.Service.Implemention
             return appointment;
         }
 
+        public async Task<Appointment> StartConsultationAsync(int appointmentId, CancellationToken cancellationToken = default)
+        {
+            var appointment = await unitOfWork.AppointmentsRepository.GetAppointmentWithDetailsAsync(appointmentId, cancellationToken)
+                ?? throw new NotFoundException("Appointment not found.");
+
+            appointment.StartConsultation();
+            await StartLinkedPlanItemAsync(appointment, cancellationToken);
+            unitOfWork.AppointmentsRepository.Update(appointment, cancellationToken);
+            await unitOfWork.SaveAsync(cancellationToken);
+            return appointment;
+        }
+
         private async Task EnsureClinicSlotAsync(DateTime date, TimeSpan time, CancellationToken cancellationToken)
         {
             var hours = await operatingHours.GetAsync(cancellationToken);
@@ -543,6 +570,43 @@ namespace Clinic_System.Application.Service.Implemention
                 return;
 
             throw new ValidationException("El horario seleccionado está fuera del horario de trabajo de la clínica.");
+        }
+
+        private async Task StartLinkedPlanItemAsync(Appointment appointment, CancellationToken cancellationToken)
+        {
+            if (appointment.PlanItemId is not > 0)
+                return;
+
+            var item = appointment.PlanItem
+                ?? await unitOfWork.TreatmentPlansRepository.GetItemWithPlanAsync(appointment.PlanItemId.Value, cancellationToken);
+            if (item == null)
+                return;
+
+            item.MarkInProgress();
+            if (item.DentalTreatment != null && item.DentalTreatment.Status == DentalTreatmentStatus.Planned)
+                item.DentalTreatment.Start();
+            unitOfWork.TreatmentPlansRepository.Update(item.TreatmentPlan, cancellationToken);
+        }
+
+        private async Task CompleteLinkedPlanItemAsync(Appointment appointment, CancellationToken cancellationToken)
+        {
+            if (appointment.PlanItemId is not > 0)
+                return;
+
+            var item = appointment.PlanItem
+                ?? await unitOfWork.TreatmentPlansRepository.GetItemWithPlanAsync(appointment.PlanItemId.Value, cancellationToken);
+            if (item == null || item.AcceptanceStatus != PlanItemAcceptanceStatus.Approved)
+                return;
+
+            item.MarkCompleted();
+            if (item.DentalTreatment != null)
+            {
+                if (item.DentalTreatment.Status == DentalTreatmentStatus.Planned)
+                    item.DentalTreatment.Start();
+                if (item.DentalTreatment.Status == DentalTreatmentStatus.InProgress)
+                    item.DentalTreatment.Complete();
+            }
+            unitOfWork.TreatmentPlansRepository.Update(item.TreatmentPlan, cancellationToken);
         }
 
         private void StatePaymentOnAppointmentCancellation(Appointment appointment)
@@ -624,7 +688,7 @@ namespace Clinic_System.Application.Service.Implemention
         public async Task<AppointmentStatsDto> GetAdminAppointmentsStatsAsync(GetAdminAppointmentsStatsQuery query, CancellationToken cancellationToken = default)
         {
             var counts = await unitOfWork.AppointmentsRepository
-                .GetAppointmentsCountByStatusAsync(query.StartDate, query.EndDate, cancellationToken);
+                .GetAppointmentsCountByStatusAsync(query.StartDate, query.EndDate, cancellationToken, query.DoctorId);
 
             return new AppointmentStatsDto
             {

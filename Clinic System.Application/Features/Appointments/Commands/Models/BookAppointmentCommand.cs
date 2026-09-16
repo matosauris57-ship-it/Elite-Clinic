@@ -8,5 +8,6 @@ namespace Clinic_System.Application.Features.Appointments.Commands.Models
         public TimeSpan AppointmentTime { get; set; }
         public int? TreatmentProcedureId { get; set; }
         public decimal? QuotedAmount { get; set; }
+        public int? PlanItemId { get; set; }
     }
 }

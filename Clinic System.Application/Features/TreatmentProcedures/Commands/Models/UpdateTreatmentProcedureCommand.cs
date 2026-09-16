@@ -11,6 +11,8 @@ namespace Clinic_System.Application.Features.TreatmentProcedures.Commands.Models
         public TreatmentPricingMode PricingMode { get; set; } = TreatmentPricingMode.AtBooking;
         public int DurationMinutes { get; set; }
         public bool IsActive { get; set; } = true;
+        public TreatmentProcedureTarget Target { get; set; } = TreatmentProcedureTarget.PerTooth;
+        public TreatmentToothKindFilter ToothKindFilter { get; set; } = TreatmentToothKindFilter.Any;
         public List<DoctorProcedurePriceInput> DoctorPrices { get; set; } = [];
     }
 }

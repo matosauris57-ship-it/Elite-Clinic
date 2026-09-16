@@ -1,9 +1,8 @@
 @page "/reportes"
+@using System.Globalization
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "reportes.view")]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject ReportMaintenanceService Reports
-@inject PermissionService PermissionService
-@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Reportes — DentalCare Admin</PageTitle>
 
@@ -14,6 +13,17 @@
             <p>Agenda, ingresos, producción, pacientes, tratamientos, inventario y cuentas por cobrar.</p>
         </div>
         <div class="command-actions">
+            @if (_data != null && !_loading)
+            {
+                <a class="btn-outline" href="@PrintUrl(_activeTab)" target="_blank" rel="noopener">
+                    <Icon Name="printer" Class="btn-svg" />
+                    Imprimir sección
+                </a>
+                <a class="btn-primary" href="@PrintUrl("todos")" target="_blank" rel="noopener">
+                    <Icon Name="printer" Class="btn-svg" />
+                    Imprimir todo
+                </a>
+            }
             <button class="btn-outline" disabled="@_loading" @onclick="ReloadAsync">
                 <Icon Name="refresh-cw" Class="btn-svg" />
                 Actualizar
@@ -366,16 +376,54 @@
         ("cobrar", "Por cobrar")
     ];
 
+    [SupplyParameterFromQuery(Name = "desde")]
+    public string? Desde { get; set; }
+
+    [SupplyParameterFromQuery(Name = "hasta")]
+    public string? Hasta { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? Tab { get; set; }
+
     private ClinicReportsData? _data;
     private bool _loading = true;
     private string? _error;
     private string _activeTab = "asistencia";
     private DateTime _fromDate = DateTime.Today.AddDays(-30);
     private DateTime _toDate = DateTime.Today;
+    private bool _queryApplied;
 
     protected override async Task OnInitializedAsync()
     {
+        ApplyQueryDefaults();
         await ReloadAsync();
+    }
+
+    private void ApplyQueryDefaults()
+    {
+        if (_queryApplied) return;
+        _queryApplied = true;
+
+        if (DateTime.TryParseExact(Desde, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var from))
+            _fromDate = from.Date;
+        if (DateTime.TryParseExact(Hasta, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var to))
+            _toDate = to.Date;
+        if (_toDate < _fromDate)
+            (_fromDate, _toDate) = (_toDate, _fromDate);
+
+        if (!string.IsNullOrWhiteSpace(Tab)
+            && Tabs.Any(t => string.Equals(t.Key, Tab, StringComparison.OrdinalIgnoreCase)))
+            _activeTab = Tab!.ToLowerInvariant();
+    }
+
+    private string PrintUrl(string tab)
+    {
+        var from = _fromDate.ToString("yyyy-MM-dd");
+        var to = _toDate.ToString("yyyy-MM-dd");
+        var url = $"/reportes/imprimir?desde={from}&hasta={to}&tab={Uri.EscapeDataString(tab)}";
+        if (string.Equals(tab, "todos", StringComparison.OrdinalIgnoreCase))
+            url += $"&focus={Uri.EscapeDataString(_activeTab)}";
+        return url;
     }
 
     private void SetLast30Days()

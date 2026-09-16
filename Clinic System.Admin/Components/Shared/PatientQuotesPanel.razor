@@ -1,0 +1,936 @@
+@using System.Globalization
+@using Clinic_System.Core.Finance
+@using Clinic_System.Core.Validation
+@using ProcedureTarget = Clinic_System.Core.Enums.TreatmentProcedureTarget
+@using CoreSurface = Clinic_System.Core.Enums.ToothSurface
+@inject TreatmentPlanMaintenanceService PlanService
+@inject TreatmentProcedureMaintenanceService ProcedureService
+@inject AuthService AuthService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<section class="record-section-card patient-quotes-panel">
+    @if (Mode == QuotePanelMode.List)
+    {
+        <div class="clinical-section-heading">
+            <div>
+                <h3>Presupuestos</h3>
+                <p>Listado de cotizaciones del paciente. Para armar una nueva, use el odontograma.</p>
+            </div>
+            @if (_canCreate)
+            {
+                <div class="quote-card-actions">
+                    @if (_form.Items.Count > 0)
+                    {
+                        <button type="button" class="btn-primary" disabled="@_saving" @onclick="() => RequestComposeAsync(false)">Continuar borrador</button>
+                        <button type="button" class="btn-outline" disabled="@_saving" @onclick="() => RequestComposeAsync(true)">Empezar uno nuevo</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn-primary" disabled="@_saving" @onclick="() => RequestComposeAsync(false)">Nuevo presupuesto</button>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="clinical-section-heading">
+            <div>
+                <h3>Armar presupuesto</h3>
+                <p>@(CanViewOdontogram
+                    ? "Seleccione las piezas en el odontograma de arriba, agregue procedimientos y guarde la cotización."
+                    : "Indique procedimiento y pieza, luego guarde la cotización.")</p>
+            </div>
+            <div class="quote-card-actions">
+                <button type="button" class="btn-outline" disabled="@_saving" @onclick="RequestListAsync">Ver listado</button>
+                @if (_form.Items.Count > 0)
+                {
+                    <button type="button" class="btn-outline" disabled="@_saving" @onclick="ResetDraft">Descartar borrador</button>
+                }
+            </div>
+        </div>
+    }
+
+    @if (Mode == QuotePanelMode.Compose && _canCreate)
+    {
+        <div class="new-patient-form compact-clinical-form quote-builder">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Título</label>
+                    <input class="form-input" @bind="_form.Title" placeholder="Presupuesto odontológico" />
+                </div>
+                <div class="form-group">
+                    <label>Válido hasta</label>
+                    <input type="date" class="form-input" value="@_validUntilDate.ToString("yyyy-MM-dd")" @onchange="OnValidUntilChanged" />
+                </div>
+                <div class="form-group">
+                    <label>Descuento</label>
+                    <input class="form-input" type="text" inputmode="decimal" placeholder="0.00" value="@_discountInput" @oninput="OnDiscountInput" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Notas para el paciente</label>
+                <textarea class="form-input" rows="2" @bind="_form.Notes" placeholder="Opcional"></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Procedimiento</label>
+                    <select class="form-input" value="@_procedureId" @onchange="OnProcedureChanged">
+                        <option value="0">Seleccione...</option>
+                        @foreach (var procedure in _procedures)
+                        {
+                            <option value="@procedure.Id">@procedure.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Piezas</label>
+                    <div class="tooth-selection-chips">
+                        @if (_wholeMouth)
+                        {
+                            <span class="rx-hint">Boca completa — no se asocia a piezas</span>
+                        }
+                        else if (SelectedToothNumbers.Count == 0)
+                        {
+                            <span class="rx-hint">@(CanViewOdontogram ? "Seleccione en el odontograma" : "Indique el número FDI")</span>
+                        }
+                        else
+                        {
+                            @foreach (var tooth in SelectedToothNumbers)
+                            {
+                                <span class="tooth-chip @(SelectedTooth == tooth ? "is-primary" : "")">@tooth</span>
+                            }
+                        }
+                    </div>
+                </div>
+                @if (!CanViewOdontogram)
+                {
+                    <div class="form-group">
+                        <label>Pieza FDI</label>
+                        <input class="form-input" type="number" min="11" placeholder="Ej. 16" @bind="_itemTooth" disabled="@_wholeMouth" />
+                    </div>
+                    <div class="form-group">
+                        <label>Superficie</label>
+                        <select class="form-input" @bind="_itemSurface" disabled="@_wholeMouth">
+                            @foreach (var surface in Enum.GetValues<CoreSurface>())
+                            {
+                                <option value="@surface">@SurfaceLabel(surface)</option>
+                            }
+                        </select>
+                    </div>
+                }
+                else
+                {
+                    <div class="form-group">
+                        <label>Superficie</label>
+                        <input class="form-input" value="@SurfaceLabel(ActiveSurface)" disabled />
+                    </div>
+                }
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Cantidad</label>
+                    <input class="form-input" type="number" min="1" @bind="_itemQuantity" />
+                </div>
+                <div class="form-group">
+                    <label>Precio unitario</label>
+                    <input class="form-input" type="text" inputmode="decimal" placeholder="0.00" value="@_itemPriceInput" @oninput="OnUnitPriceInput" />
+                    <span class="form-hint">Escríbalo para este presupuesto. No se toma el precio del catálogo.</span>
+                </div>
+                <div class="form-group">
+                    <label>Notas del ítem</label>
+                    <input class="form-input" @bind="_itemNotes" placeholder="Opcional" />
+                </div>
+            </div>
+            <button type="button" class="btn-outline" @onclick="AddItem">Agregar ítem</button>
+            @if (_form.Items.Count > 0)
+            {
+                <div class="data-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Procedimiento</th>
+                                <th>Pieza</th>
+                                <th>Cant.</th>
+                                <th>Precio</th>
+                                <th>Total</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _form.Items)
+                            {
+                                <tr>
+                                    <td>
+                                        <select class="form-input" value="@(item.TreatmentProcedureId ?? 0)" @onchange="e => ChangeItemProcedure(item, e)">
+                                            @foreach (var procedure in _procedures)
+                                            {
+                                                <option value="@procedure.Id">@procedure.Name</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input class="form-input" type="number" min="11" placeholder="—"
+                                               value="@(item.ToothNumber?.ToString() ?? "")"
+                                               @oninput="e => ChangeItemTooth(item, e)" />
+                                    </td>
+                                    <td>
+                                        <input class="form-input" type="number" min="1" value="@item.Quantity"
+                                               @oninput="e => ChangeItemQuantity(item, e)" />
+                                    </td>
+                                    <td>
+                                        <input class="form-input" type="text" inputmode="decimal" placeholder="0.00"
+                                               value="@item.UnitPriceInput"
+                                               @oninput="e => ChangeItemPrice(item, e)" />
+                                    </td>
+                                    <td>@Money.Format(item.UnitPrice * item.Quantity)</td>
+                                    <td><button type="button" class="btn-table btn-table-danger" @onclick="() => RemoveItem(item)">Quitar</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="quote-builder-totals">
+                    Subtotal @Money.Format(DraftSubtotal)
+                    @if (DraftDiscount > 0)
+                    {
+                        <text> · Descuento @Money.Format(DraftDiscount)</text>
+                    }
+                    · <strong>Total @Money.Format(DraftTotal)</strong>
+                </p>
+            }
+            <button type="button" class="btn-primary" disabled="@(_saving || _form.Items.Count == 0)" @onclick="CreateAsync">
+                @(_saving ? "Guardando..." : "Guardar presupuesto")
+            </button>
+        </div>
+    }
+
+    @if (Mode == QuotePanelMode.List)
+    {
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="wizard-success">@_message</div>
+    }
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando presupuestos..." />
+    }
+    else if (_plans.Count == 0)
+    {
+        <div class="maintenance-empty">
+            <p>Este paciente aún no tiene presupuestos. Use <strong>Nuevo presupuesto</strong> para armarlo en el odontograma.</p>
+        </div>
+    }
+    else
+    {
+        <div class="quote-list">
+            @foreach (var plan in _plans)
+            {
+                <article class="quote-card">
+                    <div class="clinical-section-heading">
+                        <div>
+                            <h4>@plan.Title</h4>
+                            <p>
+                                <span class="status-badge @StatusClass(plan.Status)">@StatusLabel(plan.Status)</span>
+                                · @MoneyDisplay(plan.FinalAmountDisplay, plan.FinalAmount)
+                                @if (plan.Status == "Approved" || plan.InvoicePaymentIds.Count > 0)
+                                {
+                                    <text> · Facturado @MoneyDisplay(plan.AmountBilledDisplay, plan.AmountBilled) · Cobrado @MoneyDisplay(plan.AmountCollectedOnAccountDisplay, plan.AmountCollectedOnAccount) · Por facturar @MoneyDisplay(plan.RemainingToBillDisplay, plan.RemainingToBill) · Saldo del plan @MoneyDisplay(plan.RemainingToCollectDisplay, plan.RemainingToCollect)</text>
+                                }
+                                @if (plan.ValidUntil.HasValue)
+                                {
+                                    <text> · Válido hasta @plan.ValidUntil.Value.ToString("dd/MM/yyyy")</text>
+                                }
+                                @if (plan.InvoicePaymentIds.Count > 0)
+                                {
+                                    <text> · Facturas @string.Join(", ", plan.InvoicePaymentIds.Select(id => $"#{id}"))</text>
+                                }
+                            </p>
+                        </div>
+                        <div class="quote-card-actions">
+                            <a class="btn-outline" href="@PrintUrl(plan.Id, false)" target="_blank">Imprimir</a>
+                            @if (_canEdit && plan.Status == "Draft")
+                            {
+                                <button type="button" class="btn-outline" disabled="@_saving" @onclick="() => IssueAsync(plan.Id)">Entregar</button>
+                            }
+                            @if (_canEdit && (plan.Status == "Draft" || plan.Status == "Issued"))
+                            {
+                                <button type="button" class="btn-primary" disabled="@_saving" @onclick="() => OpenAccept(plan)">Aceptar</button>
+                                <button type="button" class="btn-outline" disabled="@_saving" @onclick="() => OpenReject(plan)">Rechazar</button>
+                            }
+                            @if (_canInvoice && plan.UnbilledCompletedAmount > 0)
+                            {
+                                <button type="button" class="btn-primary" disabled="@_saving" @onclick="() => InvoiceCompletedAsync(plan.Id)">
+                                    Facturar realizados @MoneyDisplay(plan.UnbilledCompletedAmountDisplay, plan.UnbilledCompletedAmount)
+                                </button>
+                            }
+                            @if (plan.InvoicePaymentIds.Count > 0)
+                            {
+                                <a class="btn-primary" href="@($"/facturacion?pago={plan.InvoicePaymentIds[^1]}")">Ver facturas</a>
+                            }
+                            else if (plan.Status == "Approved")
+                            {
+                                <a class="btn-outline" href="@($"/facturacion?paciente={PatientId}")">Abrir facturación</a>
+                            }
+                            @if (_canEdit && plan.Status == "Approved")
+                            {
+                                <button type="button" class="btn-outline" disabled="@_saving" @onclick="() => CompleteAsync(plan.Id)">Completar</button>
+                            }
+                            <a class="btn-outline" href="@PrintUrl(plan.Id, true)" target="_blank">Documento de aceptación</a>
+                        </div>
+                    </div>
+                    <div class="data-table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Procedimiento</th>
+                                    <th>Pieza</th>
+                                    <th>Cant.</th>
+                                    <th>Total</th>
+                                    <th>Aceptación</th>
+                                    <th>Ejecución</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in plan.Items)
+                                {
+                                    <tr>
+                                        <td>@item.ProcedureName</td>
+                                        <td>@(item.ToothNumber?.ToString() ?? "—")</td>
+                                        <td>@item.Quantity</td>
+                                        <td>@MoneyDisplay(item.LineTotalDisplay, item.LineTotal)</td>
+                                        <td><span class="status-badge @ItemAcceptanceClass(item.AcceptanceStatus)">@ItemAcceptanceLabel(item.AcceptanceStatus)</span></td>
+                                        <td><span class="status-badge @ItemExecutionClass(item.ExecutionStatus)">@ItemExecutionLabel(item.ExecutionStatus)</span></td>
+                                        <td>
+                                            @if (_canEdit && plan.Status == "Approved" && item.CanAccept)
+                                            {
+                                                <button type="button" class="btn-table" disabled="@_saving" @onclick="() => AcceptItemAsync(item.Id)">Aceptar</button>
+                                            }
+                                            @if (_canEdit && plan.Status == "Approved" && item.CanReject)
+                                            {
+                                                <button type="button" class="btn-table btn-table-danger" disabled="@_saving" @onclick="() => RejectItemAsync(item.Id)">Rechazar</button>
+                                            }
+                                            @if (item.CanSchedule)
+                                            {
+                                                <a class="btn-table" href="@($"/agendar-cita?paciente={PatientId}&planItem={item.Id}")">Agendar</a>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(plan.Notes))
+                    {
+                        <p class="rx-hint">@plan.Notes</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(plan.RejectionReason))
+                    {
+                        <p class="wizard-error">Rechazo: @plan.RejectionReason</p>
+                    }
+                </article>
+            }
+        </div>
+    }
+    }
+
+    @if (Mode == QuotePanelMode.Compose && !string.IsNullOrWhiteSpace(_error))
+    {
+        <ErrorBanner Message="@_error" />
+    }
+    else if (Mode == QuotePanelMode.Compose && !string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="wizard-success">@_message</div>
+    }
+</section>
+
+@if (_acceptPlan != null)
+{
+    <div class="modal-overlay" @onclick="CloseModals">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Aceptar presupuesto</h2>
+                <button class="modal-close" @onclick="CloseModals">×</button>
+            </div>
+            <p class="modal-confirm-text">
+                Se registrará la aceptación del documento “@_acceptPlan.Title” por @MoneyDisplay(_acceptPlan.FinalAmountDisplay, _acceptPlan.FinalAmount).
+                Cada procedimiento queda pendiente hasta que lo acepte o rechace en el listado; solo los aceptados pasan al plan de tratamiento.
+            </p>
+            <div class="form-group">
+                <label>Nombre de quien acepta</label>
+                <input class="form-input" @bind="_acceptedByName" placeholder="@PatientName" />
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" disabled="@_saving" @onclick="CloseModals">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="AcceptAsync">
+                    @(_saving ? "Guardando..." : "Aceptar e imprimir")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_rejectPlan != null)
+{
+    <div class="modal-overlay" @onclick="CloseModals">
+        <div class="modal-panel modal-panel-sm" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Rechazar presupuesto</h2>
+                <button class="modal-close" @onclick="CloseModals">×</button>
+            </div>
+            <div class="form-group">
+                <label>Motivo (opcional)</label>
+                <input class="form-input" @bind="_rejectionReason" placeholder="Opcional" />
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" disabled="@_saving" @onclick="CloseModals">Cancelar</button>
+                <button class="btn-primary" disabled="@_saving" @onclick="RejectAsync">Confirmar rechazo</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public string PatientName { get; set; } = string.Empty;
+    [Parameter] public QuotePanelMode Mode { get; set; } = QuotePanelMode.List;
+    [Parameter] public bool CanViewOdontogram { get; set; }
+    [Parameter] public int? SelectedTooth { get; set; }
+    [Parameter] public IReadOnlyList<int> SelectedTeeth { get; set; } = [];
+    [Parameter] public ToothSurface SelectedSurface { get; set; } = ToothSurface.WholeTooth;
+    [Parameter] public EventCallback<bool> OnRequestCompose { get; set; }
+    [Parameter] public EventCallback OnRequestList { get; set; }
+    [Parameter] public EventCallback OnQuoteSaved { get; set; }
+
+    private readonly List<TreatmentPlanListItem> _plans = [];
+    private readonly Dictionary<int, string> _invoiceAmountByPlan = [];
+    private readonly List<TreatmentProcedureListItem> _procedures = [];
+    private CreateTreatmentPlanRequest _form = new();
+    private TreatmentPlanListItem? _acceptPlan;
+    private TreatmentPlanListItem? _rejectPlan;
+
+    private bool _loading = true;
+    private bool _saving;
+    private bool _canCreate;
+    private bool _canEdit;
+    private bool _canInvoice;
+    private bool _wholeMouth;
+
+    private string? _error;
+    private string? _message;
+    private string _discountInput = string.Empty;
+    private string _itemPriceInput = string.Empty;
+    private string? _itemNotes;
+    private string? _acceptedByName;
+    private string? _rejectionReason;
+    private DateTime _validUntilDate = DateTime.Today.AddDays(30);
+    private int _procedureId;
+    private int _itemQuantity = 1;
+    private int? _itemTooth;
+    private CoreSurface _itemSurface = CoreSurface.WholeTooth;
+
+    private decimal DraftSubtotal => _form.Items.Sum(x => x.UnitPrice * x.Quantity);
+    private decimal DraftDiscount => Money.TryParse(_discountInput, out var discount) ? discount : 0;
+    private decimal DraftTotal => Money.MaxZero(DraftSubtotal - DraftDiscount);
+
+    private List<int> SelectedToothNumbers
+    {
+        get
+        {
+            if (_wholeMouth)
+                return [];
+
+            var fromChart = SelectedTeeth.Where(FdiToothNumber.IsValid).Distinct().OrderBy(x => x).ToList();
+            if (fromChart.Count > 0)
+                return fromChart;
+            if (_itemTooth is int tooth && FdiToothNumber.IsValid(tooth))
+                return [tooth];
+            return [];
+        }
+    }
+
+    private CoreSurface ActiveSurface =>
+        CanViewOdontogram ? (CoreSurface)(int)SelectedSurface : _itemSurface;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var isDoctor = user.IsInRole("Doctor") || user.IsInRole("Admin");
+        _canCreate = PermissionService.HasPermission(user, "planes-tratamiento.create") || isDoctor;
+        _canEdit = PermissionService.HasPermission(user, "planes-tratamiento.edit") || isDoctor;
+        _canInvoice = PermissionService.HasPermission(user, "facturacion.edit")
+            || PermissionService.HasPermission(user, "planes-tratamiento.edit")
+            || isDoctor;
+        ResetForm();
+        var proceduresTask = ProcedureService.GetActiveProceduresAsync();
+        await LoadAsync();
+        var (procedures, _) = await proceduresTask;
+        _procedures.Clear();
+        _procedures.AddRange(procedures);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_itemTooth is null && SelectedTooth is > 0)
+            _itemTooth = SelectedTooth;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var result = await AuthService.WithTokenRetryAsync(
+            async () =>
+            {
+                var response = await PlanService.GetByPatientAsync(PatientId);
+                return (response.Items, response.Error);
+            },
+            AuthService.IsTokenError);
+        _plans.Clear();
+        _plans.AddRange(result.Data);
+        foreach (var plan in _plans)
+            _invoiceAmountByPlan.TryAdd(plan.Id, string.Empty);
+        _error = result.Error;
+        _loading = false;
+    }
+
+    private void ResetForm()
+    {
+        _form = new CreateTreatmentPlanRequest
+        {
+            PatientId = PatientId,
+            Title = "Presupuesto odontológico"
+        };
+        _validUntilDate = DateTime.Today.AddDays(30);
+        _discountInput = string.Empty;
+        _itemQuantity = 1;
+        _itemPriceInput = string.Empty;
+        _itemNotes = null;
+        _procedureId = 0;
+        _itemTooth = SelectedTooth;
+        _itemSurface = CoreSurface.WholeTooth;
+        _wholeMouth = false;
+    }
+
+    private void OnValidUntilChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(Convert.ToString(e.Value), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            _validUntilDate = date;
+    }
+
+    private void OnDiscountInput(ChangeEventArgs e) =>
+        _discountInput = Money.SanitizeAmountInput(Convert.ToString(e.Value));
+
+    private void OnUnitPriceInput(ChangeEventArgs e) =>
+        _itemPriceInput = Money.SanitizeAmountInput(Convert.ToString(e.Value));
+
+    private void OnProcedureChanged(ChangeEventArgs e)
+    {
+        _procedureId = int.TryParse(Convert.ToString(e.Value), out var id) ? id : 0;
+        var procedure = _procedures.FirstOrDefault(x => x.Id == _procedureId);
+        _wholeMouth = procedure?.Target == ProcedureTarget.WholeMouth;
+        if (_wholeMouth)
+        {
+            _itemTooth = null;
+            _itemSurface = CoreSurface.WholeTooth;
+        }
+    }
+
+    private void AddItem()
+    {
+        var procedure = _procedures.FirstOrDefault(x => x.Id == _procedureId);
+        if (procedure == null)
+        {
+            _error = "Seleccione un procedimiento.";
+            return;
+        }
+
+        if (!Money.TryParse(_itemPriceInput, out var price) || price <= 0)
+        {
+            _error = "Indique el precio unitario de este procedimiento.";
+            return;
+        }
+
+        var teeth = SelectedToothNumbers;
+        var surface = _wholeMouth ? (CoreSurface?)null : ActiveSurface;
+
+        if (!_wholeMouth && teeth.Count == 0)
+        {
+            var firstError = TreatmentProcedureRules.ValidateAssignment(
+                procedure.Target,
+                procedure.ToothKindFilter,
+                null,
+                surface);
+            _error = firstError ?? "Seleccione una o más piezas en el odontograma.";
+            return;
+        }
+
+        if (teeth.Count == 0)
+        {
+            var error = TreatmentProcedureRules.ValidateAssignment(
+                procedure.Target,
+                procedure.ToothKindFilter,
+                null,
+                surface);
+            if (error != null)
+            {
+                _error = error;
+                return;
+            }
+
+            _form.Items.Add(NewItem(procedure, null, null, price));
+        }
+        else
+        {
+            foreach (var tooth in teeth)
+            {
+                var error = TreatmentProcedureRules.ValidateAssignment(
+                    procedure.Target,
+                    procedure.ToothKindFilter,
+                    tooth,
+                    surface);
+                if (error != null)
+                {
+                    _error = $"Pieza {tooth}: {error}";
+                    return;
+                }
+            }
+
+            foreach (var tooth in teeth)
+                _form.Items.Add(NewItem(procedure, tooth, surface, price));
+        }
+
+        _procedureId = 0;
+        _itemQuantity = 1;
+        _itemPriceInput = string.Empty;
+        _itemNotes = null;
+        _wholeMouth = false;
+        _error = null;
+        _message = null;
+    }
+
+    private CreateTreatmentPlanItemRequest NewItem(
+        TreatmentProcedureListItem procedure, int? tooth, CoreSurface? surface, decimal price) =>
+        new()
+        {
+            ProcedureName = procedure.Name,
+            TreatmentProcedureId = procedure.Id,
+            ToothNumber = tooth,
+            ToothSurface = surface,
+            Quantity = Math.Max(1, _itemQuantity),
+            UnitPrice = price,
+            UnitPriceInput = Money.ToInput(price),
+            Notes = _itemNotes
+        };
+
+    private void RemoveItem(CreateTreatmentPlanItemRequest item) => _form.Items.Remove(item);
+
+    private void ChangeItemProcedure(CreateTreatmentPlanItemRequest item, ChangeEventArgs e)
+    {
+        var id = int.TryParse(Convert.ToString(e.Value), out var parsed) ? parsed : 0;
+        var procedure = _procedures.FirstOrDefault(x => x.Id == id);
+        if (procedure == null)
+            return;
+
+        item.TreatmentProcedureId = procedure.Id;
+        item.ProcedureName = procedure.Name;
+        if (procedure.Target == ProcedureTarget.WholeMouth)
+        {
+            item.ToothNumber = null;
+            item.ToothSurface = CoreSurface.WholeTooth;
+        }
+    }
+
+    private void ChangeItemTooth(CreateTreatmentPlanItemRequest item, ChangeEventArgs e)
+    {
+        var raw = Money.SanitizeAmountInput(Convert.ToString(e.Value));
+        item.ToothNumber = int.TryParse(raw, out var tooth) && tooth > 0 ? tooth : null;
+    }
+
+    private void ChangeItemQuantity(CreateTreatmentPlanItemRequest item, ChangeEventArgs e)
+    {
+        var raw = Money.SanitizeAmountInput(Convert.ToString(e.Value));
+        item.Quantity = int.TryParse(raw, out var quantity) && quantity > 0 ? quantity : 1;
+    }
+
+    private void ChangeItemPrice(CreateTreatmentPlanItemRequest item, ChangeEventArgs e)
+    {
+        item.UnitPriceInput = Money.SanitizeAmountInput(Convert.ToString(e.Value));
+        item.UnitPrice = Money.TryParse(item.UnitPriceInput, out var price) ? price : 0;
+    }
+
+    private async Task RequestComposeAsync(bool startFresh)
+    {
+        if (startFresh)
+            ResetForm();
+        await OnRequestCompose.InvokeAsync(startFresh);
+    }
+
+    private Task RequestListAsync() => OnRequestList.InvokeAsync();
+
+    private void ResetDraft()
+    {
+        ResetForm();
+        _error = null;
+        _message = "Borrador descartado. Puede armar un presupuesto nuevo.";
+    }
+
+    private async Task CreateAsync()
+    {
+        _saving = true;
+        _error = null;
+        _message = null;
+        _form.PatientId = PatientId;
+        _form.ValidUntil = _validUntilDate.Date;
+        _form.DiscountAmount = DraftDiscount;
+        if (string.IsNullOrWhiteSpace(_form.Title))
+            _form.Title = "Presupuesto odontológico";
+
+        foreach (var item in _form.Items)
+        {
+            if (!Money.TryParse(item.UnitPriceInput, out var price) || price <= 0)
+            {
+                _saving = false;
+                _error = $"Indique el precio de {item.ProcedureName}.";
+                return;
+            }
+
+            item.UnitPrice = price;
+            if (item.Quantity < 1)
+                item.Quantity = 1;
+        }
+
+        var result = await PlanService.CreateAsync(_form);
+        _saving = false;
+        if (!result.Success)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        _message = "Presupuesto guardado. Ya puede imprimirlo y entregarlo al paciente.";
+        ResetForm();
+        await LoadAsync();
+        await OnQuoteSaved.InvokeAsync();
+    }
+
+    private async Task IssueAsync(int id)
+    {
+        await RunAsync(() => PlanService.IssueAsync(id), "Presupuesto marcado como entregado.");
+    }
+
+    private void OpenAccept(TreatmentPlanListItem plan)
+    {
+        _acceptPlan = plan;
+        _acceptedByName = PatientName;
+        _rejectPlan = null;
+    }
+
+    private void OpenReject(TreatmentPlanListItem plan)
+    {
+        _rejectPlan = plan;
+        _rejectionReason = null;
+        _acceptPlan = null;
+    }
+
+    private void CloseModals()
+    {
+        _acceptPlan = null;
+        _rejectPlan = null;
+    }
+
+    private async Task AcceptAsync()
+    {
+        if (_acceptPlan == null)
+            return;
+
+        var planId = _acceptPlan.Id;
+        var acceptedBy = _acceptedByName;
+        _saving = true;
+        _error = null;
+        var result = await PlanService.ApproveAsync(planId, acceptedBy);
+        _saving = false;
+        if (!result.Success)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        CloseModals();
+        _message = "Presupuesto aceptado como documento. Acepte o rechace cada procedimiento; solo los aceptados pasan al plan.";
+        await LoadAsync();
+        try
+        {
+            await JS.InvokeVoidAsync("open", PrintUrl(planId, true), "_blank");
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task RejectAsync()
+    {
+        if (_rejectPlan == null)
+            return;
+        var id = _rejectPlan.Id;
+        var reason = _rejectionReason;
+        CloseModals();
+        await RunAsync(() => PlanService.RejectAsync(id, reason), "Presupuesto rechazado.");
+    }
+
+    private async Task CompleteAsync(int id) =>
+        await RunAsync(() => PlanService.CompleteAsync(id), "Presupuesto completado.");
+
+    private async Task AcceptItemAsync(int itemId) =>
+        await RunAsync(() => PlanService.AcceptItemAsync(itemId), "Procedimiento aceptado. Ya forma parte del plan de tratamiento.");
+
+    private async Task RejectItemAsync(int itemId) =>
+        await RunAsync(() => PlanService.RejectItemAsync(itemId), "Procedimiento rechazado. No pasa al plan de tratamiento.");
+
+    private async Task InvoiceCompletedAsync(int id)
+    {
+        _saving = true;
+        _error = null;
+        _message = null;
+        var result = await PlanService.InvoiceAsync(id, null, completedOnly: true);
+        _saving = false;
+        if (!result.Success)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        var paymentId = result.Plan?.InvoicePaymentId ?? result.Plan?.InvoicePaymentIds.LastOrDefault();
+        if (paymentId is > 0)
+        {
+            Navigation.NavigateTo($"/facturacion?pago={paymentId}");
+            return;
+        }
+
+        _message = "Se creó la factura de los procedimientos realizados.";
+        await LoadAsync();
+    }
+
+    private async Task InvoiceAsync(int id, bool settle)
+    {
+        _saving = true;
+        _error = null;
+        _message = null;
+        var amountInput = settle ? null : _invoiceAmountByPlan.GetValueOrDefault(id);
+        if (!settle && string.IsNullOrWhiteSpace(amountInput))
+        {
+            _saving = false;
+            _error = "Indique el monto de esta factura o use Facturar saldo.";
+            return;
+        }
+
+        var result = await PlanService.InvoiceAsync(id, amountInput);
+        _saving = false;
+        if (!result.Success)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        var paymentId = result.Plan?.InvoicePaymentId ?? result.Plan?.InvoicePaymentIds.LastOrDefault();
+        _message = paymentId is > 0
+            ? $"Factura #{paymentId} ligada a la cuenta del plan. Puede crear más facturas mientras quede saldo."
+            : "Presupuesto facturado.";
+        await LoadAsync();
+    }
+
+    private async Task RunAsync(Func<Task<(bool Success, string? Error)>> action, string success)
+    {
+        _saving = true;
+        _error = null;
+        _message = null;
+        var result = await action();
+        _saving = false;
+        if (!result.Success)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        _message = success;
+        await LoadAsync();
+    }
+
+    private string PrintUrl(int planId, bool acceptance) =>
+        $"/pacientes/{PatientId}/presupuesto/{planId}/imprimir?firma={(acceptance ? "1" : "0")}";
+
+    private static string ItemAcceptanceLabel(string status) => status switch
+    {
+        "Approved" => "Aprobado",
+        "Rejected" => "Rechazado",
+        "Pending" => "Pendiente",
+        _ => string.IsNullOrWhiteSpace(status) ? "Pendiente" : status
+    };
+
+    private static string ItemExecutionLabel(string status) => status switch
+    {
+        "Scheduled" => "Programado",
+        "InProgress" => "En proceso",
+        "Completed" => "Completado",
+        "Cancelled" => "Cancelado",
+        "Pending" => "Pendiente",
+        _ => string.IsNullOrWhiteSpace(status) ? "Pendiente" : status
+    };
+
+    private static string ItemAcceptanceClass(string status) => status switch
+    {
+        "Approved" => "status-active",
+        "Rejected" => "status-inactive",
+        _ => "status-pending"
+    };
+
+    private static string ItemExecutionClass(string status) => status switch
+    {
+        "Completed" => "status-completed",
+        "InProgress" or "Scheduled" => "status-progress",
+        "Cancelled" => "status-cancelled",
+        _ => "status-planned"
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "Draft" => "Borrador",
+        "Issued" => "Entregado",
+        "Approved" => "Aceptado",
+        "Rejected" => "Rechazado",
+        "Completed" => "Completado",
+        _ => status
+    };
+
+    private static string StatusClass(string status) => status switch
+    {
+        "Approved" or "Completed" => "status-active",
+        "Issued" => "status-pending",
+        "Rejected" => "status-inactive",
+        _ => "status-pending"
+    };
+
+    private static string MoneyDisplay(string? display, decimal amount) =>
+        string.IsNullOrWhiteSpace(display) ? Money.Format(amount) : display;
+
+    private static string SurfaceLabel(CoreSurface surface) => surface switch
+    {
+        CoreSurface.WholeTooth => "Pieza completa",
+        CoreSurface.Mesial => "Mesial",
+        CoreSurface.Distal => "Distal",
+        CoreSurface.BuccalFacial => "Vestibular / Facial",
+        CoreSurface.LingualPalatal => "Lingual / Palatal",
+        CoreSurface.OcclusalIncisal => "Oclusal / Incisal",
+        _ => surface.ToString()
+    };
+}

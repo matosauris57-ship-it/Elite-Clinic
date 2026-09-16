@@ -43,6 +43,10 @@ namespace Clinic_System.Application.Features.Appointments.Commands.Handlers
 
             request.PatientId = authorizedId;
 
+            var doctorScopeError = await ValidateScopedDoctorSelection(request.DoctorId);
+            if (doctorScopeError != null)
+                return doctorScopeError;
+
             try
             {
                 var newAppointment = await appointmentService.BookAppointmentAsync(
@@ -52,7 +56,8 @@ namespace Clinic_System.Application.Features.Appointments.Commands.Handlers
                                request.AppointmentTime,
                                cancellationToken,
                                request.TreatmentProcedureId,
-                               request.QuotedAmount
+                               request.QuotedAmount,
+                               request.PlanItemId
                            );
 
                 var appointmentDto = mapper.Map<AppointmentDTO>(newAppointment);

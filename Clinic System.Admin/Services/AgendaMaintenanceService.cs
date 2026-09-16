@@ -140,6 +140,26 @@ public class AgendaMaintenanceService
         }
     }
 
+    public async Task<(bool Success, string? Error, AppointmentAgendaItem? Appointment)> StartConsultationAsync(int appointmentId)
+    {
+        try
+        {
+            var response = await Client.PutAsJsonAsync("/api/appointments/start", new { appointmentId }, JsonOptions);
+            if (ApiConnectionMessages.IsRateLimited(response))
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), null);
+
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<AppointmentAgendaItem>>(JsonOptions);
+            if (body?.Succeeded == true)
+                return (true, null, body.Data);
+
+            return (false, FormatApiErrors(body), null);
+        }
+        catch (Exception ex)
+        {
+            return (false, FormatConnectionError(ex) ?? ex.Message, null);
+        }
+    }
+
     public async Task<(bool Success, string? Error)> CancelAsync(CancelAppointmentRequest request)
     {
         try
@@ -182,24 +202,24 @@ public class AgendaMaintenanceService
         }
     }
 
-    public async Task<(bool Success, string? Error)> CompleteAsync(CompleteAppointmentRequest request)
+    public async Task<(bool Success, string? Error, int PaymentId)> CompleteAsync(CompleteAppointmentRequest request)
     {
         try
         {
             var response = await Client.PutAsJsonAsync("/api/appointments/complete", request, JsonOptions);
             if (ApiConnectionMessages.IsRateLimited(response))
-                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response));
+                return (false, await ApiConnectionMessages.GetRateLimitMessageAsync(response), 0);
 
-            var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(JsonOptions);
+            var body = await response.Content.ReadFromJsonAsync<ApiResponse<CompleteAppointmentResult>>(JsonOptions);
 
             if (body?.Succeeded == true)
-                return (true, null);
+                return (true, null, body.Data?.PaymentId ?? 0);
 
-            return (false, FormatApiErrors(body));
+            return (false, FormatApiErrors(body), 0);
         }
         catch (Exception ex)
         {
-            return (false, FormatConnectionError(ex) ?? ex.Message);
+            return (false, FormatConnectionError(ex) ?? ex.Message, 0);
         }
     }
 

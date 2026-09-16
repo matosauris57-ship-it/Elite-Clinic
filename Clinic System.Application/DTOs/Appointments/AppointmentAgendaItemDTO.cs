@@ -13,5 +13,13 @@ namespace Clinic_System.Application.DTOs.Appointments
         public string Specialization { get; set; } = null!;
         public string AppointmentDate { get; set; } = null!;
         public string Status { get; set; } = null!;
+        public DateTime? CancelledAt { get; set; }
+        public string? CancellationChannel { get; set; }
+        public string? CancellationComment { get; set; }
+        public int? PlanItemId { get; set; }
+        public int? TreatmentPlanId { get; set; }
+        public int? PaymentId { get; set; }
+        public int? ToothNumber { get; set; }
+        public string? ProcedureName { get; set; }
     }
 }

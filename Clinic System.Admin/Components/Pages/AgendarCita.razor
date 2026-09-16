@@ -4,11 +4,15 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject AppointmentBookingService BookingService
 @inject TreatmentProcedureMaintenanceService ProcedureService
+@inject TreatmentPlanMaintenanceService PlanService
+@inject PatientMaintenanceService PatientService
 @inject AuthService AuthService
 @inject NavigationManager Navigation
 @inject WhatsAppMessageSettingsService WhatsAppSettings
 @inject EmailMessageSettingsService EmailMessageSettings
 @inject AttendanceConfirmationService AttendanceService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 
 <PageTitle>Agendar Cita — DentalCare Admin</PageTitle>
@@ -120,6 +124,7 @@ else
                 {
                     <div class="wizard-error">@_error</div>
                 }
+                <DuplicateCedulaBanner PatientId="_duplicatePatientId" />
                 @if (!string.IsNullOrEmpty(_successMessage))
                 {
                     <div class="wizard-success">@_successMessage</div>
@@ -197,11 +202,11 @@ else
                                         <div class="np-grid">
                                             <div class="form-group np-span-2">
                                                 <label>Nombre completo <span class="np-req">*</span></label>
-                                                <input class="form-input" @bind="_newPatient.FullName" placeholder="Nombre y apellidos" autocomplete="name" />
+                                                <input class="form-input" maxlength="@PatientFieldLimits.FullName" value="@_newPatient.FullName" placeholder="Nombre y apellidos" autocomplete="name" @oninput="OnNewNameInput" />
                                             </div>
                                             <div class="form-group">
                                                 <label>Cédula <span class="np-req">*</span></label>
-                                                <input class="form-input" @bind="_newPatient.NationalId" placeholder="000-0000000-0" maxlength="20" autocomplete="off" />
+                                                <input class="form-input" maxlength="@PatientFieldLimits.NationalId" value="@_newPatient.NationalId" placeholder="000-0000000-0" autocomplete="off" @oninput="OnNewCedulaInput" />
                                             </div>
                                             <div class="form-group">
                                                 <label>Fecha de nacimiento <span class="np-req">*</span></label>
@@ -233,19 +238,15 @@ else
                                         <div class="np-grid">
                                             <div class="form-group">
                                                 <label>Teléfono <span class="np-req">*</span></label>
-                                                <input class="form-input" @bind="_newPatient.Phone" placeholder="809 555 1234" inputmode="tel" autocomplete="tel" />
+                                                <input class="form-input" maxlength="@PatientFieldLimits.Phone" value="@_newPatient.Phone" placeholder="809 555 1234" inputmode="tel" autocomplete="tel" @oninput="OnNewPhoneInput" />
                                             </div>
                                             <div class="form-group">
-                                                <label>Celular</label>
-                                                <input class="form-input" @bind="_newPatient.MobilePhone" placeholder="Opcional" inputmode="tel" />
-                                            </div>
-                                            <div class="form-group np-span-2">
                                                 <label>Correo</label>
-                                                <input class="form-input" type="email" @bind="_newPatient.Email" placeholder="Opcional — paciente@correo.com" autocomplete="email" />
+                                                <input class="form-input" type="email" maxlength="@PatientFieldLimits.Email" value="@_newPatient.Email" placeholder="Opcional — paciente@correo.com" autocomplete="email" @oninput="OnNewEmailInput" />
                                             </div>
                                             <div class="form-group np-span-2">
                                                 <label>Dirección</label>
-                                                <input class="form-input" @bind="_newPatient.Address" placeholder="Calle, sector, ciudad" autocomplete="street-address" />
+                                                <input class="form-input" maxlength="@PatientFieldLimits.Address" value="@_newPatient.Address" placeholder="Calle, sector, ciudad" autocomplete="street-address" @oninput="OnNewAddressInput" />
                                             </div>
                                         </div>
                                     </section>
@@ -352,7 +353,9 @@ else
                         <div class="step-content">
                             <div class="step-head">
                                 <h2>Seleccionar Médico</h2>
-                                <p>Elige el profesional que atenderá la cita</p>
+                                <p>@(_restrictsOwnData
+                                    ? "Su cuenta solo puede agendar citas para usted."
+                                    : "Elige el profesional que atenderá la cita")</p>
                             </div>
                             <div class="doctor-list-wizard">
                                 @if (_loadingDoctors)
@@ -636,6 +639,7 @@ else
 
     private List<PatientListItem> _patients = [];
     private List<DoctorListItem> _doctors = [];
+    private bool _restrictsOwnData;
     private List<TreatmentCatalogItem> _catalogItems = [];
     private List<TimeSpan> _availableSlots = [];
     private List<TimeSpan> _allSlots = [];
@@ -663,6 +667,7 @@ else
     private string _treatmentCategoryFilter = string.Empty;
     private string _patientTab = "existing";
     private string? _error;
+    private int? _duplicatePatientId;
     private string? _successMessage;
     private string? _patientsLoadError;
     private string? _catalogLoadError;
@@ -710,10 +715,20 @@ else
         await ApplyScheduleAsync();
         await ReloadPatientsAsync();
         await ReloadCatalogAsync();
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _restrictsOwnData = PermissionService.RestrictsToOwnDoctorData(user);
         _doctors = await BookingService.GetDoctorsAsync();
+        if (_restrictsOwnData)
+        {
+            var ownId = PermissionService.GetDoctorId(user);
+            if (ownId.HasValue)
+                _doctors = _doctors.Where(d => d.Id == ownId.Value).ToList();
+            _state.SelectedDoctor ??= _doctors.FirstOrDefault();
+        }
         _loadingDoctors = false;
 
         ApplyBookingQuery();
+        await ApplyPatientAndPlanQueryAsync();
 
         if (!_state.SelectedDate.HasValue)
             _state.SelectedDate = DateTime.Today;
@@ -743,6 +758,58 @@ else
 
         if (query.TryGetValue("medico", out var medicoVal) && int.TryParse(medicoVal.ToString(), out var doctorId))
             _state.SelectedDoctor = _doctors.FirstOrDefault(d => d.Id == doctorId);
+    }
+
+    private async Task ApplyPatientAndPlanQueryAsync()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        if (!query.TryGetValue("paciente", out var pacienteVal) || !int.TryParse(pacienteVal.ToString(), out var patientId))
+            return;
+
+        var patient = _patients.FirstOrDefault(p => p.Id == patientId);
+        if (patient == null)
+        {
+            var (profile, _) = await PatientService.GetClinicalProfileAsync(patientId);
+            if (profile != null)
+            {
+                patient = new PatientListItem
+                {
+                    Id = profile.Id,
+                    FullName = profile.FullName,
+                    Phone = profile.Phone,
+                    Email = profile.Email,
+                    NationalId = profile.NationalId
+                };
+                UpsertPatient(patient);
+            }
+        }
+
+        if (patient != null)
+            SelectPatient(patient);
+
+        if (!query.TryGetValue("planItem", out var planItemVal) || !int.TryParse(planItemVal.ToString(), out var planItemId))
+            return;
+
+        var (plans, _) = await PlanService.GetByPatientAsync(patientId);
+        var item = plans.SelectMany(p => p.Items.Select(i => (Plan: p, Item: i)))
+            .FirstOrDefault(x => x.Item.Id == planItemId);
+        if (item.Item == null)
+            return;
+
+        _state.PlanItemId = item.Item.Id;
+        var procedure = _catalogItems.FirstOrDefault(t => t.Id == item.Item.TreatmentProcedureId);
+        _state.SelectedTreatment = procedure ?? new TreatmentCatalogItem
+        {
+            Id = item.Item.TreatmentProcedureId ?? 0,
+            Name = item.Item.ProcedureName,
+            Category = "Plan de tratamiento"
+        };
+        _state.QuotedPriceInput = item.Item.UnitPrice > 0
+            ? Money.ToInput(item.Item.UnitPrice)
+            : Money.ToInput(item.Item.LineTotal);
+        if (_state.CurrentStep < 3)
+            _state.CurrentStep = 3;
     }
 
     private async Task ReloadCatalogAsync()
@@ -884,6 +951,7 @@ else
     private async Task CreatePatientAsync()
     {
         _error = null;
+        _duplicatePatientId = null;
         _successMessage = null;
         if (string.IsNullOrWhiteSpace(_newPatient.FullName) || string.IsNullOrWhiteSpace(_newPatient.Phone))
         {
@@ -895,6 +963,20 @@ else
         if (string.IsNullOrWhiteSpace(nationalId))
         {
             _error = "La cédula es obligatoria.";
+            return;
+        }
+
+        var lengthError = PatientFieldLimits.ValidateLengths(_newPatient.FullName, nationalId, _newPatient.Phone, _newPatient.Email, _newPatient.Address);
+        if (lengthError != null)
+        {
+            _error = lengthError;
+            return;
+        }
+
+        _duplicatePatientId = PatientSaveErrors.FindLocalDuplicate(_patients, nationalId);
+        if (_duplicatePatientId.HasValue)
+        {
+            _error = "Esta cédula ya existe";
             return;
         }
 
@@ -912,9 +994,9 @@ else
         }
 
         var phoneDigits = new string(_newPatient.Phone.Where(char.IsDigit).ToArray());
-        if (phoneDigits.Length is < 10 or > 15)
+        if (phoneDigits.Length is < PatientFieldLimits.PhoneMinDigits or > PatientFieldLimits.PhoneMaxDigits)
         {
-            _error = "El teléfono debe tener entre 10 y 15 dígitos.";
+            _error = $"El teléfono debe tener entre {PatientFieldLimits.PhoneMinDigits} y {PatientFieldLimits.PhoneMaxDigits} dígitos.";
             return;
         }
 
@@ -929,15 +1011,16 @@ else
         _newPatient.NationalId = nationalId;
         _newPatient.Phone = phoneDigits;
         _newPatient.Age = age;
-        _newPatient.MobilePhone = string.IsNullOrWhiteSpace(_newPatient.MobilePhone) ? null : _newPatient.MobilePhone.Trim();
+        _newPatient.MobilePhone = null;
         if (string.IsNullOrWhiteSpace(_newPatient.Address)) _newPatient.Address = "Sin dirección";
 
-        var (success, error, patient) = await BookingService.CreatePatientAsync(_newPatient);
+        var (success, error, patient, duplicateId) = await BookingService.CreatePatientAsync(_newPatient);
         _creatingPatient = false;
 
         if (!success || patient == null)
         {
             _error = error ?? "Error al crear paciente.";
+            _duplicatePatientId = duplicateId;
             return;
         }
 
@@ -947,6 +1030,26 @@ else
         _state.SelectedPatient = _patients.FirstOrDefault(p => p.Id == patient.Id) ?? patient;
         _patientTab = "existing";
         _successMessage = $"Paciente \"{patient.FullName}\" registrado y seleccionado.";
+    }
+
+    private void OnNewNameInput(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString() ?? string.Empty;
+        _newPatient.FullName = PersonNameRules.Sanitize(raw, PatientFieldLimits.FullName, out _);
+        if (raw.Any(char.IsDigit))
+            _error = "El nombre no puede contener números.";
+    }
+    private void OnNewCedulaInput(ChangeEventArgs e) => _newPatient.NationalId = LimitNew(e, PatientFieldLimits.NationalId, "La cédula");
+    private void OnNewPhoneInput(ChangeEventArgs e) => _newPatient.Phone = LimitNew(e, PatientFieldLimits.Phone, "El teléfono");
+    private void OnNewEmailInput(ChangeEventArgs e) => _newPatient.Email = LimitNew(e, PatientFieldLimits.Email, "El correo");
+    private void OnNewAddressInput(ChangeEventArgs e) => _newPatient.Address = LimitNew(e, PatientFieldLimits.Address, "La dirección");
+
+    private string LimitNew(ChangeEventArgs e, int max, string label)
+    {
+        var value = PatientSaveErrors.Clamp(e.Value?.ToString(), max, out var truncated);
+        if (truncated)
+            _error = $"{label} admite máximo {max} caracteres.";
+        return value;
     }
 
     private async Task ShowExistingPatientsAsync()
@@ -1052,7 +1155,8 @@ else
                 TreatmentProcedureId = _state.SelectedTreatment?.Id,
                 QuotedAmount = _state.SelectedTreatment?.RequiresPriceAtBilling == true
                     ? null
-                    : (TryGetQuotedAmount(out var quoted) ? quoted : null)
+                    : (TryGetQuotedAmount(out var quoted) ? quoted : null),
+                PlanItemId = _state.PlanItemId
             };
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
@@ -1109,9 +1213,7 @@ else
 
     private void OpenWhatsAppConfirmation()
     {
-        var phone = !string.IsNullOrWhiteSpace(_state.SelectedPatient?.Phone)
-            ? _state.SelectedPatient.Phone
-            : _state.SelectedPatient?.MobilePhone;
+        var phone = _state.SelectedPatient?.Phone;
 
         DateTime? when = _state.SelectedDate.HasValue && _state.SelectedTime.HasValue
             ? _state.SelectedDate.Value.Date.Add(_state.SelectedTime.Value)
@@ -1223,9 +1325,7 @@ else
             return;
         }
 
-        var phone = !string.IsNullOrWhiteSpace(_state.SelectedPatient?.Phone)
-            ? _state.SelectedPatient.Phone
-            : _state.SelectedPatient?.MobilePhone;
+        var phone = _state.SelectedPatient?.Phone;
         if (!WhatsAppMessageSettingsService.TryNormalizePhone(
                 phone,
                 WhatsAppSettings.Get().DefaultCountryCode,
@@ -1305,7 +1405,8 @@ else
         _state.SelectedPatient = null;
         _state.SelectedTreatment = null;
         _state.QuotedPriceInput = string.Empty;
-        _state.SelectedDoctor = null;
+        _state.PlanItemId = null;
+        _state.SelectedDoctor = _restrictsOwnData ? _doctors.FirstOrDefault() : null;
         _state.SelectedDate = DateTime.Today;
         _state.SelectedTime = null;
         _state.Notes = string.Empty;

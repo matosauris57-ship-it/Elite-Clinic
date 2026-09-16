@@ -30,3 +30,9 @@ public class GetRecentClinicalActivityQuery : IRequest<Response<List<RecentClini
 }
 
 public class GetPeriodontalIncompleteStatsQuery : IRequest<Response<PeriodontalIncompleteStatsDTO>>;
+
+public class GetAttendanceLinkAlertsQuery : IRequest<Response<List<AttendanceLinkAlertDTO>>>
+{
+    public string Period { get; set; } = "14d";
+    public int Take { get; set; } = 20;
+}

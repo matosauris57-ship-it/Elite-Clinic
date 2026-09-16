@@ -140,7 +140,8 @@ namespace Clinic_System.Data.Seed
                     Address = "Clínica DentalCare",
                     Phone = "+52 555 100 0001",
                     Specialization = spec,
-                    ApplicationUserId = user.Id
+                    ApplicationUserId = user.Id,
+                    CanViewAllClinicData = true
                 });
             }
 

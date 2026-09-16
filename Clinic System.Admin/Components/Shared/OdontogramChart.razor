@@ -5,61 +5,73 @@
 <div class="clinical-odontogram">
     <div class="odontogram-head">
         <div>
-            <h2>Odontograma clínico</h2>
-            <p>Seleccione una o varias piezas y registre un diagnóstico.</p>
+            <p class="clinical-kicker">Expediente clínico</p>
+            <h2>@(string.IsNullOrWhiteSpace(Heading) ? "Odontograma clínico" : Heading)</h2>
+            <p>@(string.IsNullOrWhiteSpace(Hint) ? "Seleccione una o varias piezas y registre un diagnóstico." : Hint)</p>
         </div>
         <div class="odontogram-head-actions">
-            <div class="maintenance-tabs odontogram-view-tabs" role="tablist" aria-label="Vista clínica">
-                <button type="button" role="tab" aria-selected="@(_view == "odontogram")"
-                        class="toggle-btn @(_view == "odontogram" ? "active" : "")"
-                        @onclick="() => SetViewAsync(false)">Odontograma</button>
-                <button type="button" role="tab" aria-selected="@(_view == "periodontogram")"
-                        class="toggle-btn @(_view == "periodontogram" ? "active" : "")"
-                        @onclick="() => SetViewAsync(true)">Periodontograma</button>
-            </div>
+            @if (AllowPeriodontogram)
+            {
+                <div class="odontogram-seg" role="tablist" aria-label="Vista clínica">
+                    <button type="button" role="tab" aria-selected="@(_view == "odontogram")"
+                            class="odontogram-seg-btn @(_view == "odontogram" ? "is-active" : "")"
+                            @onclick="() => SetViewAsync(false)">Odontograma</button>
+                    <button type="button" role="tab" aria-selected="@(_view == "periodontogram")"
+                            class="odontogram-seg-btn @(_view == "periodontogram" ? "is-active" : "")"
+                            @onclick="() => SetViewAsync(true)">Periodontograma</button>
+                </div>
+            }
             @if (_view == "odontogram")
             {
-                <div class="maintenance-tabs odontogram-dentition-tabs" role="tablist" aria-label="Tipo de dentición">
+                <div class="odontogram-seg odontogram-seg-secondary" role="tablist" aria-label="Tipo de dentición">
                     <button type="button" role="tab" aria-selected="@(_dentition == "permanent")"
-                            class="toggle-btn @(_dentition == "permanent" ? "active" : "")"
+                            class="odontogram-seg-btn @(_dentition == "permanent" ? "is-active" : "")"
                             @onclick='() => SetDentition("permanent")'>Permanente</button>
                     <button type="button" role="tab" aria-selected="@(_dentition == "deciduous")"
-                            class="toggle-btn @(_dentition == "deciduous" ? "active" : "")"
+                            class="odontogram-seg-btn @(_dentition == "deciduous" ? "is-active" : "")"
                             @onclick='() => SetDentition("deciduous")'>Temporal</button>
                 </div>
             }
         </div>
     </div>
 
-    @if (_view == "periodontogram")
+    @if (AllowPeriodontogram && _view == "periodontogram")
     {
         <PeriodontogramChart PatientId="PatientId" PatientName="PatientName" CanEdit="CanEditPeriodontogram" />
     }
     else
     {
         <div class="odontogram-legend-block">
-            <div class="odontogram-phase-legend" aria-label="Leyenda de fases">
-                @foreach (var phase in SymbolConfig.Current.Phases)
-                {
-                    <span>
-                        <i class="phase-dot" style="@OdontogramSymbolPaint.PhaseCssVariables(phase)"></i>
-                        @OdontogramSymbolDefaults.PhaseLabel(phase.Phase)
+            <div class="odontogram-legend-panel">
+                <span class="odontogram-legend-label">Fase</span>
+                <div class="odontogram-phase-legend" aria-label="Leyenda de fases">
+                    @foreach (var phase in SymbolConfig.Current.Phases)
+                    {
+                        <span class="legend-chip">
+                            <i class="phase-dot" style="@OdontogramSymbolPaint.PhaseCssVariables(phase)"></i>
+                            @OdontogramSymbolDefaults.PhaseLabel(phase.Phase)
+                        </span>
+                    }
+                    <span class="legend-chip">
+                        <i class="phase-dot phase-empty"></i>
+                        Sin registro
                     </span>
-                }
-                <span><i class="phase-dot phase-empty"></i> Sin registro</span>
+                </div>
             </div>
-            <div class="odontogram-condition-legend" aria-label="Simbología de condiciones">
-                <strong>Simbología</strong>
-                @foreach (var row in SymbolConfig.Current.Conditions.Where(x => x.Enabled))
-                {
-                    <span>
-                        <OdontogramSymbolGlyph Symbol="row" Class="legend-symbol" />
-                        @OdontogramSymbolDefaults.ConditionLabel(row.Condition)
-                    </span>
-                }
+            <div class="odontogram-legend-panel">
+                <span class="odontogram-legend-label">Simbología</span>
+                <div class="odontogram-condition-legend" aria-label="Simbología de condiciones">
+                    @foreach (var row in SymbolConfig.Current.Conditions.Where(x => x.Enabled))
+                    {
+                        <span class="legend-chip">
+                            <OdontogramSymbolGlyph Symbol="row" Class="legend-symbol" />
+                            @OdontogramSymbolDefaults.ConditionLabel(row.Condition)
+                        </span>
+                    }
+                </div>
             </div>
+            <p class="odontogram-legend-hint">Clic selecciona una pieza. Active «Varias piezas» o use Ctrl para agregar más. En el mapa, pulse varias caras para un hallazgo MO, MOD u otra combinación.</p>
         </div>
-        <p class="odontogram-legend-hint">Clic selecciona una pieza. Active «Varias piezas» o use Ctrl para agregar más y aplicar el mismo diagnóstico.</p>
 
         <div class="odontogram-arches" aria-label="Selector de piezas dentales">
             @foreach (var arch in CurrentArches)
@@ -129,6 +141,12 @@
                             <span> · @ToothClinicalLabels.Phase(WholeToothEntry.Phase)</span>
                         }
                     </p>
+                    @if (SelectedFaceCount > 0)
+                    {
+                        <p class="surface-combo-hint">
+                            Caras activas: <strong>@SurfacesLabel(SelectedFaceList, SelectedTooth)</strong>
+                        </p>
+                    }
                     <ul class="tooth-surface-summary">
                         @foreach (var surface in ChartSurfaces)
                         {
@@ -145,12 +163,14 @@
                     <p>Elija una o varias piezas del arco para registrar un diagnóstico.</p>
                 }
                 <button type="button"
-                        class="whole-tooth-btn @(SelectedSurface == ToothSurface.WholeTooth ? "selected" : "")"
+                        class="whole-tooth-btn @(IsSurfaceSelected(ToothSurface.WholeTooth) ? "selected" : "")"
                         style="@EntryStyle(LatestForSurface(ToothSurface.WholeTooth))"
                         disabled="@(!HasSelection)"
+                        aria-pressed="@IsSurfaceSelected(ToothSurface.WholeTooth)"
                         @onclick="() => SelectSurfaceAsync(ToothSurface.WholeTooth)">
                     Pieza completa
                 </button>
+                <p class="rx-hint" style="margin-top:0.55rem">Pulse cada cara para marcarla o quitarla. Una restauración MOD se registra tocando Mesial, Oclusal y Distal.</p>
             </div>
 
             <div class="surface-detail-visuals">
@@ -164,42 +184,47 @@
                     </figure>
                 }
                 <svg class="tooth-surface-map" viewBox="0 0 300 270" role="group"
-                     aria-label="Selector interactivo de cinco superficies dentales">
+                     aria-label="Selector de superficies dentales. Puede marcar varias caras.">
                     <text x="150" y="18" text-anchor="middle">@BuccalLabel</text>
                     <text x="150" y="263" text-anchor="middle">@LingualLabel</text>
                     <text x="17" y="138" text-anchor="middle" transform="rotate(-90 17 138)">Mesial</text>
                     <text x="283" y="138" text-anchor="middle" transform="rotate(90 283 138)">Distal</text>
 
                     <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.BuccalFacial)"
-                       class="surface-zone @(SelectedSurface == ToothSurface.BuccalFacial ? "selected" : "")"
+                       aria-pressed="@IsSurfaceSelected(ToothSurface.BuccalFacial)"
+                       class="surface-zone @(IsSurfaceSelected(ToothSurface.BuccalFacial) ? "selected" : "")"
                        style="@SurfacePaintStyle(ToothSurface.BuccalFacial)"
                        @onclick="() => SelectSurfaceAsync(ToothSurface.BuccalFacial)"
                        @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.BuccalFacial)">
                         <path d="M58 50 Q150 13 242 50 L205 102 Q150 82 95 102 Z" />
                     </g>
                     <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.Mesial)"
-                       class="surface-zone @(SelectedSurface == ToothSurface.Mesial ? "selected" : "")"
+                       aria-pressed="@IsSurfaceSelected(ToothSurface.Mesial)"
+                       class="surface-zone @(IsSurfaceSelected(ToothSurface.Mesial) ? "selected" : "")"
                        style="@SurfacePaintStyle(ToothSurface.Mesial)"
                        @onclick="() => SelectSurfaceAsync(ToothSurface.Mesial)"
                        @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.Mesial)">
                         <path d="M58 50 L95 102 L95 168 L58 220 Q18 135 58 50 Z" />
                     </g>
                     <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.Distal)"
-                       class="surface-zone @(SelectedSurface == ToothSurface.Distal ? "selected" : "")"
+                       aria-pressed="@IsSurfaceSelected(ToothSurface.Distal)"
+                       class="surface-zone @(IsSurfaceSelected(ToothSurface.Distal) ? "selected" : "")"
                        style="@SurfacePaintStyle(ToothSurface.Distal)"
                        @onclick="() => SelectSurfaceAsync(ToothSurface.Distal)"
                        @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.Distal)">
                         <path d="M242 50 Q282 135 242 220 L205 168 L205 102 Z" />
                     </g>
                     <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.LingualPalatal)"
-                       class="surface-zone @(SelectedSurface == ToothSurface.LingualPalatal ? "selected" : "")"
+                       aria-pressed="@IsSurfaceSelected(ToothSurface.LingualPalatal)"
+                       class="surface-zone @(IsSurfaceSelected(ToothSurface.LingualPalatal) ? "selected" : "")"
                        style="@SurfacePaintStyle(ToothSurface.LingualPalatal)"
                        @onclick="() => SelectSurfaceAsync(ToothSurface.LingualPalatal)"
                        @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.LingualPalatal)">
                         <path d="M58 220 L95 168 Q150 188 205 168 L242 220 Q150 257 58 220 Z" />
                     </g>
                     <g role="button" tabindex="0" aria-label="@SurfaceAriaLabel(ToothSurface.OcclusalIncisal)"
-                       class="surface-zone @(SelectedSurface == ToothSurface.OcclusalIncisal ? "selected" : "")"
+                       aria-pressed="@IsSurfaceSelected(ToothSurface.OcclusalIncisal)"
+                       class="surface-zone @(IsSurfaceSelected(ToothSurface.OcclusalIncisal) ? "selected" : "")"
                        style="@SurfacePaintStyle(ToothSurface.OcclusalIncisal)"
                        @onclick="() => SelectSurfaceAsync(ToothSurface.OcclusalIncisal)"
                        @onkeydown="e => SelectSurfaceByKeyboardAsync(e, ToothSurface.OcclusalIncisal)">
@@ -217,6 +242,7 @@
     [Parameter] public int? SelectedTooth { get; set; }
     [Parameter] public IReadOnlyList<int> SelectedTeeth { get; set; } = [];
     [Parameter] public ToothSurface SelectedSurface { get; set; } = ToothSurface.WholeTooth;
+    [Parameter] public IReadOnlyList<ToothSurface> SelectedSurfaces { get; set; } = [];
     [Parameter] public EventCallback<int> SelectedToothChanged { get; set; }
     [Parameter] public EventCallback<(int Tooth, bool Additive)> ToothSelectionChanged { get; set; }
     [Parameter] public EventCallback<ToothSurface> SelectedSurfaceChanged { get; set; }
@@ -225,6 +251,9 @@
     [Parameter] public bool CanEditPeriodontogram { get; set; }
     [Parameter] public bool ShowingPeriodontogram { get; set; }
     [Parameter] public EventCallback<bool> ShowingPeriodontogramChanged { get; set; }
+    [Parameter] public bool AllowPeriodontogram { get; set; } = true;
+    [Parameter] public string? Heading { get; set; }
+    [Parameter] public string? Hint { get; set; }
 
     private string _dentition = "permanent";
     private string _view = "odontogram";
@@ -324,6 +353,20 @@
 
     private bool IsPrimaryTooth(int tooth) =>
         SelectedTooth == tooth && SelectedTeeth.Count > 1;
+
+    private bool IsSurfaceSelected(ToothSurface surface)
+    {
+        var selected = EffectiveSelectedSurfaces;
+        return selected.Contains(surface);
+    }
+
+    private IReadOnlyList<ToothSurface> EffectiveSelectedSurfaces =>
+        SelectedSurfaces.Count > 0 ? SelectedSurfaces : [SelectedSurface];
+
+    private IReadOnlyList<ToothSurface> SelectedFaceList =>
+        ChartSurfaces.Where(IsSurfaceSelected).ToList();
+
+    private int SelectedFaceCount => SelectedFaceList.Count;
 
     private async Task SelectSurfaceAsync(ToothSurface surface)
     {
@@ -426,6 +469,21 @@
             ToothSurface.OcclusalIncisal => FdiToothNumber.IsAnterior(toothNumber) ? "Incisal" : "Oclusal",
             _ => SurfaceLabel(surface)
         };
+    }
+
+    public static string SurfacesLabel(IReadOnlyList<ToothSurface> surfaces, int? toothNumber = null)
+    {
+        var faces = ChartSurfaces.Where(surfaces.Contains).ToList();
+        if (faces.Count == 0)
+            return SurfaceLabel(ToothSurface.WholeTooth);
+        if (faces.Count == 1)
+            return toothNumber is int tooth ? SurfaceLabelFor(tooth, faces[0]) : SurfaceLabel(faces[0]);
+
+        var code = ToothSurfaceSelection.CombinationCode(
+            faces.Select(s => (Clinic_System.Core.Enums.ToothSurface)(int)s),
+            toothNumber);
+        var names = faces.Select(s => toothNumber is int tooth ? SurfaceLabelFor(tooth, s) : SurfaceLabel(s));
+        return string.IsNullOrWhiteSpace(code) ? string.Join(" · ", names) : $"{code} · {string.Join(" · ", names)}";
     }
 
     private sealed record ArchDefinition(

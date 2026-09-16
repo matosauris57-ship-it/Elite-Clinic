@@ -4,5 +4,6 @@
     {
         public DateTime? StartDate { get; set; } // ممكن يكون بداية الأسبوع/اليوم
         public DateTime? EndDate { get; set; }   // نهاية الأسبوع/اليوم
+        public int? DoctorId { get; set; }
     }
 }

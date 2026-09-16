@@ -1,0 +1,250 @@
+@page "/configuracion/recuperacion-contrasena"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "recuperacion-contrasena.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject PasswordRecoveryMaintenanceService RecoveryService
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Recuperación de contraseña — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <h1>Recuperación de contraseña</h1>
+            <p>Solicitudes enviadas desde el inicio de sesión. Con el permiso «Cambiar contraseña» puede asignar una clave nueva y marcar la solicitud como atendida.</p>
+        </div>
+        <div class="command-actions">
+            <button class="btn-outline" disabled="@_loading" @onclick="ReloadAsync">
+                <Icon Name="refresh-cw" Class="btn-svg" />
+                Actualizar
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_loadError))
+    {
+        <ErrorBanner Message="@_loadError" OnRetry="ReloadAsync" />
+    }
+    @if (!string.IsNullOrEmpty(_actionMessage))
+    {
+        <div class="@(_actionSuccess ? "wizard-success" : "wizard-error")">@_actionMessage</div>
+    }
+
+    <div class="alert-tabs recovery-tabs">
+        <button type="button" class="alert-tab @(_statusFilter == "Pending" ? "active" : "")" @onclick='() => FilterAsync("Pending")'>
+            Pendientes (@_pendingCount)
+        </button>
+        <button type="button" class="alert-tab @(_statusFilter == "Resolved" ? "active" : "")" @onclick='() => FilterAsync("Resolved")'>
+            Atendidas
+        </button>
+        <button type="button" class="alert-tab @(_statusFilter == "Dismissed" ? "active" : "")" @onclick='() => FilterAsync("Dismissed")'>
+            Descartadas
+        </button>
+        <button type="button" class="alert-tab @(string.IsNullOrEmpty(_statusFilter) ? "active" : "")" @onclick='() => FilterAsync("")'>
+            Todas
+        </button>
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando solicitudes..." />
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="maintenance-empty">
+            <p>No hay solicitudes en esta vista.</p>
+        </div>
+    }
+    else
+    {
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Cuándo</th>
+                        <th>Indicó</th>
+                        <th>Usuario en el sistema</th>
+                        <th>Comentario</th>
+                        <th>Estado</th>
+                        @if (_canEdit || _canResetPassword)
+                        {
+                            <th class="col-actions">Acciones</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _items)
+                    {
+                        <tr>
+                            <td>@item.RequestedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@item.Identifier</td>
+                            <td>
+                                @if (item.UserMatched)
+                                {
+                                    <strong>@(item.UserDisplayName ?? item.UserName)</strong>
+                                    <div class="field-hint">@(item.UserType) · @(item.UserEmail ?? item.UserName)</div>
+                                }
+                                else
+                                {
+                                    <span class="field-hint">No coincide con una cuenta</span>
+                                }
+                            </td>
+                            <td>@(string.IsNullOrWhiteSpace(item.Comment) ? "—" : item.Comment)</td>
+                            <td>
+                                <span class="status-badge @StatusClass(item.Status)">@StatusLabel(item.Status)</span>
+                                @if (!string.IsNullOrWhiteSpace(item.ResolvedByName))
+                                {
+                                    <div class="field-hint">@item.ResolvedByName</div>
+                                }
+                            </td>
+                            @if (_canEdit || _canResetPassword)
+                            {
+                                <td class="col-actions">
+                                    @if (item.Status == "Pending")
+                                    {
+                                        @if (_canResetPassword && item.UserMatched && !string.IsNullOrWhiteSpace(item.UserId))
+                                        {
+                                            <button class="btn-table" disabled="@_saving" @onclick="() => OpenResetPassword(item)">Contraseña</button>
+                                        }
+                                        @if (_canEdit)
+                                        {
+                                            <button class="btn-table" disabled="@_saving" @onclick="() => ResolveAsync(item, false)">Atendida</button>
+                                            <button class="btn-table" disabled="@_saving" @onclick="() => ResolveAsync(item, true)">Descartar</button>
+                                        }
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<ResetStaffPasswordModal Visible="_showResetPassword"
+                         UserId="@_passwordUserId"
+                         DisplayName="@_passwordDisplayName"
+                         OnClose="CloseResetPassword"
+                         OnSaved="OnPasswordSavedAsync" />
+
+@code {
+    private readonly List<PasswordRecoveryRequestItem> _items = [];
+    private string _statusFilter = "Pending";
+    private int _pendingCount;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _canEdit;
+    private bool _canResetPassword;
+    private bool _showResetPassword;
+    private string? _passwordUserId;
+    private string _passwordDisplayName = string.Empty;
+    private int? _passwordRecoveryId;
+    private string? _loadError;
+    private string? _actionMessage;
+    private bool _actionSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canEdit = PermissionService.HasPermission(user, "recuperacion-contrasena.edit");
+        _canResetPassword = PermissionService.HasPermission(user, "usuarios.reset-password")
+            || PermissionService.HasPermission(user, "recuperacion-contrasena.reset-password");
+        await ReloadAsync();
+    }
+
+    private async Task FilterAsync(string status)
+    {
+        _statusFilter = status;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        var (list, error) = await RecoveryService.GetListAsync(string.IsNullOrEmpty(_statusFilter) ? null : _statusFilter);
+        _items.Clear();
+        _items.AddRange(list.Items);
+        _pendingCount = list.PendingCount;
+        _loadError = error;
+        _loading = false;
+    }
+
+    private void OpenResetPassword(PasswordRecoveryRequestItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.UserId))
+            return;
+
+        _passwordUserId = item.UserId;
+        _passwordDisplayName = item.UserDisplayName ?? item.UserEmail ?? item.UserName ?? item.Identifier;
+        _passwordRecoveryId = item.Id;
+        _showResetPassword = true;
+        _actionMessage = null;
+    }
+
+    private void CloseResetPassword()
+    {
+        _showResetPassword = false;
+        _passwordUserId = null;
+        _passwordDisplayName = string.Empty;
+        _passwordRecoveryId = null;
+    }
+
+    private async Task OnPasswordSavedAsync()
+    {
+        var recoveryId = _passwordRecoveryId;
+        CloseResetPassword();
+        if (recoveryId.HasValue && _canEdit)
+        {
+            var (success, error) = await RecoveryService.ResolveAsync(recoveryId.Value, false, "Contraseña restablecida.");
+            if (!success)
+            {
+                _actionMessage = error;
+                _actionSuccess = false;
+                await ReloadAsync();
+                return;
+            }
+        }
+
+        _actionMessage = _canEdit
+            ? "Contraseña actualizada. La solicitud quedó como atendida."
+            : "Contraseña actualizada. El usuario ya puede iniciar sesión.";
+        _actionSuccess = true;
+        await ReloadAsync();
+    }
+
+    private async Task ResolveAsync(PasswordRecoveryRequestItem item, bool dismiss)
+    {
+        _saving = true;
+        _actionMessage = null;
+        var (success, error) = await RecoveryService.ResolveAsync(item.Id, dismiss, null);
+        _saving = false;
+        if (!success)
+        {
+            _actionMessage = error;
+            _actionSuccess = false;
+            return;
+        }
+
+        _actionMessage = dismiss ? "Solicitud descartada." : "Solicitud marcada como atendida.";
+        _actionSuccess = true;
+        await ReloadAsync();
+    }
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "Pending" => "Pendiente",
+        "Resolved" => "Atendida",
+        "Dismissed" => "Descartada",
+        _ => status
+    };
+
+    private static string StatusClass(string status) => status switch
+    {
+        "Pending" => "status-pending",
+        "Resolved" => "status-active",
+        "Dismissed" => "status-inactive",
+        _ => ""
+    };
+}

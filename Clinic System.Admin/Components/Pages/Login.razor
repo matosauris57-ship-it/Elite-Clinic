@@ -5,61 +5,154 @@
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ClinicProfileService ClinicProfile
+@inject PermissionService PermissionService
 
 <PageTitle>Iniciar sesión — @_clinic.Name</PageTitle>
 
-<div class="login-card">
-    <div class="login-brand">
-        <div class="login-logo">
-            @if (!string.IsNullOrWhiteSpace(_clinic.DisplayLogoUrl))
+<div class="login-stage">
+    <aside class="login-showcase" aria-hidden="false">
+        <div class="login-showcase-glow"></div>
+        <div class="login-showcase-inner">
+            <div class="login-showcase-brand">
+                <div class="login-logo login-logo-lg">
+                    @if (!string.IsNullOrWhiteSpace(_clinic.DisplayLogoUrl))
+                    {
+                        <img class="login-logo-image" src="@_clinic.DisplayLogoUrl" alt="" />
+                    }
+                    else
+                    {
+                        <Icon Name="tooth" Class="login-logo-svg" StrokeWidth="1.6" />
+                    }
+                </div>
+                <p class="login-kicker">Clínica dental</p>
+                <h1>@_clinic.Name</h1>
+                <p class="login-showcase-copy">@(string.IsNullOrWhiteSpace(_clinic.Slogan) ? "Panel clínico para agenda, ficha del paciente y cobro en un solo lugar." : _clinic.Slogan)</p>
+            </div>
+            <ul class="login-highlights">
+                <li>
+                    <span class="login-highlight-icon"><Icon Name="calendar" /></span>
+                    <span>Agenda y sala de espera</span>
+                </li>
+                <li>
+                    <span class="login-highlight-icon"><Icon Name="tooth" /></span>
+                    <span>Odontograma y ficha clínica</span>
+                </li>
+                <li>
+                    <span class="login-highlight-icon"><Icon Name="credit-card" /></span>
+                    <span>Facturación y cobros</span>
+                </li>
+            </ul>
+            @if (!string.IsNullOrWhiteSpace(_clinic.Phone) || !string.IsNullOrWhiteSpace(_clinic.Address))
             {
-                <img class="login-logo-image" src="@_clinic.DisplayLogoUrl" alt="" />
-            }
-            else
-            {
-                <Icon Name="tooth" Class="login-logo-svg" StrokeWidth="1.6" />
+                <p class="login-showcase-meta">
+                    @if (!string.IsNullOrWhiteSpace(_clinic.Phone))
+                    {
+                        <span>@_clinic.Phone</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_clinic.Address))
+                    {
+                        <span>@_clinic.Address</span>
+                    }
+                </p>
             }
         </div>
-        <h1>@_clinic.Name</h1>
-        <p>@(string.IsNullOrWhiteSpace(_clinic.Slogan) ? "Panel de administración" : _clinic.Slogan)</p>
-    </div>
+    </aside>
 
-    <EditForm Model="_model" OnValidSubmit="HandleLoginAsync" class="login-form">
-        <DataAnnotationsValidator />
+    <section class="login-panel">
+        <div class="login-panel-head">
+            <p class="login-kicker">@(_showForgot ? "Ayuda de acceso" : "Personal autorizado")</p>
+            <h2>@(_showForgot ? "Olvidé mi contraseña" : "Iniciar sesión")</h2>
+            <p>@(_showForgot
+                ? "El equipo con permiso verá la solicitud en el sistema y podrá restablecer su acceso."
+                : "Entre con el correo o usuario de la clínica.")</p>
+        </div>
 
-        @if (!string.IsNullOrEmpty(_error))
+        @if (!_showForgot)
         {
-            <div class="login-error">@_error</div>
+            <EditForm Model="_model" OnValidSubmit="HandleLoginAsync" class="login-form">
+                <DataAnnotationsValidator />
+
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="login-error" role="alert">@_error</div>
+                }
+
+                <div class="form-group">
+                    <label for="email">Correo o usuario</label>
+                    <div class="login-field">
+                        <Icon Name="mail" Class="login-field-icon" />
+                        <InputText id="email" @bind-Value="_model.Email" class="form-input" placeholder="ej. recepcion@clinica.com" autocomplete="username" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <div class="login-field">
+                        <Icon Name="lock" Class="login-field-icon" />
+                        <input id="password" type="@(_showPassword ? "text" : "password")" class="form-input" @bind="_model.Password" placeholder="••••••••" autocomplete="current-password" />
+                        <button type="button" class="login-field-action" title="@(_showPassword ? "Ocultar contraseña" : "Mostrar contraseña")" @onclick="TogglePassword">
+                            <Icon Name="@(_showPassword ? "eye-off" : "eye")" />
+                        </button>
+                    </div>
+                </div>
+
+                <button type="button" class="login-forgot-toggle login-forgot-inline" @onclick="OpenForgot">Olvidé mi contraseña</button>
+
+                <button type="submit" class="login-btn" disabled="@_loading">
+                    @(_loading ? "Entrando..." : "Entrar al panel")
+                </button>
+            </EditForm>
+        }
+        else
+        {
+            <div class="login-form">
+                @if (!string.IsNullOrEmpty(_forgotSuccess))
+                {
+                    <div class="login-success" role="status">@_forgotSuccess</div>
+                }
+                @if (!string.IsNullOrEmpty(_forgotError))
+                {
+                    <div class="login-error" role="alert">@_forgotError</div>
+                }
+                <div class="form-group">
+                    <label for="forgot-id">Correo o usuario</label>
+                    <div class="login-field">
+                        <Icon Name="mail" Class="login-field-icon" />
+                        <input id="forgot-id" class="form-input" @bind="_forgotIdentifier" placeholder="ej. recepcion@clinica.com" autocomplete="username" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="forgot-note">Comentario (opcional)</label>
+                    <textarea id="forgot-note" class="form-input login-textarea" rows="3" maxlength="500" @bind="_forgotComment" placeholder="Ej. no recuerdo la clave del panel."></textarea>
+                </div>
+                <div class="login-forgot-actions">
+                    <button type="button" class="btn-outline login-secondary-btn" disabled="@_forgotLoading" @onclick="CloseForgot">Volver</button>
+                    <button type="button" class="login-btn" disabled="@_forgotLoading" @onclick="SubmitForgotAsync">
+                        @(_forgotLoading ? "Enviando..." : "Enviar al sistema")
+                    </button>
+                </div>
+            </div>
         }
 
-        <div class="form-group">
-            <label for="email">Correo electrónico</label>
-            <InputText id="email" @bind-Value="_model.Email" class="form-input" placeholder="admin@clinic.com" />
-        </div>
-
-        <div class="form-group">
-            <label for="password">Contraseña</label>
-            <InputText id="password" type="password" @bind-Value="_model.Password" class="form-input" placeholder="••••••••" />
-        </div>
-
-        <button type="submit" class="login-btn" disabled="@_loading">
-            @(_loading ? "Iniciando sesión..." : "Iniciar sesión")
-        </button>
-    </EditForm>
-
-    @if (_loading)
-    {
-        <AnimatedLoader Overlay="true" Message="Iniciando sesión..." />
-    }
-
-    <p class="login-hint">Credenciales de prueba: admin@clinic.com / Admin@123</p>
+        @if (_loading)
+        {
+            <AnimatedLoader Overlay="true" Message="Iniciando sesión..." />
+        }
+    </section>
 </div>
 
 @code {
     private readonly LoginModel _model = new();
     private string? _error;
     private bool _loading;
+    private bool _showPassword;
     private ClinicProfile _clinic = new();
+    private bool _showForgot;
+    private bool _forgotLoading;
+    private string _forgotIdentifier = string.Empty;
+    private string _forgotComment = string.Empty;
+    private string? _forgotError;
+    private string? _forgotSuccess;
 
     protected override async Task OnInitializedAsync()
     {
@@ -67,9 +160,11 @@
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         if (authState.User.Identity?.IsAuthenticated == true)
         {
-            Navigation.NavigateTo("/");
+            Navigation.NavigateTo(PermissionService.ResolveLandingPath(authState.User));
         }
     }
+
+    private void TogglePassword() => _showPassword = !_showPassword;
 
     private async Task HandleLoginAsync()
     {
@@ -88,6 +183,46 @@
         {
             _error = error;
         }
+    }
+
+    private void OpenForgot()
+    {
+        _showForgot = true;
+        _forgotError = null;
+        _forgotSuccess = null;
+        if (string.IsNullOrWhiteSpace(_forgotIdentifier))
+            _forgotIdentifier = _model.Email;
+    }
+
+    private void CloseForgot()
+    {
+        _showForgot = false;
+        _forgotError = null;
+        _forgotSuccess = null;
+    }
+
+    private async Task SubmitForgotAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_forgotIdentifier))
+        {
+            _forgotError = "Indique su correo o usuario.";
+            _forgotSuccess = null;
+            return;
+        }
+
+        _forgotLoading = true;
+        _forgotError = null;
+        _forgotSuccess = null;
+        var (success, error, message) = await AuthService.RequestPasswordRecoveryAsync(_forgotIdentifier, _forgotComment);
+        _forgotLoading = false;
+        if (!success)
+        {
+            _forgotError = error;
+            return;
+        }
+
+        _forgotSuccess = message ?? "Solicitud enviada al sistema.";
+        _forgotComment = string.Empty;
     }
 
     private class LoginModel

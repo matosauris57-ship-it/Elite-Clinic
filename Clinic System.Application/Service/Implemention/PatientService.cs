@@ -16,16 +16,31 @@
         }
 
         public async Task<List<Patient?>> GetPatientsListForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default)
+            => await GetPatientsListForAdminAsync(includeInactive, attendedByDoctorId: null, cancellationToken);
+
+        public async Task<List<Patient?>> GetPatientsListForAdminAsync(bool includeInactive, int? attendedByDoctorId, CancellationToken cancellationToken = default)
         {
             return (await unitOfWork.PatientsRepository
-                .GetAllForAdminAsync(includeInactive, cancellationToken)).ToList();
+                .GetAllForAdminAsync(includeInactive, attendedByDoctorId, cancellationToken)).ToList();
         }
 
-        public async Task<PagedResult<Patient?>> GetPatientsListPagingAsync(int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<PagedResult<Patient>> GetPatientsListPagingAsync(
+            int pageNumber,
+            int pageSize,
+            string? search = null,
+            string status = "all",
+            int? attendedByDoctorId = null,
+            CancellationToken cancellationToken = default)
         {
-            var (items, totalCount) = await unitOfWork.PatientsRepository.GetPaginatedAsync(pageNumber, pageSize, cancellationToken: cancellationToken);
+            var (items, totalCount) = await unitOfWork.PatientsRepository.GetFilteredForAdminPagedAsync(
+                pageNumber,
+                pageSize,
+                search,
+                status,
+                attendedByDoctorId,
+                cancellationToken);
 
-            return new PagedResult<Patient>(items, totalCount, pageNumber, pageSize);
+            return new PagedResult<Patient>(items, totalCount, pageNumber < 1 ? 1 : pageNumber, pageSize < 1 ? 20 : pageSize);
         }
 
         public async Task<Patient?> GetPatientWithAppointmentsByIdAsync(int id, CancellationToken cancellationToken = default)

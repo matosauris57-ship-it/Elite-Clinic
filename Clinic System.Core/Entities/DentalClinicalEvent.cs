@@ -14,4 +14,17 @@ public class DentalClinicalEvent
     public virtual string? ReferenceId { get; set; }
     public virtual string? RecordedByUserId { get; set; }
     public virtual DateTime RecordedAt { get; set; }
+    public virtual bool IsVoided { get; set; }
+    public virtual DateTime? VoidedAt { get; set; }
+    public virtual string? VoidedByUserId { get; set; }
+
+    public void Void(string? voidedByUserId)
+    {
+        if (IsVoided)
+            return;
+
+        IsVoided = true;
+        VoidedAt = DateTime.UtcNow;
+        VoidedByUserId = voidedByUserId;
+    }
 }

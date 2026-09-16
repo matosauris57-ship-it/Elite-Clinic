@@ -30,6 +30,7 @@ namespace Clinic_System.Application.Features.Patients.Commands.Handlers
                 patient.ApplicationUserId = null;
                 patient.Email = ContactEmail.NormalizeOrNull(request.Email);
                 patient.NationalId = string.IsNullOrWhiteSpace(request.NationalId) ? null : request.NationalId.Trim();
+                patient.MobilePhone = null;
 
                 await patientService.CreatePatientAsync(patient, cancellationToken);
                 var result = await unitOfWork.SaveAsync();

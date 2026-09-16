@@ -87,7 +87,9 @@ public enum DentalClinicalEventType
     Treatment = 2,
     ClinicalNote = 3,
     PeriodontalExam = 4,
-    Prescription = 5
+    Prescription = 5,
+    Attachment = 6,
+    InformedConsent = 7
 }
 
 public enum BridgeRole
@@ -116,6 +118,8 @@ public class ToothChartEntry
     public int? AppointmentId { get; set; }
     public string? RecordedByUserId { get; set; }
     public DateTime RecordedAt { get; set; }
+    public bool IsVoided { get; set; }
+    public DateTime? VoidedAt { get; set; }
 }
 
 public class DentalClinicalEvent
@@ -132,6 +136,9 @@ public class DentalClinicalEvent
     public string? RecordedByUserId { get; set; }
     public string? RecordedByUserName { get; set; }
     public DateTime RecordedAt { get; set; }
+    public long? ToothChartEntryId { get; set; }
+    public bool IsVoided { get; set; }
+    public DateTime? VoidedAt { get; set; }
 }
 
 public class CreateToothChartEntryRequest
@@ -150,6 +157,7 @@ public class CreateToothChartEntryRequest
     public string? Notes { get; set; }
     public int? AppointmentId { get; set; }
     public List<int> ToothNumbers { get; set; } = [];
+    public List<ToothSurface> Surfaces { get; set; } = [];
     public Guid? BridgeSpanId { get; set; }
     public List<BridgeUnitInput> BridgeUnits { get; set; } = [];
 }
@@ -159,6 +167,7 @@ public class CreateToothChartEntriesBatchRequest
     public int PatientId { get; set; }
     public List<int> ToothNumbers { get; set; } = [];
     public ToothSurface Surface { get; set; }
+    public List<ToothSurface> Surfaces { get; set; } = [];
     public ToothChartPhase Phase { get; set; }
     public ToothCondition Condition { get; set; }
     public RestorationMaterial? RestorationMaterial { get; set; }

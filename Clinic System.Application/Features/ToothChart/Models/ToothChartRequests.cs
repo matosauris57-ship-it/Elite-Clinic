@@ -29,6 +29,7 @@ public class CreateToothChartEntryCommand : IRequest<Response<ToothChartEntryDTO
     public string? Notes { get; set; }
     public int? AppointmentId { get; set; }
     public List<int> ToothNumbers { get; set; } = [];
+    public List<ToothSurface> Surfaces { get; set; } = [];
     public Guid? BridgeSpanId { get; set; }
     public List<BridgeUnitInput> BridgeUnits { get; set; } = [];
 }
@@ -38,6 +39,7 @@ public class CreateToothChartEntriesBatchCommand : IRequest<Response<List<ToothC
     public int PatientId { get; set; }
     public List<int> ToothNumbers { get; set; } = [];
     public ToothSurface Surface { get; set; }
+    public List<ToothSurface> Surfaces { get; set; } = [];
     public ToothChartPhase Phase { get; set; }
     public ToothCondition Condition { get; set; }
     public RestorationMaterial? RestorationMaterial { get; set; }
@@ -56,4 +58,29 @@ public class BridgeUnitInput
 {
     public int ToothNumber { get; set; }
     public BridgeRole Role { get; set; }
+}
+
+public class GetToothChartEntryQuery : IRequest<Response<ToothChartEntryDTO>>
+{
+    public long Id { get; set; }
+}
+
+public class VoidToothChartEntryCommand : IRequest<Response<string>>
+{
+    public long Id { get; set; }
+}
+
+public class UpdateToothChartEntryCommand : IRequest<Response<ToothChartEntryDTO>>
+{
+    public long Id { get; set; }
+    public ToothSurface Surface { get; set; }
+    public ToothChartPhase Phase { get; set; }
+    public ToothCondition Condition { get; set; }
+    public RestorationMaterial? RestorationMaterial { get; set; }
+    public CariesType? CariesType { get; set; }
+    public IcdasCode? Icdas { get; set; }
+    public ToothSeverity? Severity { get; set; }
+    public string? ClinicalDiagnosis { get; set; }
+    public string? ProposedTreatment { get; set; }
+    public string? Notes { get; set; }
 }

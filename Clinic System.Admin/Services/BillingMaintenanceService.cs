@@ -194,11 +194,17 @@ public class BillingMaintenanceService
     public Task<(bool Success, string? Error)> CollectPaymentAsync(int paymentId, CollectPaymentRequest request) =>
         SendPaymentTransitionAsync($"/api/payment/{paymentId}/collect", request);
 
-    public Task<(bool Success, string? Error)> RefundPaymentAsync(int paymentId, string? reason) =>
-        SendPaymentTransitionAsync($"/api/payment/{paymentId}/refund", new PaymentReasonRequest { Reason = reason });
+    public Task<(bool Success, string? Error)> RefundPaymentAsync(int paymentId, string? reason, string? amountInput = null) =>
+        SendPaymentTransitionAsync($"/api/payment/{paymentId}/refund", new PaymentReasonRequest { Reason = reason, AmountInput = amountInput });
 
     public Task<(bool Success, string? Error)> CancelPaymentAsync(int paymentId, string? reason) =>
         SendPaymentTransitionAsync($"/api/payment/{paymentId}/cancel", new PaymentReasonRequest { Reason = reason });
+
+    public Task<(bool Success, string? Error)> ApplyDiscountAsync(int paymentId, string? discountInput) =>
+        SendPaymentTransitionAsync($"/api/payment/{paymentId}/discount", new InvoiceDiscountRequest { DiscountAmountInput = discountInput });
+
+    public Task<(bool Success, string? Error)> VoidReceiptAsync(int paymentId, int receiptId, string? reason) =>
+        SendPaymentTransitionAsync($"/api/payment/{paymentId}/receipts/{receiptId}/void", new PaymentReasonRequest { Reason = reason });
 
     private async Task<(bool Success, string? Error)> SendPaymentTransitionAsync<T>(string url, T body)
     {
@@ -240,6 +246,8 @@ public class BillingMaintenanceService
             query.Add($"Method={Uri.EscapeDataString(filters.Method)}");
         if (!string.IsNullOrWhiteSpace(filters.Status))
             query.Add($"Status={Uri.EscapeDataString(filters.Status)}");
+        if (filters.OutstandingOnly)
+            query.Add("OutstandingOnly=true");
         if (!string.IsNullOrWhiteSpace(filters.Search))
             query.Add($"Search={Uri.EscapeDataString(filters.Search.Trim())}");
         if (filters.PatientId is > 0)

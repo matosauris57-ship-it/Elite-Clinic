@@ -1,0 +1,375 @@
+@using System.Globalization
+@inject ClinicProfileService ClinicProfile
+
+<article class="invoice-document reports-document">
+    <header class="invoice-letterhead">
+        <div class="invoice-brand">
+            @if (!string.IsNullOrWhiteSpace(Clinic.DisplayLogoUrl))
+            {
+                <img class="invoice-logo" src="@Clinic.DisplayLogoUrl" alt="@Clinic.Name" />
+            }
+            <div class="invoice-brand-copy">
+                <h1>@Clinic.Name</h1>
+                <p class="invoice-contact">
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Address)) { <span>@Clinic.Address</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Phone)) { <span>Tel. @Clinic.Phone</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.Email)) { <span>@Clinic.Email</span> }
+                    @if (!string.IsNullOrWhiteSpace(Clinic.TaxId)) { <span>RNC @Clinic.TaxId</span> }
+                </p>
+            </div>
+        </div>
+        <aside class="invoice-meta">
+            <p class="invoice-kicker">@(IsAllSections ? "Reportes de clínica" : SectionTitle)</p>
+            <p class="invoice-meta-line">Período @PeriodLabel</p>
+            <p class="invoice-meta-line">Generado @DateTime.Now.ToString("dd/MM/yyyy HH:mm", Culture)</p>
+        </aside>
+    </header>
+
+    @if (Show("resumen"))
+    {
+        <section class="report-print-section">
+            <h2>Resumen del período</h2>
+            <div class="report-print-kpis">
+                <div><strong>@Data.Attendance.Total</strong><span>Citas</span></div>
+                <div><strong>@Data.Revenue.TotalDisplay</strong><span>Ingresos cobrados</span></div>
+                <div><strong>@Data.Revenue.OutstandingBalanceDisplay</strong><span>Por cobrar</span></div>
+                <div><strong>@Data.Patients.NewInPeriod</strong><span>Pacientes nuevos</span></div>
+            </div>
+        </section>
+    }
+
+    @if (Show("asistencia"))
+    {
+        <section class="report-print-section">
+            <h2>Agenda y asistencia</h2>
+            <div class="report-print-kpis">
+                <div><strong>@Data.Attendance.Completed</strong><span>Completadas</span></div>
+                <div><strong>@Data.Attendance.Confirmed</strong><span>Confirmadas</span></div>
+                <div><strong>@Data.Attendance.Cancelled</strong><span>Canceladas</span></div>
+                <div><strong>@Data.Attendance.NoShow</strong><span>No-show</span></div>
+                <div><strong>@Data.Attendance.AttendanceRate.ToString("0.0")%</strong><span>Tasa asistencia</span></div>
+                <div><strong>@Data.Attendance.NoShowRate.ToString("0.0")%</strong><span>Tasa no-show</span></div>
+            </div>
+            <table class="invoice-lines">
+                <thead>
+                    <tr>
+                        <th>Médico</th>
+                        <th>Total</th>
+                        <th>Completadas</th>
+                        <th>Confirmadas</th>
+                        <th>Canceladas</th>
+                        <th>No-show</th>
+                        <th>Asistencia</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Data.Attendance.ByDoctor.Count == 0)
+                    {
+                        <tr><td colspan="7">Sin citas en el período.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in Data.Attendance.ByDoctor)
+                        {
+                            <tr>
+                                <td>@row.DoctorName</td>
+                                <td>@row.Total</td>
+                                <td>@row.Completed</td>
+                                <td>@row.Confirmed</td>
+                                <td>@row.Cancelled</td>
+                                <td>@row.NoShow</td>
+                                <td>@row.AttendanceRate.ToString("0.0")%</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    @if (Show("ingresos"))
+    {
+        <section class="report-print-section">
+            <h2>Ingresos</h2>
+            <div class="report-print-kpis">
+                <div><strong>@Data.Revenue.TotalDisplay</strong><span>Total cobrado</span></div>
+                <div><strong>@Data.Revenue.CashDisplay</strong><span>Efectivo</span></div>
+                <div><strong>@Data.Revenue.CardDisplay</strong><span>Tarjeta</span></div>
+                <div><strong>@Data.Revenue.InstaPayDisplay</strong><span>InstaPay</span></div>
+                <div><strong>@Data.Revenue.TransactionCount</strong><span>Transacciones</span></div>
+                <div><strong>@Data.Revenue.OutstandingBalanceDisplay</strong><span>Saldos pendientes</span></div>
+            </div>
+        </section>
+    }
+
+    @if (Show("produccion"))
+    {
+        <section class="report-print-section">
+            <h2>Producción por odontólogo</h2>
+            <table class="invoice-lines">
+                <thead>
+                    <tr>
+                        <th>Médico</th>
+                        <th>Citas completadas</th>
+                        <th>Ingresos</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Data.DoctorProduction.Count == 0)
+                    {
+                        <tr><td colspan="3">Sin producción en el período.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in Data.DoctorProduction)
+                        {
+                            <tr>
+                                <td>@row.DoctorName</td>
+                                <td>@row.CompletedAppointments</td>
+                                <td>@row.RevenueDisplay</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    @if (Show("pacientes"))
+    {
+        <section class="report-print-section">
+            <h2>Pacientes</h2>
+            <div class="report-print-kpis">
+                <div><strong>@Data.Patients.TotalPatients</strong><span>Total en clínica</span></div>
+                <div><strong>@Data.Patients.NewInPeriod</strong><span>Nuevos en el período</span></div>
+                <div><strong>@Data.Patients.ReturningInPeriod</strong><span>Recurrentes con cita</span></div>
+            </div>
+            <p class="report-print-note">Recurrentes: pacientes creados antes del período que tuvieron al menos una cita en el rango.</p>
+        </section>
+    }
+
+    @if (Show("tratamientos"))
+    {
+        <section class="report-print-section">
+            <h2>Tratamientos</h2>
+            <div class="report-print-kpis">
+                <div><strong>@Data.Treatments.Planned</strong><span>Planificados</span></div>
+                <div><strong>@Data.Treatments.InProgress</strong><span>En curso</span></div>
+                <div><strong>@Data.Treatments.Completed</strong><span>Completados</span></div>
+                <div><strong>@Data.Treatments.Cancelled</strong><span>Cancelados</span></div>
+                <div><strong>@Data.Treatments.PendingPlans</strong><span>Planes pendientes</span></div>
+            </div>
+            <h3>Procedimientos más realizados</h3>
+            <table class="invoice-lines">
+                <thead>
+                    <tr>
+                        <th>Procedimiento</th>
+                        <th>Cantidad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Data.Treatments.TopProcedures.Count == 0)
+                    {
+                        <tr><td colspan="2">Sin tratamientos en el período.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in Data.Treatments.TopProcedures)
+                        {
+                            <tr>
+                                <td>@row.ProcedureName</td>
+                                <td>@row.Count</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    @if (Show("inventario"))
+    {
+        <section class="report-print-section">
+            <h2>Inventario</h2>
+            <div class="report-print-kpis">
+                <div><strong>@Data.Inventory.LowStockCount</strong><span>Ítems bajo mínimo</span></div>
+                <div><strong>@Data.Inventory.MovementsIn</strong><span>Entradas</span></div>
+                <div><strong>@Data.Inventory.MovementsOut</strong><span>Salidas</span></div>
+                <div><strong>@Data.Inventory.QuantityOut.ToString("0.##")</strong><span>Cantidad salida</span></div>
+            </div>
+
+            <h3>Stock bajo</h3>
+            <table class="invoice-lines">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Ítem</th>
+                        <th>Stock</th>
+                        <th>Mínimo</th>
+                        <th>Unidad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Data.Inventory.LowStockItems.Count == 0)
+                    {
+                        <tr><td colspan="5">No hay ítems bajo el mínimo.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in Data.Inventory.LowStockItems)
+                        {
+                            <tr>
+                                <td>@row.Sku</td>
+                                <td>@row.Name</td>
+                                <td>@row.QuantityOnHand.ToString("0.##")</td>
+                                <td>@row.MinimumStock.ToString("0.##")</td>
+                                <td>@row.Unit</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+
+            <h3>Consumo por procedimiento</h3>
+            <table class="invoice-lines">
+                <thead>
+                    <tr>
+                        <th>Procedimiento</th>
+                        <th>Material</th>
+                        <th>Cantidad</th>
+                        <th>Unidad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Data.Inventory.ConsumptionByProcedure.Count == 0)
+                    {
+                        <tr><td colspan="4">Sin consumos confirmados en el período.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in Data.Inventory.ConsumptionByProcedure)
+                        {
+                            <tr>
+                                <td>@row.ProcedureName</td>
+                                <td>@row.ItemName</td>
+                                <td>@row.Quantity.ToString("0.##")</td>
+                                <td>@row.Unit</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    @if (Show("cobrar"))
+    {
+        <section class="report-print-section">
+            <h2>Cuentas por cobrar</h2>
+            <p class="report-print-note">Pacientes con saldo pendiente (facturas pendientes o parcialmente pagadas).</p>
+            <table class="invoice-lines">
+                <thead>
+                    <tr>
+                        <th>Paciente</th>
+                        <th>Facturas</th>
+                        <th>Saldo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Data.Receivables.Count == 0)
+                    {
+                        <tr><td colspan="3">No hay saldos pendientes.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in Data.Receivables)
+                        {
+                            <tr>
+                                <td>@row.PatientName</td>
+                                <td>@row.InvoiceCount</td>
+                                <td>@row.BalanceDisplay</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public ClinicReportsData Data { get; set; } = new();
+
+    /// <summary>Tab key (asistencia, ingresos, …) or "todos" for the full pack.</summary>
+    [Parameter]
+    public string Section { get; set; } = "todos";
+
+    private ClinicProfile Clinic => ClinicProfile.Get();
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-DO");
+
+    private bool IsAllSections =>
+        string.IsNullOrWhiteSpace(Section)
+        || string.Equals(Section, "todos", StringComparison.OrdinalIgnoreCase);
+
+    private string PeriodLabel
+    {
+        get
+        {
+            var from = FormatPeriodDate(Data.FromDate) ?? FormatPeriodDate(_fromFallback);
+            var to = FormatPeriodDate(Data.ToDate) ?? FormatPeriodDate(_toFallback);
+            if (from == null && to == null) return "—";
+            if (from != null && to != null) return $"{from} – {to}";
+            return from ?? to!;
+        }
+    }
+
+    private DateTime? _fromFallback;
+    private DateTime? _toFallback;
+
+    [Parameter]
+    public DateTime? FromDate
+    {
+        get => _fromFallback;
+        set => _fromFallback = value;
+    }
+
+    [Parameter]
+    public DateTime? ToDate
+    {
+        get => _toFallback;
+        set => _toFallback = value;
+    }
+
+    private string SectionTitle => Section?.ToLowerInvariant() switch
+    {
+        "asistencia" => "Agenda y asistencia",
+        "ingresos" => "Ingresos",
+        "produccion" => "Producción",
+        "pacientes" => "Pacientes",
+        "tratamientos" => "Tratamientos",
+        "inventario" => "Inventario",
+        "cobrar" => "Cuentas por cobrar",
+        _ => "Reportes de clínica"
+    };
+
+    private bool Show(string key)
+    {
+        if (key == "resumen")
+            return IsAllSections;
+        return IsAllSections
+            || string.Equals(Section, key, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FormatPeriodDate(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var dt)
+            || DateTime.TryParse(raw, Culture, DateTimeStyles.AssumeLocal, out dt))
+            return dt.ToString("dd/MM/yyyy", Culture);
+        return raw;
+    }
+
+    private static string? FormatPeriodDate(DateTime? value) =>
+        value?.ToString("dd/MM/yyyy", Culture);
+}

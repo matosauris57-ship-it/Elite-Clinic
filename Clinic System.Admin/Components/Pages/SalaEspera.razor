@@ -76,7 +76,7 @@
                     <li>En este equipo (o el de la TV), inicia sesión en el Admin.</li>
                     <li>Abre esta URL en el navegador de la TV: <strong>@Navigation.BaseUri.TrimEnd('/')/sala-espera</strong></li>
                     <li>Pulsa <strong>Pantalla completa</strong> (o F11).</li>
-                    <li>Desde otro PC, en <strong>Agenda</strong>, elige una cita y pulsa <strong>Llamar paciente</strong>.</li>
+                    <li>Desde otro PC, en <strong>Agenda</strong>, elige una cita y pulsa <strong>Llamar paciente a la sala</strong>.</li>
                     <li>API + Admin + TV deben estar en la misma red; no hace falta dominio ni pago.</li>
                 </ol>
             }
@@ -113,6 +113,28 @@
 
     private string DisplayDoctorName =>
         string.IsNullOrWhiteSpace(_activeCall?.DoctorName) ? "su médico" : $"Dr(a). {_activeCall!.DoctorName}";
+
+    private string SpokenDoctorName => StripDoctorTitle(_activeCall?.DoctorName);
+
+    private static string StripDoctorTitle(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "asignado";
+
+        var trimmed = name.Trim();
+        string[] prefixes = ["Dr(a).", "Dra.", "Dr.", "Doctora", "Doctor", "Dra", "Dr"];
+        foreach (var prefix in prefixes)
+        {
+            if (trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && (trimmed.Length == prefix.Length || !char.IsLetter(trimmed[prefix.Length])))
+            {
+                trimmed = trimmed[prefix.Length..].TrimStart(' ', '.');
+                break;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(trimmed) ? "asignado" : trimmed;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -168,9 +190,7 @@
 
             if (_speakCalls)
             {
-                var text = string.IsNullOrWhiteSpace(notification.Message)
-                    ? $"Paciente {DisplayPatientName}, pase con {DisplayDoctorName}."
-                    : notification.Message;
+                var text = $"Por favor paciente {DisplayPatientName} con el doctor {SpokenDoctorName}.";
                 try
                 {
                     await Js.InvokeVoidAsync("dentalCareWaitingRoom.speak", text);

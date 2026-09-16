@@ -4,7 +4,14 @@
     {
         Task<List<Patient?>> GetPatientsListAsync(CancellationToken cancellationToken = default);
         Task<List<Patient?>> GetPatientsListForAdminAsync(bool includeInactive, CancellationToken cancellationToken = default);
-        Task<PagedResult<Patient?>> GetPatientsListPagingAsync(int pageNumber, int pageSize, CancellationToken cancellationToken = default);
+        Task<List<Patient?>> GetPatientsListForAdminAsync(bool includeInactive, int? attendedByDoctorId, CancellationToken cancellationToken = default);
+        Task<PagedResult<Patient>> GetPatientsListPagingAsync(
+            int pageNumber,
+            int pageSize,
+            string? search = null,
+            string status = "all",
+            int? attendedByDoctorId = null,
+            CancellationToken cancellationToken = default);
         Task<Patient?> GetPatientWithAppointmentsByIdAsync(int id, CancellationToken cancellationToken = default);
         Task<Patient?> GetPatientByIdAsync(int id, CancellationToken cancellationToken = default);
         Task<Patient?> GetPatientByIdIncludingDeletedAsync(int id, CancellationToken cancellationToken = default);

@@ -15,15 +15,33 @@ namespace Clinic_System.Application.Service.Implemention
             if (payment == null)
                 throw new NotFoundException($"Payment with ID {paymentId} not found.");
 
-            if (!payment.CanEditInvoice)
-                throw new InvalidOperationException("No se pueden agregar líneas a una factura con abonos, reembolsada o cancelada.");
+            if (!payment.CanAddInvoiceLines)
+                throw new InvalidOperationException("No se pueden agregar líneas a una factura reembolsada o cancelada.");
 
             if (lines == null || lines.Count == 0)
                 throw new InvalidOperationException("At least one invoice line is required.");
 
-            var existingTotal = Money.Sum(
-                (await unitOfWork.InvoiceLinesRepository.GetByPaymentIdAsync(paymentId, cancellationToken))
-                    .Select(l => l.LineTotal));
+            var existingLines = (await unitOfWork.InvoiceLinesRepository.GetByPaymentIdAsync(paymentId, cancellationToken)).ToList();
+            var existingTotal = existingLines.Count > 0
+                ? Money.Sum(existingLines.Select(l => l.LineTotal))
+                : payment.Subtotal;
+
+            if (existingLines.Count == 0 && existingTotal > 0.01m)
+            {
+                var carryForward = new InvoiceLine
+                {
+                    PaymentId = paymentId,
+                    Description = "Cargo inicial de la factura",
+                    Quantity = 1,
+                    UnitPrice = existingTotal
+                };
+                await unitOfWork.InvoiceLinesRepository.AddAsync(carryForward, cancellationToken);
+                payment.InvoiceLines.Add(carryForward);
+            }
+            else if (existingLines.Count == 0)
+            {
+                existingTotal = 0;
+            }
 
             foreach (var line in lines)
             {
@@ -38,11 +56,12 @@ namespace Clinic_System.Application.Service.Implemention
                     DentalTreatmentId = line.DentalTreatmentId
                 };
                 await unitOfWork.InvoiceLinesRepository.AddAsync(invoiceLine, cancellationToken);
+                payment.InvoiceLines.Add(invoiceLine);
             }
 
             var addedTotal = Money.Sum(lines.Select(l => Money.Multiply(ResolveUnitPrice(l), l.Quantity)));
             var total = Money.Normalize(existingTotal + addedTotal);
-            payment.UpdatePaymentDetails(amount: total > 0 ? total : 0.01m);
+            payment.RecalculateInvoiceAmount(total > 0 ? total : 0.01m);
             unitOfWork.PaymentsRepository.Update(payment, cancellationToken);
 
             return payment;
@@ -65,7 +84,7 @@ namespace Clinic_System.Application.Service.Implemention
                 .Where(l => l.Id != lineId)
                 .ToList();
             var total = Money.Sum(remaining.Select(l => l.LineTotal));
-            payment.UpdatePaymentDetails(amount: total > 0 ? total : 0.01m);
+            payment.RecalculateInvoiceAmount(total > 0 ? total : 0.01m);
             unitOfWork.PaymentsRepository.Update(payment, cancellationToken);
             return payment;
         }

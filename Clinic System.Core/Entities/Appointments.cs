@@ -17,6 +17,21 @@ namespace Clinic_System.Core.Entities
 
         public virtual DateTime? DayBeforeReminderSentAt { get; set; }
         public virtual DateTime? SameDayReminderSentAt { get; set; }
+        public virtual decimal? QuotedAmount { get; set; }
+        public virtual DateTime? CancelledAt { get; set; }
+        public virtual AppointmentCancellationChannel? CancellationChannel { get; set; }
+        public virtual string? CancellationComment { get; set; }
+        public virtual DateTime? AttendanceLinkRespondedAt { get; set; }
+        public virtual bool? AttendanceLinkAccepted { get; set; }
+        public virtual string? AttendanceLinkComment { get; set; }
+
+        public virtual int? TreatmentPlanId { get; set; }
+        public virtual TreatmentPlan? TreatmentPlan { get; set; }
+        public virtual int? PlanItemId { get; set; }
+        public virtual PlanItem? PlanItem { get; set; }
+        public virtual int? TreatmentProcedureId { get; set; }
+        public virtual TreatmentProcedure? TreatmentProcedure { get; set; }
+        public virtual int? ToothNumber { get; set; }
 
         public virtual MedicalRecord? MedicalRecord { get; set; }
         public virtual Payment? Payment { get; set; }
@@ -58,25 +73,29 @@ namespace Clinic_System.Core.Entities
             this.UpdatedAt = DateTime.Now;
         }
 
-        public void Cancel()
+        public void Cancel(AppointmentCancellationChannel channel = AppointmentCancellationChannel.Staff, string? comment = null)
         {
             InvalidAppointmentState("Cannot cancel a completed appointment.",
                 "Appointment is already cancelled.", "Cannot cancel a no-show appointment.");
 
-            if (AppointmentDate < DateTime.Now.AddHours(1))
-                throw new InvalidAppointmentStateException("Cannot cancel appointment less than 1 hour before start.");
-
-            this.Status = AppointmentStatus.Cancelled;
-            this.UpdatedAt = DateTime.Now;
+            RecordCancellation(channel, comment);
         }
 
         public void SystemExpire()
         {
             if (this.Status == AppointmentStatus.Pending)
-            {
-                this.Status = AppointmentStatus.Cancelled;
-                this.UpdatedAt = DateTime.Now;
-            }
+                RecordCancellation(AppointmentCancellationChannel.System, null);
+        }
+
+        private void RecordCancellation(AppointmentCancellationChannel channel, string? comment)
+        {
+            Status = AppointmentStatus.Cancelled;
+            CancelledAt = DateTime.Now;
+            CancellationChannel = channel;
+            CancellationComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+            if (CancellationComment is { Length: > 500 })
+                CancellationComment = CancellationComment[..500];
+            UpdatedAt = DateTime.Now;
         }
 
         public void Complete()
@@ -110,6 +129,38 @@ namespace Clinic_System.Core.Entities
 
             this.Status = AppointmentStatus.Confirmed;
             this.UpdatedAt = DateTime.Now;
+        }
+
+        public void RespondViaAttendanceLink(bool willAttend, string? comment = null)
+        {
+            if (AttendanceLinkRespondedAt != null)
+                throw new InvalidAppointmentStateException("Ya respondió a esta cita por el enlace.");
+
+            var trimmed = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+            if (trimmed is { Length: > 500 })
+                trimmed = trimmed[..500];
+
+            AttendanceLinkRespondedAt = DateTime.Now;
+            AttendanceLinkAccepted = willAttend;
+            AttendanceLinkComment = trimmed;
+
+            if (willAttend)
+                Confirm();
+            else
+                Cancel(AppointmentCancellationChannel.Patient, trimmed);
+        }
+
+        public void StartConsultation()
+        {
+            InvalidAppointmentState("Cannot start a cancelled appointment.",
+                "Cannot start a completed appointment.",
+                "Cannot start a no-show appointment.");
+
+            if (Status == AppointmentStatus.InProgress)
+                return;
+
+            Status = AppointmentStatus.InProgress;
+            UpdatedAt = DateTime.Now;
         }
     }
 }

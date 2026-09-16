@@ -63,6 +63,49 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("int")
                         .HasColumnName("PatientId");
 
+                    b.Property<decimal?>("QuotedAmount")
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("QuotedAmount");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CancelledAt");
+
+                    b.Property<string>("CancellationChannel")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("CancellationChannel");
+
+                    b.Property<string>("CancellationComment")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("CancellationComment");
+
+                    b.Property<DateTime?>("AttendanceLinkRespondedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("AttendanceLinkRespondedAt");
+
+                    b.Property<bool?>("AttendanceLinkAccepted")
+                        .HasColumnType("bit")
+                        .HasColumnName("AttendanceLinkAccepted");
+
+                    b.Property<string>("AttendanceLinkComment")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("AttendanceLinkComment");
+
+                    b.Property<int?>("PlanItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TreatmentPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TreatmentProcedureId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("SameDayReminderSentAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("SameDayReminderSentAt");
@@ -82,6 +125,9 @@ namespace Clinic_System.Data.Migrations
                     b.HasIndex("AppointmentDate")
                         .HasDatabaseName("IX_Appointments_AppointmentDate");
 
+                    b.HasIndex("AttendanceLinkRespondedAt")
+                        .HasDatabaseName("IX_Appointments_AttendanceLinkRespondedAt");
+
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_Appointments_CreatedAt");
 
@@ -90,6 +136,8 @@ namespace Clinic_System.Data.Migrations
 
                     b.HasIndex("PatientId")
                         .HasDatabaseName("IX_Appointments_PatientId");
+
+                    b.HasIndex("PlanItemId");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("IX_Appointments_Status");
@@ -106,6 +154,10 @@ namespace Clinic_System.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Appointments_Patient_Date_Unique")
                         .HasFilter("[AppointmentStatus] != 'Cancelled' AND [IsDeleted] = 0");
+
+                    b.HasIndex("TreatmentPlanId");
+
+                    b.HasIndex("TreatmentProcedureId");
 
                     b.ToTable("Appointments", (string)null);
                 });
@@ -168,6 +220,11 @@ namespace Clinic_System.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<bool>("IsVoided")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("PatientId")
                         .HasColumnType("int");
 
@@ -199,6 +256,13 @@ namespace Clinic_System.Data.Migrations
 
                     b.Property<int>("Type")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("VoidedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("VoidedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
 
@@ -971,6 +1035,84 @@ namespace Clinic_System.Data.Migrations
                     b.ToTable("Patients", (string)null);
                 });
 
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientClinicalAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CapturedOn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RecordedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("StoredFileName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("Subtype")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int?>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId")
+                        .HasDatabaseName("IX_PatientClinicalAttachments_PatientId");
+
+                    b.HasIndex("PatientId", "Kind", "CreatedAt")
+                        .HasDatabaseName("IX_PatientClinicalAttachments_Patient_Kind_Created");
+
+                    b.ToTable("PatientClinicalAttachments", (string)null);
+                });
+
             modelBuilder.Entity("Clinic_System.Core.Entities.PatientMedicalCondition", b =>
                 {
                     b.Property<int>("PatientId")
@@ -1181,7 +1323,7 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasColumnName("AmountPaid");
 
-                    b.Property<int>("AppointmentId")
+                    b.Property<int?>("AppointmentId")
                         .HasColumnType("int")
                         .HasColumnName("AppointmentId");
 
@@ -1193,11 +1335,21 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("DeletedAt");
 
+                    b.Property<decimal>("DiscountAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("DiscountAmount");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(false)
                         .HasColumnName("IsDeleted");
+
+                    b.Property<int>("PatientId")
+                        .HasColumnType("int")
+                        .HasColumnName("PatientId");
 
                     b.Property<DateTime?>("PaymentDate")
                         .HasColumnType("datetime2")
@@ -1214,6 +1366,10 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("nvarchar(50)")
                         .HasColumnName("PaymentStatus");
 
+                    b.Property<int?>("TreatmentPlanId")
+                        .HasColumnType("int")
+                        .HasColumnName("TreatmentPlanId");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("UpdatedAt");
@@ -1222,10 +1378,17 @@ namespace Clinic_System.Data.Migrations
 
                     b.HasIndex("AppointmentId")
                         .IsUnique()
-                        .HasDatabaseName("IX_Payments_AppointmentId");
+                        .HasDatabaseName("IX_Payments_AppointmentId")
+                        .HasFilter("[AppointmentId] IS NOT NULL");
 
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_Payments_CreatedAt");
+
+                    b.HasIndex("PatientId")
+                        .HasDatabaseName("IX_Payments_PatientId");
+
+                    b.HasIndex("TreatmentPlanId")
+                        .HasDatabaseName("IX_Payments_TreatmentPlanId");
 
                     b.HasIndex("PaymentDate")
                         .HasDatabaseName("IX_Payments_PaymentDate");
@@ -1265,6 +1428,18 @@ namespace Clinic_System.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsVoided")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("Payment");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -1281,6 +1456,13 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("VoidReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("VoidedAt")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
@@ -1466,11 +1648,27 @@ namespace Clinic_System.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AcceptanceStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("DentalTreatmentId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("ExecutionStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<int?>("InvoicedPaymentId")
+                        .HasColumnType("int");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -1485,6 +1683,9 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ScheduledAppointmentId")
                         .HasColumnType("int");
 
                     b.Property<int?>("ToothNumber")
@@ -1506,6 +1707,12 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DentalTreatmentId");
+
+                    b.HasIndex("InvoicedPaymentId");
+
+                    b.HasIndex("ScheduledAppointmentId");
 
                     b.HasIndex("TreatmentPlanId");
 
@@ -1777,6 +1984,11 @@ namespace Clinic_System.Data.Migrations
                     b.Property<int?>("Icdas")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsVoided")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -1809,6 +2021,17 @@ namespace Clinic_System.Data.Migrations
 
                     b.Property<int>("ToothNumber")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("VoidedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("VoidedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("VoidReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.HasKey("Id");
 
@@ -1961,6 +2184,13 @@ namespace Clinic_System.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AcceptedByName")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1970,8 +2200,14 @@ namespace Clinic_System.Data.Migrations
                     b.Property<decimal>("DiscountAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("InvoicePaymentId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<DateTime?>("IssuedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
@@ -1979,6 +2215,10 @@ namespace Clinic_System.Data.Migrations
 
                     b.Property<int>("PatientId")
                         .HasColumnType("int");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -1995,6 +2235,8 @@ namespace Clinic_System.Data.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("InvoicePaymentId");
 
                     b.HasIndex("PatientId");
 
@@ -2046,6 +2288,12 @@ namespace Clinic_System.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(1);
+
+                    b.Property<int>("Target")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ToothKindFilter")
+                        .HasColumnType("int");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -2283,9 +2531,30 @@ namespace Clinic_System.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Clinic_System.Core.Entities.PlanItem", "PlanItem")
+                        .WithMany()
+                        .HasForeignKey("PlanItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Clinic_System.Core.Entities.TreatmentPlan", "TreatmentPlan")
+                        .WithMany()
+                        .HasForeignKey("TreatmentPlanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Clinic_System.Core.Entities.TreatmentProcedure", "TreatmentProcedure")
+                        .WithMany()
+                        .HasForeignKey("TreatmentProcedureId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Doctor");
 
                     b.Navigation("Patient");
+
+                    b.Navigation("PlanItem");
+
+                    b.Navigation("TreatmentPlan");
+
+                    b.Navigation("TreatmentProcedure");
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.DentalClinicalEvent", b =>
@@ -2437,6 +2706,17 @@ namespace Clinic_System.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
+            modelBuilder.Entity("Clinic_System.Core.Entities.PatientClinicalAttachment", b =>
+                {
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("ClinicalAttachments")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
+                });
+
             modelBuilder.Entity("Clinic_System.Core.Entities.PatientMedicalCondition", b =>
                 {
                     b.HasOne("Clinic_System.Core.Entities.MedicalCondition", "MedicalCondition")
@@ -2508,10 +2788,24 @@ namespace Clinic_System.Data.Migrations
                     b.HasOne("Clinic_System.Core.Entities.Appointment", "Appointment")
                         .WithOne("Payment")
                         .HasForeignKey("Clinic_System.Core.Entities.Payment", "AppointmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
+                        .WithMany("Payments")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Clinic_System.Core.Entities.TreatmentPlan", "TreatmentPlan")
+                        .WithMany("Invoices")
+                        .HasForeignKey("TreatmentPlanId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Appointment");
+
+                    b.Navigation("Patient");
+
+                    b.Navigation("TreatmentPlan");
                 });
 
             modelBuilder.Entity("Clinic_System.Core.Entities.PaymentReceipt", b =>
@@ -2577,6 +2871,27 @@ namespace Clinic_System.Data.Migrations
                         .WithMany()
                         .HasForeignKey("TreatmentProcedureId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.DentalTreatment", "DentalTreatment")
+                        .WithMany()
+                        .HasForeignKey("DentalTreatmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Clinic_System.Core.Entities.Appointment", "ScheduledAppointment")
+                        .WithMany()
+                        .HasForeignKey("ScheduledAppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Clinic_System.Core.Entities.Payment", "InvoicedPayment")
+                        .WithMany()
+                        .HasForeignKey("InvoicedPaymentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("DentalTreatment");
+
+                    b.Navigation("InvoicedPayment");
+
+                    b.Navigation("ScheduledAppointment");
 
                     b.Navigation("TreatmentPlan");
 
@@ -2708,11 +3023,18 @@ namespace Clinic_System.Data.Migrations
 
             modelBuilder.Entity("Clinic_System.Core.Entities.TreatmentPlan", b =>
                 {
+                    b.HasOne("Clinic_System.Core.Entities.Payment", "InvoicePayment")
+                        .WithMany()
+                        .HasForeignKey("InvoicePaymentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Clinic_System.Core.Entities.Patient", "Patient")
                         .WithMany("TreatmentPlans")
                         .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("InvoicePayment");
 
                     b.Navigation("Patient");
                 });
@@ -2810,6 +3132,8 @@ namespace Clinic_System.Data.Migrations
                 {
                     b.Navigation("Appointments");
 
+                    b.Navigation("ClinicalAttachments");
+
                     b.Navigation("DentalClinicalEvents");
 
                     b.Navigation("DentalHistory");
@@ -2825,6 +3149,8 @@ namespace Clinic_System.Data.Migrations
                     b.Navigation("MedicalCertificates");
 
                     b.Navigation("PatientPrescriptions");
+
+                    b.Navigation("Payments");
 
                     b.Navigation("PeriodontalExams");
 
@@ -2864,6 +3190,8 @@ namespace Clinic_System.Data.Migrations
 
             modelBuilder.Entity("Clinic_System.Core.Entities.TreatmentPlan", b =>
                 {
+                    b.Navigation("Invoices");
+
                     b.Navigation("Items");
                 });
 

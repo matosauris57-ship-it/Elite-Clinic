@@ -7,21 +7,26 @@ namespace Clinic_System.Application.Features.Patients.Queries.Handlers
         private readonly IDentalHistoryService dentalHistoryService;
         private readonly IUnitOfWork unitOfWork;
         private readonly IMapper mapper;
+        private readonly IClinicDataScopeService clinicScope;
 
         public GetPatientClinicalProfileQueryHandler(
             IPatientService patientService,
             IDentalHistoryService dentalHistoryService,
             IUnitOfWork unitOfWork,
-            IMapper mapper)
+            IMapper mapper,
+            IClinicDataScopeService clinicScope)
         {
             this.patientService = patientService;
             this.dentalHistoryService = dentalHistoryService;
             this.unitOfWork = unitOfWork;
             this.mapper = mapper;
+            this.clinicScope = clinicScope;
         }
 
         public async Task<Response<PatientClinicalProfileDTO>> Handle(GetPatientClinicalProfileQuery request, CancellationToken cancellationToken)
         {
+            if (!await clinicScope.AllowsPatientAsync(request.PatientId, cancellationToken))
+                return Unauthorized<PatientClinicalProfileDTO>("Solo puede consultar pacientes que haya atendido.");
             var patient = await patientService.GetPatientByIdIncludingDeletedAsync(request.PatientId, cancellationToken);
             if (patient == null)
                 return NotFound<PatientClinicalProfileDTO>($"No se encontró el paciente con Id {request.PatientId}");

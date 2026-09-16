@@ -1,3 +1,5 @@
+using Clinic_System.Core.Messaging;
+
 namespace Clinic_System.Application.Common
 {
     public class PatientNotificationSettings
@@ -32,9 +34,9 @@ namespace Clinic_System.Application.Common
                 BirthdayEnabled = BirthdayEnabled,
                 BirthdaySendTime = ClampTime(BirthdaySendTime, new TimeSpan(8, 0, 0)),
                 ReminderSubject = First(ReminderSubject, "Recordatorio de cita - {clinica}"),
-                ReminderBody = First(ReminderBody, ReminderBodyDefault),
+                ReminderBody = MessageBodyFormatting.IsBlank(ReminderBody) ? ReminderBodyDefault : ReminderBody.Trim(),
                 BirthdaySubject = First(BirthdaySubject, "Feliz cumpleaños - {clinica}"),
-                BirthdayBody = First(BirthdayBody, BirthdayBodyDefault)
+                BirthdayBody = MessageBodyFormatting.IsBlank(BirthdayBody) ? BirthdayBodyDefault : BirthdayBody.Trim()
             };
         }
 
@@ -71,13 +73,17 @@ namespace Clinic_System.Application.Common
             var fecha = appointment?.ToString("d 'de' MMMM yyyy", culture) ?? "—";
             var hora = appointment?.ToString("HH:mm", culture) ?? "—";
 
-            return template
-                .Replace("{nombre}", patientName, StringComparison.OrdinalIgnoreCase)
-                .Replace("{clinica}", clinicName, StringComparison.OrdinalIgnoreCase)
-                .Replace("{fecha}", fecha, StringComparison.OrdinalIgnoreCase)
-                .Replace("{hora}", hora, StringComparison.OrdinalIgnoreCase)
-                .Replace("{doctor}", doctorName ?? "—", StringComparison.OrdinalIgnoreCase)
-                .Replace("{edad}", age?.ToString() ?? "—", StringComparison.OrdinalIgnoreCase);
+            var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["{nombre}"] = patientName,
+                ["{clinica}"] = clinicName,
+                ["{fecha}"] = fecha,
+                ["{hora}"] = hora,
+                ["{doctor}"] = doctorName ?? "—",
+                ["{edad}"] = age?.ToString() ?? "—"
+            };
+
+            return MessageBodyFormatting.ApplyTokens(template, tokens);
         }
 
         private static TimeSpan ClampTime(TimeSpan value, TimeSpan fallback)

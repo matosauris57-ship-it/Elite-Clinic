@@ -16,11 +16,17 @@ namespace Clinic_System.Application.DTOs.Payment
         public decimal Amount { get; set; }
         public string AmountDisplay { get; set; } = string.Empty;
         public string AmountRaw { get; set; } = string.Empty;
+        public decimal Subtotal { get; set; }
+        public string SubtotalDisplay { get; set; } = string.Empty;
+        public decimal DiscountAmount { get; set; }
+        public string DiscountAmountDisplay { get; set; } = string.Empty;
         public decimal AmountCollected { get; set; }
         public string AmountCollectedDisplay { get; set; } = string.Empty;
         public decimal Balance { get; set; }
         public string BalanceDisplay { get; set; } = string.Empty;
         public string BalanceRaw { get; set; } = string.Empty;
+        public int? TreatmentPlanId { get; set; }
+        public string? TreatmentPlanTitle { get; set; }
         public string PaymentMethod { get; set; }
         public string PaymentMethodDisplay { get; set; } = string.Empty;
         public string PaymentStatus { get; set; }

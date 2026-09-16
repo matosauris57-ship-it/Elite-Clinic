@@ -55,6 +55,15 @@
             return NewResult(response);
         }
 
+        [HttpPost("forgot-password")]
+        [AllowAnonymous]
+        [EnableRateLimiting("AuthLimiter")]
+        public async Task<IActionResult> ForgotPassword([FromBody] RequestPasswordRecoveryCommand command)
+        {
+            var response = await mediator.Send(command);
+            return NewResult(response);
+        }
+
         [HttpPost("send-reset-password")]
         [EnableRateLimiting("AuthLimiter")]
         public async Task<IActionResult> SendResetPassword([FromBody] SendResetPasswordCommand command)

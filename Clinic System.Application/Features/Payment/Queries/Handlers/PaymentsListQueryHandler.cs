@@ -26,7 +26,8 @@ namespace Clinic_System.Application.Features.Payment.Queries.Handlers
                  request.Method,
                  request.PageNumber,
                  request.PageSize,
-                 request.Search);
+                 request.Search,
+                 request.OutstandingOnly);
 
 
             var dtos = mapper.Map<List<PaymentDetailsDTO>>(items);

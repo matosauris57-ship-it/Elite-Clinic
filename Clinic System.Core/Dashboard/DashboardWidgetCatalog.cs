@@ -16,6 +16,8 @@ public static class DashboardWidgetCatalog
         Def(DashboardWidgetKeys.DailyCollections, "Cobros del día (detalle)", "Transacciones cobradas hoy.", "facturacion.view", false, 8, 2, 4, 4, 3, 3, 12, 8, 3, 3, 6, 4, 12, 6),
         Def(DashboardWidgetKeys.MonthlyIncomeChart, "Ingresos del año", "Cobros agrupados por mes.", "facturacion.view", false, 0, 6, 8, 4, 4, 3, 12, 8, 6, 3, 8, 4, 12, 6),
         Def(DashboardWidgetKeys.SmartAlerts, "Alertas importantes", "Incidencias operativas del día.", "dashboard.view", false, 8, 6, 4, 4, 3, 3, 12, 8, 4, 3, 6, 4, 12, 6),
+        Def(DashboardWidgetKeys.AttendanceLinkAlerts, "Respuestas del enlace", "Pacientes que aceptaron o rechazaron la cita por el enlace, con su comentario.", "agenda.view", false, 6, 14, 6, 5, 3, 4, 12, 8, 4, 4, 6, 5, 12, 6),
+        Def(DashboardWidgetKeys.CampaignBookingRequests, "Solicitudes de campaña", "Pedidos de cita desde el enlace del correo de campaña, pendientes de confirmar.", "campanas.view", false, 0, 32, 6, 5, 3, 4, 12, 8, 4, 4, 6, 5, 12, 6),
         Def(DashboardWidgetKeys.PendingTreatments, "Tratamientos abiertos", "Listado de tratamientos en curso o planificados.", "tratamientos.view", false, 0, 10, 6, 4, 3, 3, 12, 8, 4, 3, 6, 4, 12, 6),
         Def(DashboardWidgetKeys.UpcomingDues, "Saldos pendientes", "Facturas con saldo por cobrar.", "facturacion.view", false, 6, 10, 6, 4, 3, 3, 12, 8, 4, 3, 6, 4, 12, 6),
         Def(DashboardWidgetKeys.PatientsRegistered, "Pacientes registrados", "Total de pacientes en la clínica.", "pacientes.view", false, 0, 14, 3, 2, 2, 2, 6, 4),
@@ -54,6 +56,8 @@ public static class DashboardWidgetCatalog
             DashboardWidgetKeys.DailyCollections,
             DashboardWidgetKeys.MonthlyIncomeChart,
             DashboardWidgetKeys.SmartAlerts,
+            DashboardWidgetKeys.AttendanceLinkAlerts,
+            DashboardWidgetKeys.CampaignBookingRequests,
             DashboardWidgetKeys.PendingTreatments,
             DashboardWidgetKeys.UpcomingDues,
             DashboardWidgetKeys.SystemStatus

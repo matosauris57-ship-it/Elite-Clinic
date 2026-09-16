@@ -371,5 +371,6 @@ FodyWeavers.xsd
 **/App_Data/clinic-email-settings.json
 **/App_Data/odontogram-symbol-config.json
 **/App_Data/clinic-schedule.json
+**/App_Data/patient-attachments/
 **/wwwroot/uploads/clinic/*
 !**/wwwroot/uploads/clinic/.gitkeep

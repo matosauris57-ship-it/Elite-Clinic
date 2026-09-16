@@ -18,7 +18,7 @@
             _mockUnitOfWork.SetupGet(u => u.PatientsRepository).Returns(_mockPatientRepo.Object);
 
             // إنشاء الـ Validator الفعلي
-            _validator = new UpdateDoctorValidator(_mockUnitOfWork.Object);
+            _validator = new UpdateDoctorValidator(_mockUnitOfWork.Object, Mock.Of<IIdentityService>());
         }
 
         [Fact]

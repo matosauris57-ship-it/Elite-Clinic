@@ -8,16 +8,19 @@ namespace Clinic_System.Application.Features.Doctors.Queries.Handlers
         private readonly IMedicalRecordService medicalRecordService;
         private readonly IMapper mapper;
         private readonly ILogger<PatientHistoryQueryHandler> logger;
+        private readonly IClinicDataScopeService clinicScope;
 
         public PatientHistoryQueryHandler(
             ICurrentUserService currentUserService, 
             IMedicalRecordService medicalRecordService,
             IMapper mapper,
-            ILogger<PatientHistoryQueryHandler> logger) : base(currentUserService)
+            ILogger<PatientHistoryQueryHandler> logger,
+            IClinicDataScopeService clinicScope) : base(currentUserService)
         {
             this.medicalRecordService = medicalRecordService;
             this.mapper = mapper;
             this.logger = logger;
+            this.clinicScope = clinicScope;
         }
 
         public override async Task<Response<PagedResult<MedicalRecordPatientHistoryDTO>>> Handle(GetPatientHistoryQuery request, CancellationToken cancellationToken)
@@ -39,6 +42,9 @@ namespace Clinic_System.Application.Features.Doctors.Queries.Handlers
 
                     request.PatientId = authorizedPatientId;
                 }
+
+                if (request.PatientId > 0 && !await clinicScope.AllowsPatientAsync(request.PatientId, cancellationToken))
+                    return Unauthorized<PagedResult<MedicalRecordPatientHistoryDTO>>("Solo puede consultar pacientes que haya atendido.");
 
                 var medicalRecord = await medicalRecordService.GetPatientHistoryAsync(request.PageNumber, request.PageSize, request.PatientId, cancellationToken);
                 if (medicalRecord == null || !medicalRecord.Items.Any())

@@ -183,8 +183,8 @@ public class DoctorMaintenanceService
     {
         var e when e.Contains("Doctor Name is required", StringComparison.OrdinalIgnoreCase) =>
             "El nombre del médico es obligatorio.",
-        var e when e.Contains("Name must not exceed", StringComparison.OrdinalIgnoreCase) =>
-            "El nombre no puede superar 100 caracteres.",
+        var e when e.Contains("Name must not contain numbers", StringComparison.OrdinalIgnoreCase) =>
+            "El nombre no puede contener números.",
         var e when e.Contains("Address is required", StringComparison.OrdinalIgnoreCase) =>
             "La dirección es obligatoria.",
         var e when e.Contains("Specialization is required", StringComparison.OrdinalIgnoreCase) =>
@@ -199,6 +199,8 @@ public class DoctorMaintenanceService
             "Este correo ya está registrado.",
         var e when e.Contains("Username is already", StringComparison.OrdinalIgnoreCase) =>
             "Este nombre de usuario ya existe.",
+        var e when e.Contains("Email is already", StringComparison.OrdinalIgnoreCase) =>
+            "Este correo ya está registrado.",
         var e when e.Contains("Phone number is already", StringComparison.OrdinalIgnoreCase) =>
             "Este teléfono ya está registrado.",
         var e when e.Contains("Phone number must contain", StringComparison.OrdinalIgnoreCase) ||

@@ -131,3 +131,37 @@ public class SetUserLockoutCommandHandler : ResponseHandler, IRequestHandler<Set
             : BadRequest<string>(error ?? "No se pudo actualizar el estado del usuario.");
     }
 }
+
+public class SetUserPasswordCommandHandler : ResponseHandler, IRequestHandler<SetUserPasswordCommand, Response<string>>
+{
+    private readonly IUserManagementService _userManagementService;
+    private readonly ICurrentUserService _currentUserService;
+
+    public SetUserPasswordCommandHandler(
+        IUserManagementService userManagementService,
+        ICurrentUserService currentUserService)
+    {
+        _userManagementService = userManagementService;
+        _currentUserService = currentUserService;
+    }
+
+    public async Task<Response<string>> Handle(SetUserPasswordCommand request, CancellationToken cancellationToken)
+    {
+        if (!_currentUserService.IsAdmin
+            && !_currentUserService.HasPermission(AdminPermissionCatalog.Build("usuarios", AdminPermissionCatalog.Actions.ResetPassword))
+            && !_currentUserService.HasPermission(AdminPermissionCatalog.Build("recuperacion-contrasena", AdminPermissionCatalog.Actions.ResetPassword)))
+        {
+            return Unauthorized<string>("No tiene permiso para cambiar contraseñas.");
+        }
+
+        var (success, error) = await _userManagementService.SetUserPasswordAsync(
+            request.UserId,
+            request.NewPassword,
+            _currentUserService.IsAdmin,
+            cancellationToken);
+
+        return success
+            ? Success("Contraseña actualizada. El usuario ya puede iniciar sesión con la clave nueva.")
+            : BadRequest<string>(error ?? "No se pudo cambiar la contraseña.");
+    }
+}

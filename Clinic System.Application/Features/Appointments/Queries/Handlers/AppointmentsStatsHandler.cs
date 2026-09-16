@@ -6,26 +6,32 @@
         private readonly ILogger<AppointmentsStatsHandler> logger;
         private readonly IAppointmentService appointmentService;
         private readonly ICacheService cacheService;
+        private readonly IClinicDataScopeService clinicScope;
 
         public AppointmentsStatsHandler(
             IUnitOfWork unitOfWork,
             ILogger<AppointmentsStatsHandler> logger,
             IAppointmentService appointmentService,
-            ICacheService cacheService)
+            ICacheService cacheService,
+            IClinicDataScopeService clinicScope)
         {
             this.unitOfWork = unitOfWork;
             this.logger = logger;
             this.appointmentService = appointmentService;
             this.cacheService = cacheService;
+            this.clinicScope = clinicScope;
         }
 
         public async Task<AppointmentStatsDto> Handle(GetAdminAppointmentsStatsQuery request, CancellationToken cancellationToken)
         {
             logger.LogInformation("Handling GetAdminAppointmentsStatsQuery");
 
+            request.DoctorId = clinicScope.ResolveListDoctorId(request.DoctorId);
+
             string startStr = request.StartDate?.ToString("yyyyMMdd") ?? "AllTime";
             string endStr = request.EndDate?.ToString("yyyyMMdd") ?? "AllTime";
-            string cacheKey = $"AdminStats_Start_{startStr}_End_{endStr}";
+            string doctorStr = request.DoctorId?.ToString() ?? "All";
+            string cacheKey = $"AdminStats_Start_{startStr}_End_{endStr}_Doctor_{doctorStr}";
 
             var cachedStats = await cacheService.GetDataAsync<AppointmentStatsDto>(cacheKey);
 

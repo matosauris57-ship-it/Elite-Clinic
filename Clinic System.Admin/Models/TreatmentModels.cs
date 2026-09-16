@@ -1,3 +1,5 @@
+using Clinic_System.Core.Enums;
+
 namespace DentalCare.Admin.Models;
 
 public class TreatmentProcedureListItem
@@ -13,6 +15,8 @@ public class TreatmentProcedureListItem
     public string PriceRangeDisplay { get; set; } = string.Empty;
     public string PricingModeDisplay { get; set; } = string.Empty;
     public int DurationMinutes { get; set; }
+    public TreatmentProcedureTarget Target { get; set; } = TreatmentProcedureTarget.PerTooth;
+    public TreatmentToothKindFilter ToothKindFilter { get; set; } = TreatmentToothKindFilter.Any;
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public List<DoctorProcedurePriceItem> DoctorPrices { get; set; } = [];
@@ -68,6 +72,8 @@ public class CreateTreatmentProcedureRequest
     public string PriceInput { get; set; } = string.Empty;
     public int DurationMinutes { get; set; } = 30;
     public bool IsActive { get; set; } = true;
+    public TreatmentProcedureTarget Target { get; set; } = TreatmentProcedureTarget.PerTooth;
+    public TreatmentToothKindFilter ToothKindFilter { get; set; } = TreatmentToothKindFilter.Any;
     public List<DoctorProcedurePriceRequest> DoctorPrices { get; set; } = [];
 }
 
@@ -81,6 +87,8 @@ public class UpdateTreatmentProcedureRequest
     public string PricingMode { get; set; } = "AtBooking";
     public int DurationMinutes { get; set; }
     public bool IsActive { get; set; } = true;
+    public TreatmentProcedureTarget Target { get; set; } = TreatmentProcedureTarget.PerTooth;
+    public TreatmentToothKindFilter ToothKindFilter { get; set; } = TreatmentToothKindFilter.Any;
     public List<DoctorProcedurePriceRequest> DoctorPrices { get; set; } = [];
 }
 
@@ -126,6 +134,7 @@ public class CreateDentalTreatmentRequest
     public decimal Cost { get; set; }
     public int? AppointmentId { get; set; }
     public int? ToothNumber { get; set; }
+    public List<int> ToothNumbers { get; set; } = [];
     public ToothSurface? ToothSurface { get; set; }
     public string? ProcedureDetails { get; set; }
     public string? MedicalNotes { get; set; }
@@ -156,17 +165,47 @@ public class DentalTreatmentClinicalResultRequest
     public string? Notes { get; set; }
 }
 
+public enum QuotePanelMode
+{
+    List,
+    Compose
+}
+
 public class TreatmentPlanListItem
 {
     public int Id { get; set; }
     public int PatientId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public string? PatientPhone { get; set; }
+    public string? PatientNationalId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Notes { get; set; }
     public string Status { get; set; } = string.Empty;
     public decimal TotalAmount { get; set; }
+    public string TotalAmountDisplay { get; set; } = string.Empty;
     public decimal DiscountAmount { get; set; }
+    public string DiscountAmountDisplay { get; set; } = string.Empty;
     public decimal FinalAmount { get; set; }
+    public string FinalAmountDisplay { get; set; } = string.Empty;
     public DateTime? ValidUntil { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? IssuedAt { get; set; }
+    public DateTime? AcceptedAt { get; set; }
+    public string? AcceptedByName { get; set; }
+    public string? RejectionReason { get; set; }
+    public int? InvoicePaymentId { get; set; }
+    public List<int> InvoicePaymentIds { get; set; } = [];
+    public bool CanInvoice { get; set; }
+    public decimal AmountBilled { get; set; }
+    public string AmountBilledDisplay { get; set; } = string.Empty;
+    public decimal AmountCollectedOnAccount { get; set; }
+    public string AmountCollectedOnAccountDisplay { get; set; } = string.Empty;
+    public decimal RemainingToBill { get; set; }
+    public string RemainingToBillDisplay { get; set; } = string.Empty;
+    public decimal RemainingToCollect { get; set; }
+    public string RemainingToCollectDisplay { get; set; } = string.Empty;
+    public decimal UnbilledCompletedAmount { get; set; }
+    public string UnbilledCompletedAmountDisplay { get; set; } = string.Empty;
     public List<TreatmentPlanItem> Items { get; set; } = [];
 }
 
@@ -176,11 +215,22 @@ public class TreatmentPlanItem
     public string ProcedureName { get; set; } = string.Empty;
     public int? TreatmentProcedureId { get; set; }
     public int? ToothNumber { get; set; }
-    public ToothSurface? ToothSurface { get; set; }
+    public Clinic_System.Core.Enums.ToothSurface? ToothSurface { get; set; }
     public int Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
     public decimal LineTotal { get; set; }
+    public string UnitPriceDisplay { get; set; } = string.Empty;
+    public string LineTotalDisplay { get; set; } = string.Empty;
     public string? Notes { get; set; }
+    public string AcceptanceStatus { get; set; } = string.Empty;
+    public string ExecutionStatus { get; set; } = string.Empty;
+    public int? DentalTreatmentId { get; set; }
+    public int? ScheduledAppointmentId { get; set; }
+    public int? InvoicedPaymentId { get; set; }
+    public bool CanAccept { get; set; }
+    public bool CanReject { get; set; }
+    public bool CanSchedule { get; set; }
+    public bool CanInvoice { get; set; }
 }
 
 public class CreateTreatmentPlanRequest
@@ -198,10 +248,17 @@ public class CreateTreatmentPlanItemRequest
     public string ProcedureName { get; set; } = string.Empty;
     public int? TreatmentProcedureId { get; set; }
     public int? ToothNumber { get; set; }
-    public ToothSurface? ToothSurface { get; set; }
+    public Clinic_System.Core.Enums.ToothSurface? ToothSurface { get; set; }
     public int Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string UnitPriceInput { get; set; } = string.Empty;
     public string? Notes { get; set; }
+}
+
+public class ApproveTreatmentPlanRequest
+{
+    public string? AcceptedByName { get; set; }
 }
 
 public class RejectTreatmentPlanRequest

@@ -105,6 +105,7 @@ public class PatientListItem
     public string CreatedAt { get; set; } = string.Empty;
     public string ApplicationUserId { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
+    public decimal OutstandingBalance { get; set; }
 }
 
 public class PaymentListItem
@@ -133,6 +134,12 @@ public class PaymentListItem
     public string PaymentStatusDisplay { get; set; } = string.Empty;
     public string PaymentDate { get; set; } = string.Empty;
     public string? Notes { get; set; }
+    public int? TreatmentPlanId { get; set; }
+    public string? TreatmentPlanTitle { get; set; }
+    public decimal Subtotal { get; set; }
+    public string SubtotalDisplay { get; set; } = string.Empty;
+    public decimal DiscountAmount { get; set; }
+    public string DiscountAmountDisplay { get; set; } = string.Empty;
     public List<PaymentReceiptItem> Receipts { get; set; } = [];
 }
 
@@ -141,6 +148,10 @@ public class PaymentReceiptItem
     public int Id { get; set; }
     public decimal Amount { get; set; }
     public string AmountDisplay { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
+    public string KindDisplay { get; set; } = string.Empty;
+    public bool IsVoided { get; set; }
+    public string? VoidReason { get; set; }
     public string PaymentMethod { get; set; } = string.Empty;
     public string PaymentMethodDisplay { get; set; } = string.Empty;
     public string? Notes { get; set; }
@@ -207,6 +218,7 @@ public class BillingPaymentFilters
     public DateTime? ToDate { get; set; }
     public string? Method { get; set; }
     public string? Status { get; set; }
+    public bool OutstandingOnly { get; set; }
     public string? Search { get; set; }
 }
 
@@ -221,6 +233,21 @@ public class CollectPaymentRequest
 public class PaymentReasonRequest
 {
     public string? Reason { get; set; }
+    public decimal? Amount { get; set; }
+    public string? AmountInput { get; set; }
+}
+
+public class InvoiceDiscountRequest
+{
+    public decimal DiscountAmount { get; set; }
+    public string? DiscountAmountInput { get; set; }
+}
+
+public class InvoiceTreatmentPlanRequest
+{
+    public decimal? Amount { get; set; }
+    public string? AmountInput { get; set; }
+    public bool CompletedOnly { get; set; }
 }
 
 public class PagedResult<T>
@@ -297,6 +324,12 @@ public class AssignUserRolesRequest
 public class SetUserLockoutRequest
 {
     public bool LockoutEnabled { get; set; }
+}
+
+public class SetUserPasswordRequest
+{
+    public string NewPassword { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
 }
 
 public class CreateRoleRequest

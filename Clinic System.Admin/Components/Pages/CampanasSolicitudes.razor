@@ -1,0 +1,290 @@
+@page "/campanas/solicitudes"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "campanas.view")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject CampaignBookingService BookingService
+@inject DoctorMaintenanceService Doctors
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Solicitudes de campaña — DentalCare Admin</PageTitle>
+
+<div class="maintenance-page">
+    <div class="maintenance-header command-header">
+        <div class="command-titles">
+            <a href="/campanas" class="back-link-inline">← Campañas</a>
+            <h1>Solicitudes de cita</h1>
+            <p>Pedidos desde el enlace de campaña. Confirme la hora del paciente o asigne otra y se le avisará por correo.</p>
+        </div>
+        <div class="command-actions">
+            @if (_canEdit)
+            {
+                <a class="btn-outline" href="/campanas/avisos">Destinatarios de aviso</a>
+            }
+            <button class="btn-outline" disabled="@_loading" @onclick="LoadAsync">
+                <Icon Name="refresh-cw" Class="btn-svg" /> Actualizar
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_notice))
+    {
+        <div class="wizard-success">@_notice</div>
+    }
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="wizard-error">@_error</div>
+    }
+
+    <div class="alert-tabs" style="margin-bottom: 1rem;">
+        @foreach (var tab in _tabs)
+        {
+            <button class="alert-tab @(tab.Key == _statusFilter ? "active" : "")"
+                    @onclick="() => SetFilterAsync(tab.Key)">
+                @tab.Label
+            </button>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <AnimatedLoader Message="Cargando solicitudes..." />
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="dash-empty">
+            <Icon Name="mail" Class="dash-empty-icon" />
+            <p>No hay solicitudes @(_statusFilter == "all" ? "" : "en este estado").</p>
+        </div>
+    }
+    else
+    {
+        <div class="alert-cards">
+            @foreach (var item in _items)
+            {
+                var severity = item.Status switch
+                {
+                    "Pending" => "warning",
+                    "Scheduled" => "success",
+                    _ => "critical"
+                };
+                <div class="alert-card severity-@severity">
+                    <div class="alert-card-top">
+                        <span class="alert-severity-tag">@FormatStatus(item.Status)</span>
+                        <span class="alert-card-time">@item.RequestedAt.ToString("dd MMM HH:mm")</span>
+                    </div>
+                    <div class="alert-card-title">@(item.PatientName ?? $"Paciente #{item.PatientId}")</div>
+                    <div class="alert-card-desc">
+                        @item.CampaignName
+                        · Solicita @item.RequestedAppointmentAt.ToString("dd/MM/yyyy") @item.RequestedAppointmentAt.ToString("hh:mm tt")
+                        · @(item.RequestedDoctorName ?? "Médico")
+                        · @(item.ServiceName ?? "Servicio")
+                        @if (!string.IsNullOrWhiteSpace(item.PatientPhone))
+                        {
+                            <text> · @item.PatientPhone</text>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(item.PatientEmail))
+                        {
+                            <text> · @item.PatientEmail</text>
+                        }
+                    </div>
+                    @if (item.Status == "Scheduled" && item.ScheduledAppointmentAt.HasValue)
+                    {
+                        <div class="agenda-cancel-comment attendance-link-comment">
+                            <span>Agendada</span>
+                            <strong>
+                                @item.ScheduledAppointmentAt.Value.ToString("dd/MM/yyyy hh:mm tt")
+                                · @(item.ScheduledDoctorName ?? "Médico")
+                                @(item.PatientNotified ? " · correo enviado" : " · sin correo")
+                            </strong>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(item.StaffNote))
+                    {
+                        <div class="agenda-cancel-comment attendance-link-comment">
+                            <span>Nota</span>
+                            <strong>@item.StaffNote</strong>
+                        </div>
+                    }
+                    <div class="attendance-actions" style="margin-top: 0.75rem; gap: 0.5rem; display: flex; flex-wrap: wrap;">
+                        @if (item.Status == "Pending" && _canEdit)
+                        {
+                            <button class="btn-primary" @onclick="() => OpenSchedule(item)">Agendar</button>
+                            <button class="btn-outline" @onclick="() => RejectAsync(item)">Rechazar</button>
+                        }
+                        @if (item.AppointmentId is int apptId)
+                        {
+                            <a class="btn-outline" href="@($"/agenda?fecha={(item.ScheduledAppointmentAt ?? item.RequestedAppointmentAt):yyyy-MM-dd}&id={apptId}")">Ver cita</a>
+                        }
+                        <a class="btn-outline" href="@($"/pacientes/{item.PatientId}")">Ver paciente</a>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (_scheduleItem != null)
+{
+    <div class="modal-backdrop" @onclick="CloseSchedule">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <h2>Agendar solicitud</h2>
+            <p class="modal-confirm-text">
+                @_scheduleItem.PatientName pidió
+                @_scheduleItem.RequestedAppointmentAt.ToString("dd/MM/yyyy hh:mm tt")
+                con @_scheduleItem.RequestedDoctorName
+                (@_scheduleItem.ServiceName).
+                Puede confirmar esa hora o elegir otra; el paciente recibirá un correo.
+            </p>
+            @if (!string.IsNullOrEmpty(_scheduleError))
+            {
+                <div class="wizard-error">@_scheduleError</div>
+            }
+            <div class="new-patient-form">
+                <div class="form-group">
+                    <label>Médico</label>
+                    <select class="form-input" @bind="_scheduleDoctorId">
+                        @foreach (var d in _doctors)
+                        {
+                            <option value="@d.Id">@d.FullName</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Fecha</label>
+                        <input class="form-input" type="date" @bind="_scheduleDate" />
+                    </div>
+                    <div class="form-group">
+                        <label>Hora</label>
+                        <input class="form-input" type="time" @bind="_scheduleTime" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nota interna (opcional)</label>
+                    <input class="form-input" maxlength="500" @bind="_scheduleNote" />
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-outline" type="button" disabled="@_scheduling" @onclick="CloseSchedule">Cancelar</button>
+                <button class="btn-primary" type="button" disabled="@_scheduling" @onclick="ConfirmScheduleAsync">
+                    @(_scheduling ? "Agendando..." : "Confirmar y avisar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly List<(string Key, string Label)> _tabs =
+    [
+        ("Pending", "Pendientes"),
+        ("Scheduled", "Agendadas"),
+        ("Rejected", "Rechazadas"),
+        ("all", "Todas")
+    ];
+
+    private List<CampaignAppointmentRequestItem> _items = [];
+    private List<DoctorListItem> _doctors = [];
+    private string _statusFilter = "Pending";
+    private bool _loading = true;
+    private bool _canEdit;
+    private string? _notice;
+    private string? _error;
+
+    private CampaignAppointmentRequestItem? _scheduleItem;
+    private int _scheduleDoctorId;
+    private DateTime _scheduleDate = DateTime.Today.AddDays(1);
+    private TimeOnly _scheduleTime = new(9, 0);
+    private string _scheduleNote = "";
+    private string? _scheduleError;
+    private bool _scheduling;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canEdit = PermissionService.HasPermission(user, "campanas.edit");
+        var (docs, _) = await Doctors.GetDoctorsAsync();
+        _doctors = docs ?? [];
+        await LoadAsync();
+    }
+
+    private async Task SetFilterAsync(string key)
+    {
+        _statusFilter = key;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var status = _statusFilter == "all" ? null : _statusFilter;
+        var (items, error) = await BookingService.ListRequestsAsync(status, 100);
+        _items = items;
+        _error = error;
+        _loading = false;
+    }
+
+    private void OpenSchedule(CampaignAppointmentRequestItem item)
+    {
+        _scheduleItem = item;
+        _scheduleDoctorId = item.RequestedDoctorId;
+        _scheduleDate = item.RequestedAppointmentAt.Date;
+        _scheduleTime = TimeOnly.FromDateTime(item.RequestedAppointmentAt);
+        _scheduleNote = "";
+        _scheduleError = null;
+    }
+
+    private void CloseSchedule()
+    {
+        if (_scheduling) return;
+        _scheduleItem = null;
+    }
+
+    private async Task ConfirmScheduleAsync()
+    {
+        if (_scheduleItem == null) return;
+        _scheduling = true;
+        _scheduleError = null;
+        var (data, error) = await BookingService.ScheduleAsync(_scheduleItem.Id, new CampaignScheduleFormRequest
+        {
+            DoctorId = _scheduleDoctorId,
+            AppointmentDate = _scheduleDate.Date,
+            AppointmentTime = _scheduleTime.ToTimeSpan(),
+            StaffNote = string.IsNullOrWhiteSpace(_scheduleNote) ? null : _scheduleNote.Trim()
+        });
+        _scheduling = false;
+
+        if (data == null)
+        {
+            _scheduleError = error ?? "No se pudo agendar.";
+            return;
+        }
+
+        _notice = error ?? "Cita agendada.";
+        _scheduleItem = null;
+        await LoadAsync();
+    }
+
+    private async Task RejectAsync(CampaignAppointmentRequestItem item)
+    {
+        _notice = null;
+        var (data, error) = await BookingService.RejectAsync(item.Id, null);
+        if (data == null)
+        {
+            _error = error;
+            return;
+        }
+        _notice = error ?? "Solicitud rechazada.";
+        await LoadAsync();
+    }
+
+    private static string FormatStatus(string status) => status switch
+    {
+        "Pending" => "PENDIENTE",
+        "Scheduled" => "AGENDADA",
+        "Rejected" => "RECHAZADA",
+        _ => status.ToUpperInvariant()
+    };
+}

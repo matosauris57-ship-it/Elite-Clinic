@@ -1,9 +1,11 @@
 using Clinic_System.Core.Odontogram;
+using Clinic_System.Core.Messaging;
 using Clinic_System.Core.Validation;
 using ApiResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.ClinicOperatingHours>;
 using EmailSettingsResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.ClinicEmailSettings>;
 using NotificationSettingsResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.PatientNotificationSettings>;
 using LowStockAlertSettingsResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.LowStockEmailAlertSettings>;
+using CampaignBookingNotifySettingsResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Application.Common.CampaignBookingNotifySettings>;
 using SendEmailResponse = Clinic_System.Application.Common.Bases.Response<string>;
 using SymbolResponse = Clinic_System.Application.Common.Bases.Response<Clinic_System.Core.Odontogram.OdontogramSymbolConfigDocument>;
 
@@ -21,6 +23,7 @@ namespace Clinic_System.API.Controllers
         private readonly IPatientNotificationSettingsService _patientNotifications;
         private readonly ILowStockEmailAlertSettingsService _lowStockAlerts;
         private readonly ILowStockEmailAlertDispatchService _lowStockDispatch;
+        private readonly ICampaignBookingNotifySettingsService _campaignBookingNotify;
 
         public ClinicController(
             IMediator mediator,
@@ -30,7 +33,8 @@ namespace Clinic_System.API.Controllers
             IEmailService emailService,
             IPatientNotificationSettingsService patientNotifications,
             ILowStockEmailAlertSettingsService lowStockAlerts,
-            ILowStockEmailAlertDispatchService lowStockDispatch) : base(mediator)
+            ILowStockEmailAlertDispatchService lowStockDispatch,
+            ICampaignBookingNotifySettingsService campaignBookingNotify) : base(mediator)
         {
             _hours = hours;
             _symbols = symbols;
@@ -39,6 +43,7 @@ namespace Clinic_System.API.Controllers
             _patientNotifications = patientNotifications;
             _lowStockAlerts = lowStockAlerts;
             _lowStockDispatch = lowStockDispatch;
+            _campaignBookingNotify = campaignBookingNotify;
         }
 
         [HttpGet("schedule")]
@@ -189,6 +194,27 @@ namespace Clinic_System.API.Controllers
             });
         }
 
+        [HttpGet("campaign-booking-notify")]
+        [Authorize(Policy = "campanas.view")]
+        public IActionResult GetCampaignBookingNotify()
+        {
+            return NewResult(OkCampaignNotify(_campaignBookingNotify.Get(), "Destinatarios de solicitudes de campaña."));
+        }
+
+        [HttpPut("campaign-booking-notify")]
+        [Authorize(Policy = "campanas.edit")]
+        public async Task<IActionResult> SaveCampaignBookingNotify(
+            [FromBody] CampaignBookingNotifySettings request,
+            CancellationToken cancellationToken)
+        {
+            var error = CampaignBookingNotifySettings.Validate(request);
+            if (error != null)
+                return NewResult(FailCampaignNotify(error));
+
+            await _campaignBookingNotify.SaveAsync(request.Normalize(), cancellationToken);
+            return NewResult(OkCampaignNotify(_campaignBookingNotify.Get(), "Destinatarios de solicitudes de campaña guardados."));
+        }
+
         [HttpGet("odontogram/symbol-config")]
         public async Task<IActionResult> GetOdontogramSymbolConfig(CancellationToken cancellationToken)
         {
@@ -332,12 +358,12 @@ namespace Clinic_System.API.Controllers
         {
             if (request.DayBeforeEnabled || request.SameDayEnabled)
             {
-                if (string.IsNullOrWhiteSpace(request.ReminderSubject) || string.IsNullOrWhiteSpace(request.ReminderBody))
+                if (string.IsNullOrWhiteSpace(request.ReminderSubject) || MessageBodyFormatting.IsBlank(request.ReminderBody))
                     return "El asunto y el cuerpo del recordatorio son obligatorios.";
             }
 
             if (request.BirthdayEnabled
-                && (string.IsNullOrWhiteSpace(request.BirthdaySubject) || string.IsNullOrWhiteSpace(request.BirthdayBody)))
+                && (string.IsNullOrWhiteSpace(request.BirthdaySubject) || MessageBodyFormatting.IsBlank(request.BirthdayBody)))
                 return "El asunto y el cuerpo del cumpleaños son obligatorios si está activo.";
 
             return null;
@@ -367,6 +393,21 @@ namespace Clinic_System.API.Controllers
         };
 
         private static LowStockAlertSettingsResponse FailLowStockAlerts(string message) => new()
+        {
+            Succeeded = false,
+            StatusCode = HttpStatusCode.BadRequest,
+            Message = message
+        };
+
+        private static CampaignBookingNotifySettingsResponse OkCampaignNotify(CampaignBookingNotifySettings data, string message) => new()
+        {
+            Succeeded = true,
+            StatusCode = HttpStatusCode.OK,
+            Data = data,
+            Message = message
+        };
+
+        private static CampaignBookingNotifySettingsResponse FailCampaignNotify(string message) => new()
         {
             Succeeded = false,
             StatusCode = HttpStatusCode.BadRequest,

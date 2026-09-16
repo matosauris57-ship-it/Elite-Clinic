@@ -20,6 +20,8 @@ public class ToothChartEntryDTO
     public int? AppointmentId { get; set; }
     public string? RecordedByUserId { get; set; }
     public DateTime RecordedAt { get; set; }
+    public bool IsVoided { get; set; }
+    public DateTime? VoidedAt { get; set; }
 }
 
 public class DentalClinicalEventDTO
@@ -36,4 +38,7 @@ public class DentalClinicalEventDTO
     public string? RecordedByUserId { get; set; }
     public string? RecordedByUserName { get; set; }
     public DateTime RecordedAt { get; set; }
+    public long? ToothChartEntryId { get; set; }
+    public bool IsVoided { get; set; }
+    public DateTime? VoidedAt { get; set; }
 }
